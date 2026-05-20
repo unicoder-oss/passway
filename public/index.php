@@ -2,6 +2,15 @@
 
 declare(strict_types=1);
 
+if (PHP_SAPI === 'cli-server') {
+    $requestPath = parse_url($_SERVER['REQUEST_URI'] ?? '/', PHP_URL_PATH);
+    $staticFile = __DIR__ . ($requestPath !== false ? $requestPath : '/');
+
+    if (is_file($staticFile)) {
+        return false;
+    }
+}
+
 /**
  * Passway — Front Controller
  *
