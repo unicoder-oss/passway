@@ -35,9 +35,9 @@ jobs:
       - name: Run tests
         working-directory: ${{ github.workspace }}
         run: |
-          test -f phpunit.xml
+          test -f phpunit.xml.dist
           test -d tests
-          vendor/bin/phpunit --configuration "${{ github.workspace }}/phpunit.xml" "${{ github.workspace }}/tests"
+          vendor/bin/phpunit --configuration "${{ github.workspace }}/phpunit.xml.dist" "${{ github.workspace }}/tests"
 
   build-and-push:
     name: Build and Push Image
