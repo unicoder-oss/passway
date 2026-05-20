@@ -130,6 +130,12 @@ $router->group('/api/v1', function (\Passway\Core\Router $router) {
             [DirectoryController::class, 'create'], [AuthMiddleware::class]);
         $router->get('/:uuid/directories/:dirUuid',
             [DirectoryController::class, 'show'], [AuthMiddleware::class]);
+        $router->get('/:uuid/directories/:dirUuid/acl',
+            [DirectoryController::class, 'acl'], [AuthMiddleware::class]);
+        $router->put('/:uuid/directories/:dirUuid/acl',
+            [DirectoryController::class, 'replaceAcl'], [AuthMiddleware::class]);
+        $router->post('/:uuid/directories/:dirUuid/owner',
+            [DirectoryController::class, 'transferOwnership'], [AuthMiddleware::class]);
         $router->patch('/:uuid/directories/:dirUuid',
             [DirectoryController::class, 'update'], [AuthMiddleware::class]);
         $router->delete('/:uuid/directories/:dirUuid',
@@ -176,6 +182,12 @@ $router->group('/api/v1', function (\Passway\Core\Router $router) {
 
     // Создать запрос на одобрение для конкретного секрета
     $router->group('/organizations', function (\Passway\Core\Router $router) {
+        $router->get('/:uuid/secrets/:secUuid/acl',
+            [SecretController::class, 'acl'], [AuthMiddleware::class]);
+        $router->put('/:uuid/secrets/:secUuid/acl',
+            [SecretController::class, 'replaceAcl'], [AuthMiddleware::class]);
+        $router->post('/:uuid/secrets/:secUuid/owner',
+            [SecretController::class, 'transferOwnership'], [AuthMiddleware::class]);
         $router->post('/:uuid/secrets/:secUuid/approvals',
             [ApprovalController::class, 'create'], [AuthMiddleware::class]);
     });
@@ -209,14 +221,10 @@ $router->group('/api/v1', function (\Passway\Core\Router $router) {
             [ApiKeyController::class, 'create'], [AuthMiddleware::class]);
         $router->get('/:uuid/api-keys/:keyUuid',
             [ApiKeyController::class, 'show'], [AuthMiddleware::class]);
+        $router->patch('/:uuid/api-keys/:keyUuid',
+            [ApiKeyController::class, 'update'], [AuthMiddleware::class]);
         $router->delete('/:uuid/api-keys/:keyUuid',
             [ApiKeyController::class, 'revoke'], [AuthMiddleware::class]);
-        $router->get('/:uuid/api-keys/:keyUuid/permissions',
-            [ApiKeyController::class, 'listPermissions'], [AuthMiddleware::class]);
-        $router->post('/:uuid/api-keys/:keyUuid/permissions',
-            [ApiKeyController::class, 'addPermission'], [AuthMiddleware::class]);
-        $router->delete('/:uuid/api-keys/:keyUuid/permissions/:permId',
-            [ApiKeyController::class, 'removePermission'], [AuthMiddleware::class]);
     });
 
     // ------------------------------------------------------------------ //

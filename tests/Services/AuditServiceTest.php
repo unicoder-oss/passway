@@ -44,7 +44,7 @@ final class AuditServiceTest extends DatabaseTestCase
         $owner = $this->createTestUser();
         $observer = $this->createTestUser('obs@example.com');
         $org = $this->orgSvc->create('Org', $owner->id);
-        $this->orgSvc->addMember($org->id, $observer->id, 'observer', null);
+        $this->orgSvc->addMember($org->id, $observer->id, 'reader', null);
 
         $this->expectException(AuthException::class);
         $this->svc->listForOrganization($org->id, $observer->id);

@@ -19,18 +19,18 @@ use Passway\Models\Template;
  * Сервис управления секретами.
  *
  * Авторизация (через PermissionService, включает org-level и fine-grained):
- *   read   — list, get, listVersions  (observer+ или явное право)
- *   write  — create, update           (moderator+ или явное право)
- *   delete — delete                   (moderator+ или явное право)
+ *   read   — list, get, listVersions  (reader+ или явное право)
+ *   write  — create, update           (editor+ или явное право)
+ *   delete — delete                   (editor+ или явное право)
  *
  * Права проверяются на каталоге, которому принадлежит секрет.
  * Шифрование: XChaCha20-Poly1305, AAD = uuid секрета.
  *
  * requires_approval:
- *   Если у секрета флаг requires_approval=true, пользователи ниже moderator
+ *   Если у секрета флаг requires_approval=true, пользователи ниже editor
  *   обязаны пройти workflow одобрения (ApprovalService) и получить одноразовый
  *   токен. Вместо get() используется ApprovalService::useToken().
- *   Moderator+ обходят проверку и читают секрет напрямую.
+ *   Editor+ обходят проверку и читают секрет напрямую.
  */
 final class SecretService
 {
@@ -67,7 +67,7 @@ final class SecretService
      * @param string $value    Открытое значение (будет зашифровано)
      * @param string $userId   ID создателя
      *
-     * @throws AuthException             если нет прав (требуется moderator+)
+     * @throws AuthException             если нет прав (требуется editor+)
      * @throws \InvalidArgumentException при невалидном имени или типе
      * @throws \RuntimeException         если каталог не найден или имя занято
      */
@@ -128,6 +128,7 @@ final class SecretService
             'rotation_schedule' => $rotationSchedule,
             'version'          => 1,
             'created_by'       => (int) $userId,
+            'owner_user_id'    => (int) $userId,
             'created_at'       => $now,
             'updated_at'       => $now,
         ]);
@@ -213,6 +214,7 @@ final class SecretService
             'rotation_integration_id' => null,
             'version'               => 1,
             'created_by'            => (int) $userId,
+            'owner_user_id'         => (int) $userId,
             'created_at'            => $now,
             'updated_at'            => $now,
         ]);
@@ -293,6 +295,7 @@ final class SecretService
             'rotation_schedule'       => $rotationSchedule,
             'version'                 => 1,
             'created_by'              => (int) $userId,
+            'owner_user_id'           => (int) $userId,
             'created_at'              => $now,
             'updated_at'              => $now,
         ]);
@@ -323,7 +326,7 @@ final class SecretService
      * Список секретов в каталоге (без расшифровки значений).
      *
      * @return Secret[]
-     * @throws AuthException     если нет прав (требуется observer+)
+     * @throws AuthException     если нет прав (требуется reader+)
      * @throws \RuntimeException если каталог не найден
      */
     public function listInDirectory(string $dirUuid, string $orgId, string $userId): array
@@ -336,22 +339,23 @@ final class SecretService
     /**
      * Получить секрет с расшифрованным значением.
      *
-     * Если у секрета requires_approval=true и пользователь ниже moderator,
+     * Если у секрета requires_approval=true и пользователь ниже editor,
      * бросается AuthException с кодом 403 и инструкцией использовать approval workflow.
      *
      * @return array{secret: Secret, value: string}
-     * @throws AuthException     если нет прав (требуется observer+) или требуется одобрение
+     * @throws AuthException     если нет прав (требуется reader+) или требуется одобрение
      * @throws \RuntimeException если не найден
      */
     public function get(string $secretUuid, string $orgId, string $userId): array
     {
         $secret = $this->findSecretInOrg($secretUuid, $orgId);
-        $this->assertCan('read', $userId, 'directory', $secret->directoryId, $orgId);
+        $this->assertCan('read', $userId, 'secret', $secret->id, $orgId);
 
-        // requires_approval: пользователи ниже moderator должны использовать ApprovalService::useToken()
+        // requires_approval: пользователи ниже editor должны использовать ApprovalService::useToken()
         if ($secret->requiresApproval
             && !AuthContext::isApiKeyRequest()
-            && !$this->organizationService->hasPermission($orgId, $userId, 'moderator')
+            && $secret->ownerUserId !== $userId
+            && !$this->organizationService->hasPermission($orgId, $userId, 'editor')
         ) {
             throw new AuthException(
                 __('ui.backend.secret.requires_approval'),
@@ -388,7 +392,7 @@ final class SecretService
     public function getTemplateOverrides(string $secretUuid, string $orgId, string $userId): array
     {
         $secret = $this->findSecretInOrg($secretUuid, $orgId);
-        $this->assertCan('read', $userId, 'directory', $secret->directoryId, $orgId);
+        $this->assertCan('read', $userId, 'secret', $secret->id, $orgId);
 
         return $this->loadTemplateOverrides($secret->id);
     }
@@ -397,7 +401,7 @@ final class SecretService
     public function getDynamicSecretView(string $secretUuid, string $orgId, string $userId): array
     {
         $secret = $this->findSecretInOrg($secretUuid, $orgId);
-        $this->assertCan('read', $userId, 'directory', $secret->directoryId, $orgId);
+        $this->assertCan('read', $userId, 'secret', $secret->id, $orgId);
 
         if ($secret->type !== 'dynamic') {
             return ['input' => [], 'outputs' => [], 'primary_field' => null, 'service' => null];
@@ -453,7 +457,7 @@ final class SecretService
         ?string $providedValue = null,
     ): array {
         $secret = $this->findSecretInOrg($secretUuid, $orgId);
-        $this->assertCan('write', $userId, 'directory', $secret->directoryId, $orgId);
+        $this->assertCan('write', $userId, 'secret', $secret->id, $orgId);
 
         if ($secret->type !== 'template') {
             throw new \InvalidArgumentException(__('ui.backend.secret.template_regenerate_only'));
@@ -504,13 +508,13 @@ final class SecretService
      * История версий секрета (зашифрованные записи, без расшифровки).
      *
      * @return SecretVersion[]
-     * @throws AuthException     если нет прав (требуется observer+)
+     * @throws AuthException     если нет прав (требуется reader+)
      * @throws \RuntimeException если не найден
      */
     public function listVersions(string $secretUuid, string $orgId, string $userId): array
     {
         $secret = $this->findSecretInOrg($secretUuid, $orgId);
-        $this->assertCan('read', $userId, 'directory', $secret->directoryId, $orgId);
+        $this->assertCan('read', $userId, 'secret', $secret->id, $orgId);
         return SecretVersion::findBySecretId($secret->id);
     }
 
@@ -522,7 +526,7 @@ final class SecretService
      * Обновить имя и/или значение секрета.
      * При смене значения предыдущая версия сохраняется в историю, version++.
      *
-     * @throws AuthException             если нет прав (требуется moderator+)
+     * @throws AuthException             если нет прав (требуется editor+)
      * @throws \InvalidArgumentException при пустом имени
      * @throws \RuntimeException         если не найден или новое имя занято
      */
@@ -534,7 +538,7 @@ final class SecretService
         ?string $newValue = null,
     ): Secret {
         $secret = $this->findSecretInOrg($secretUuid, $orgId);
-        $this->assertCan('write', $userId, 'directory', $secret->directoryId, $orgId);
+        $this->assertCan('write', $userId, 'secret', $secret->id, $orgId);
         $now    = now()->format('Y-m-d H:i:s');
         $data   = ['updated_at' => $now];
 
@@ -593,13 +597,13 @@ final class SecretService
     /**
      * Мягкое удаление секрета (устанавливает deleted_at).
      *
-     * @throws AuthException     если нет прав (требуется moderator+)
+     * @throws AuthException     если нет прав (требуется editor+)
      * @throws \RuntimeException если не найден
      */
     public function delete(string $secretUuid, string $orgId, string $userId): void
     {
         $secret = $this->findSecretInOrg($secretUuid, $orgId);
-        $this->assertCan('delete', $userId, 'directory', $secret->directoryId, $orgId);
+        $this->assertCan('write', $userId, 'secret', $secret->id, $orgId);
         $secret->update(['deleted_at' => now()->format('Y-m-d H:i:s')]);
 
         $this->getAuditService()->record(
@@ -610,6 +614,61 @@ final class SecretService
             resourceId: $secret->id,
             resourceUuid: $secret->uuid,
         );
+    }
+
+    public function transferOwnership(string $secretUuid, string $orgId, string $newOwnerId, string $requesterId): Secret
+    {
+        $secret = $this->findSecretInOrg($secretUuid, $orgId);
+        $this->assertOwnedBy($secret, $requesterId, 'ui.backend.secret.owner_transfer_required');
+
+        if ($this->organizationService->getMemberRole($orgId, $newOwnerId) === null) {
+            throw new \RuntimeException(__('ui.backend.secret.new_owner_must_be_member'));
+        }
+
+        if ($secret->ownerUserId === $newOwnerId) {
+            return $secret;
+        }
+
+        $secret->update([
+            'owner_user_id' => (int) $newOwnerId,
+            'updated_at' => now()->format('Y-m-d H:i:s'),
+        ]);
+
+        $updated = Secret::findByUuid($secretUuid)
+            ?? throw new \RuntimeException(__('ui.backend.secret.not_found'));
+
+        $this->getAuditService()->record(
+            action: 'secret.transfer_ownership',
+            organizationId: $orgId,
+            userId: $requesterId,
+            resourceType: 'secret',
+            resourceId: $updated->id,
+            resourceUuid: $updated->uuid,
+            details: ['new_owner_id' => $newOwnerId],
+        );
+
+        return $updated;
+    }
+
+    /** @return \Passway\Models\UserPermission[] */
+    public function listAcl(string $secretUuid, string $orgId, string $requesterId): array
+    {
+        $secret = $this->findSecretInOrg($secretUuid, $orgId);
+        $this->assertOwnedBy($secret, $requesterId, 'ui.backend.secret.owner_acl_required');
+
+        return $this->permissionService->listForResource('secret', $secret->id);
+    }
+
+    /**
+     * @param array<int, array{subject_type:string,subject_id:string,read:?string,write:?string}> $rules
+     * @return \Passway\Models\UserPermission[]
+     */
+    public function replaceAcl(string $secretUuid, string $orgId, string $requesterId, array $rules): array
+    {
+        $secret = $this->findSecretInOrg($secretUuid, $orgId);
+        $this->assertOwnedBy($secret, $requesterId, 'ui.backend.secret.owner_acl_required');
+
+        return $this->permissionService->replaceForResource('secret', $secret->id, $rules, $requesterId);
     }
 
     /**
@@ -667,7 +726,7 @@ final class SecretService
         ?string $rotationSchedule,
     ): Secret {
         $secret = $this->findSecretInOrg($secretUuid, $orgId);
-        $this->assertCan('write', $userId, 'directory', $secret->directoryId, $orgId);
+        $this->assertCan('write', $userId, 'secret', $secret->id, $orgId);
 
         if ($secret->type !== 'dynamic') {
             throw new \InvalidArgumentException(__('ui.backend.secret.rotation_supported_for_dynamic_only'));
@@ -751,7 +810,7 @@ final class SecretService
     public function assertCanRotate(string $secretUuid, string $orgId, string $userId): void
     {
         $secret = $this->findSecretInOrg($secretUuid, $orgId);
-        $this->assertCan('write', $userId, 'directory', $secret->directoryId, $orgId);
+        $this->assertCan('write', $userId, 'secret', $secret->id, $orgId);
     }
 
     // ------------------------------------------------------------------ //
@@ -859,11 +918,31 @@ final class SecretService
         string $resourceId,
         string $orgId,
     ): void {
+        if ($resourceType === 'secret' && $this->isSecretOwnerById($resourceId, $userId)) {
+            return;
+        }
+
         if (!$this->permissionService->can($permission, $userId, $resourceType, $resourceId, $orgId)) {
             throw new AuthException(
                 __('ui.backend.secret.access_permission_required', ['permission' => $permission]),
                 403
             );
+        }
+    }
+
+    private function isSecretOwnerById(string $secretId, string $userId): bool
+    {
+        $secret = Secret::findById($secretId);
+        return $secret !== null && $secret->ownerUserId === $userId;
+    }
+
+    /**
+     * @throws AuthException (code 403)
+     */
+    private function assertOwnedBy(Secret $secret, string $userId, string $messageKey): void
+    {
+        if ($secret->ownerUserId !== $userId) {
+            throw new AuthException(__( $messageKey), 403);
         }
     }
 

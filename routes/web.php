@@ -99,9 +99,7 @@ $router->get('/organizations/:uuid/manage', [WebController::class, 'showOrganiza
 $router->post('/organizations/:uuid/manage', [WebController::class, 'updateOrganizationSettings'], [AuthMiddleware::class]);
 $router->get('/organizations/:uuid/api-keys', [WebController::class, 'showApiKeys'], [AuthMiddleware::class]);
 $router->post('/organizations/:uuid/api-keys', [WebController::class, 'createApiKey'], [AuthMiddleware::class]);
-$router->get('/organizations/:uuid/api-keys/:keyUuid/permissions', [WebController::class, 'showApiKeyPermissions'], [AuthMiddleware::class]);
-$router->post('/organizations/:uuid/api-keys/:keyUuid/permissions', [WebController::class, 'createApiKeyPermission'], [AuthMiddleware::class]);
-$router->post('/organizations/:uuid/api-keys/:keyUuid/permissions/:permId/delete', [WebController::class, 'removeApiKeyPermission'], [AuthMiddleware::class]);
+$router->post('/organizations/:uuid/api-keys/:keyUuid/role', [WebController::class, 'updateApiKeyRole'], [AuthMiddleware::class]);
 $router->post('/organizations/:uuid/api-keys/:keyUuid/revoke', [WebController::class, 'revokeApiKey'], [AuthMiddleware::class]);
 $router->get('/organizations/:uuid/integrations', [WebController::class, 'showOrganizationIntegrations'], [AuthMiddleware::class]);
 $router->post('/organizations/:uuid/integrations', [WebController::class, 'createOrganizationIntegration'], [AuthMiddleware::class]);
@@ -116,12 +114,14 @@ $router->post('/organizations/:uuid/directories', [WebController::class, 'create
 $router->post('/organizations/:uuid/secrets', [WebController::class, 'createRootSecret'], [AuthMiddleware::class]);
 $router->post('/organizations/:uuid/directories/:dirUuid/rename', [WebController::class, 'renameDirectory'], [AuthMiddleware::class]);
 $router->post('/organizations/:uuid/directories/:dirUuid/delete', [WebController::class, 'deleteDirectory'], [AuthMiddleware::class]);
+$router->post('/organizations/:uuid/directories/:dirUuid/owner', [WebController::class, 'transferDirectoryOwnership'], [AuthMiddleware::class]);
 $router->post('/organizations/:uuid/directories/:dirUuid/secrets', [WebController::class, 'createSecret'], [AuthMiddleware::class]);
 $router->get('/organizations/:uuid/directories/:dirUuid/secrets/:secUuid', [WebController::class, 'showSecret'], [AuthMiddleware::class]);
 $router->post('/organizations/:uuid/directories/:dirUuid/secrets/:secUuid/update', [WebController::class, 'updateSecret'], [AuthMiddleware::class]);
 $router->post('/organizations/:uuid/directories/:dirUuid/secrets/:secUuid/regenerate', [WebController::class, 'regenerateTemplateSecret'], [AuthMiddleware::class]);
 $router->post('/organizations/:uuid/directories/:dirUuid/secrets/:secUuid/rotate', [WebController::class, 'rotateSecret'], [AuthMiddleware::class]);
 $router->post('/organizations/:uuid/directories/:dirUuid/secrets/:secUuid/delete', [WebController::class, 'deleteSecret'], [AuthMiddleware::class]);
+$router->post('/organizations/:uuid/directories/:dirUuid/secrets/:secUuid/owner', [WebController::class, 'transferSecretOwnership'], [AuthMiddleware::class]);
 
 // ------------------------------------------------------------------ //
 //  Инвайты (web — принятие ссылки)                                    //

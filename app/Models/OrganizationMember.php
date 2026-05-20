@@ -9,12 +9,12 @@ use Passway\Core\Database;
 /**
  * Тонкая модель участника организации.
  *
- * Роли (иерархия убывает): owner | admin | moderator | user | observer
+ * Роли (иерархия убывает): owner | admin | editor | reader
  */
 final class OrganizationMember
 {
     /** Допустимые роли в порядке убывания привилегий */
-    public const ROLES = ['owner', 'admin', 'moderator', 'user', 'observer'];
+    public const ROLES = ['owner', 'admin', 'editor', 'reader'];
 
     public function __construct(
         public readonly string  $id,

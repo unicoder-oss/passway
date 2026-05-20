@@ -62,15 +62,8 @@ require base_path('resources/views/partials/auth_topbar.php');
         <div class="api-docs-summary">
             <div>
                 <h2 style="margin:0 0 .5rem;"><?= e(__('ui.api_docs.auth_heading')) ?></h2>
-                <div class="muted"><?= e(__('ui.api_docs.auth_session')) ?></div>
                 <div class="muted"><?= e(__('ui.api_docs.auth_api_key')) ?></div>
-                <div class="muted"><?= e(__('ui.api_docs.auth_api_key_limits')) ?></div>
-            </div>
-            <div>
-                <h2 style="margin:0 0 .5rem;"><?= e(__('ui.api_docs.notes_heading')) ?></h2>
-                <div class="muted"><?= e(__('ui.api_docs.note_rotation')) ?></div>
-                <div class="muted"><?= e(__('ui.api_docs.note_response')) ?></div>
-                <div class="muted"><?= e(__('ui.api_docs.note_time')) ?></div>
+                <div class="muted"><?= e(__('ui.api_docs.auth_api_key_generate')) ?></div>
             </div>
         </div>
     </section>

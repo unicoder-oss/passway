@@ -159,10 +159,10 @@ final class OrganizationServiceTest extends DatabaseTestCase
         $observer = $this->createTestUser('obs@example.com');
         $org      = $this->svc->create('Org', $owner->id);
 
-        $this->svc->addMember($org->id, $observer->id, 'observer', null);
+        $this->svc->addMember($org->id, $observer->id, 'reader', null);
 
         $this->assertFalse($this->svc->hasPermission($org->id, $observer->id, 'admin'));
-        $this->assertTrue($this->svc->hasPermission($org->id, $observer->id, 'observer'));
+        $this->assertTrue($this->svc->hasPermission($org->id, $observer->id, 'reader'));
     }
 
     // ------------------------------------------------------------------ //
@@ -175,9 +175,9 @@ final class OrganizationServiceTest extends DatabaseTestCase
         $newbie = $this->createTestUser('newbie@example.com');
         $org    = $this->svc->create('Org', $owner->id);
 
-        $member = $this->svc->addMember($org->id, $newbie->id, 'user', $owner->id);
+        $member = $this->svc->addMember($org->id, $newbie->id, 'reader', $owner->id);
 
-        $this->assertSame('user', $member->role);
+        $this->assertSame('reader', $member->role);
         $this->assertSame($newbie->id, $member->userId);
     }
 
@@ -187,7 +187,7 @@ final class OrganizationServiceTest extends DatabaseTestCase
         $org   = $this->svc->create('Org', $owner->id);
 
         $this->expectException(\RuntimeException::class);
-        $this->svc->addMember($org->id, $owner->id, 'user', null);
+        $this->svc->addMember($org->id, $owner->id, 'reader', null);
     }
 
     public function test_add_member_throws_for_invalid_role(): void
@@ -210,10 +210,10 @@ final class OrganizationServiceTest extends DatabaseTestCase
         $member = $this->createTestUser('member@example.com');
         $org    = $this->svc->create('Org', $owner->id);
 
-        $this->svc->addMember($org->id, $member->id, 'user', null);
-        $this->svc->updateMemberRole($org->id, $member->id, 'moderator', $owner->id);
+        $this->svc->addMember($org->id, $member->id, 'reader', null);
+        $this->svc->updateMemberRole($org->id, $member->id, 'editor', $owner->id);
 
-        $this->assertSame('moderator', $this->svc->getMemberRole($org->id, $member->id));
+        $this->assertSame('editor', $this->svc->getMemberRole($org->id, $member->id));
     }
 
     public function test_update_member_role_throws_for_non_admin(): void
@@ -222,10 +222,10 @@ final class OrganizationServiceTest extends DatabaseTestCase
         $member = $this->createTestUser('member@example.com');
         $org    = $this->svc->create('Org', $owner->id);
 
-        $this->svc->addMember($org->id, $member->id, 'user', null);
+        $this->svc->addMember($org->id, $member->id, 'reader', null);
 
         $this->expectException(AuthException::class);
-        $this->svc->updateMemberRole($org->id, $owner->id, 'user', $member->id);
+        $this->svc->updateMemberRole($org->id, $owner->id, 'reader', $member->id);
     }
 
     public function test_update_owner_role_throws(): void
@@ -237,7 +237,7 @@ final class OrganizationServiceTest extends DatabaseTestCase
         $this->svc->addMember($org->id, $admin->id, 'admin', null);
 
         $this->expectException(AuthException::class);
-        $this->svc->updateMemberRole($org->id, $owner->id, 'user', $admin->id);
+        $this->svc->updateMemberRole($org->id, $owner->id, 'reader', $admin->id);
     }
 
     // ------------------------------------------------------------------ //
@@ -252,7 +252,7 @@ final class OrganizationServiceTest extends DatabaseTestCase
         $org    = $this->svc->create('Org', $owner->id);
 
         $this->svc->addMember($org->id, $admin->id, 'admin', null);
-        $this->svc->addMember($org->id, $member->id, 'user', null);
+        $this->svc->addMember($org->id, $member->id, 'reader', null);
         $this->svc->removeMember($org->id, $member->id, $admin->id);
 
         $this->assertNull(OrganizationMember::findByOrgAndUser($org->id, $member->id));
@@ -264,7 +264,7 @@ final class OrganizationServiceTest extends DatabaseTestCase
         $member = $this->createTestUser('member@example.com');
         $org    = $this->svc->create('Org', $owner->id);
 
-        $this->svc->addMember($org->id, $member->id, 'user', null);
+        $this->svc->addMember($org->id, $member->id, 'reader', null);
         $this->svc->removeMember($org->id, $member->id, $member->id);
 
         $this->assertNull(OrganizationMember::findByOrgAndUser($org->id, $member->id));
@@ -304,7 +304,7 @@ final class OrganizationServiceTest extends DatabaseTestCase
         $org    = $this->svc->create('Org', $owner->id);
 
         $this->svc->addMember($org->id, $admin->id, 'admin', null);
-        $this->svc->addMember($org->id, $newOwn->id, 'user', null);
+        $this->svc->addMember($org->id, $newOwn->id, 'reader', null);
 
         $this->expectException(AuthException::class);
         $this->svc->transferOwnership($org->id, $newOwn->id, $admin->id);
@@ -319,7 +319,7 @@ final class OrganizationServiceTest extends DatabaseTestCase
         $owner  = $this->createTestUser();
         $member = $this->createTestUser('member@example.com');
         $org    = $this->svc->create('Org', $owner->id);
-        $this->svc->addMember($org->id, $member->id, 'user', null);
+        $this->svc->addMember($org->id, $member->id, 'reader', null);
 
         $members = $this->svc->listMembers($org->id);
         $this->assertCount(2, $members);

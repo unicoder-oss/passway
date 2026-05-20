@@ -29,6 +29,13 @@ require base_path('resources/views/partials/auth_topbar.php');
                 <input id="key-name" name="name" placeholder="<?= e(__('ui.api_keys.name_placeholder')) ?>" required>
             </div>
             <div>
+                <label for="key-role"><?= e(__('ui.api_keys.role')) ?></label>
+                <select id="key-role" name="role">
+                    <option value="reader"><?= e(__('ui.api_keys.role_reader')) ?></option>
+                    <option value="editor"><?= e(__('ui.api_keys.role_editor')) ?></option>
+                </select>
+            </div>
+            <div>
                 <label for="key-expires"><?= e(__('ui.api_keys.expires_at_optional')) ?></label>
                 <input id="key-expires" name="expires_at" placeholder="2026-12-31 23:59:59">
             </div>
@@ -43,12 +50,21 @@ require base_path('resources/views/partials/auth_topbar.php');
                 <div class="panel panel-muted" style="padding:1rem; display:grid; gap:.75rem;">
                     <div>
                         <div style="font-weight:700;"><?= e($key->name) ?></div>
-                        <div class="muted" style="font-size:.92rem;"><?= e(__('ui.api_keys.prefix', ['prefix' => $key->keyPrefix])) ?> · <?= e($key->isActive ? __('ui.api_key_permissions.status_active') : __('ui.api_key_permissions.status_revoked')) ?></div>
+                        <div class="muted" style="font-size:.92rem;"><?= e(__('ui.api_keys.prefix', ['prefix' => $key->keyPrefix])) ?> · <?= e($key->isActive ? __('ui.api_keys.status_active') : __('ui.api_keys.status_revoked')) ?></div>
+                        <div class="muted" style="font-size:.92rem;"><?= e(__('ui.api_keys.role_label', ['role' => __('ui.api_keys.role_' . $key->role)])) ?></div>
                         <div class="muted" style="font-size:.92rem;"><?= __('ui.api_keys.created', ['created_at' => local_datetime($key->createdAt)]) ?><?= $key->expiresAt ? __('ui.api_keys.expires_suffix', ['date' => local_datetime($key->expiresAt)]) : '' ?></div>
                         <div class="muted" style="font-size:.92rem;"><?= __('ui.api_keys.last_used', ['date' => $key->lastUsedAt !== null ? local_datetime($key->lastUsedAt) : e(__('ui.app.never'))]) ?></div>
                     </div>
                     <div class="actions">
-                        <a class="button secondary" href="/organizations/<?= e($organization->uuid) ?>/api-keys/<?= e($key->uuid) ?>/permissions"><?= e(__('ui.api_keys.permissions')) ?></a>
+                        <?php if ($key->isActive): ?>
+                            <form method="POST" action="/organizations/<?= e($organization->uuid) ?>/api-keys/<?= e($key->uuid) ?>/role" class="actions" style="gap:.5rem;">
+                                <select name="role">
+                                    <option value="reader"<?= $key->role === 'reader' ? ' selected' : '' ?>><?= e(__('ui.api_keys.role_reader')) ?></option>
+                                    <option value="editor"<?= $key->role === 'editor' ? ' selected' : '' ?>><?= e(__('ui.api_keys.role_editor')) ?></option>
+                                </select>
+                                <button type="submit" class="secondary"><?= e(__('ui.api_keys.update_role')) ?></button>
+                            </form>
+                        <?php endif; ?>
                         <?php if ($key->isActive): ?>
                             <form method="POST" action="/organizations/<?= e($organization->uuid) ?>/api-keys/<?= e($key->uuid) ?>/revoke">
                                 <button type="submit" class="danger"><?= e(__('ui.api_keys.revoke_key')) ?></button>

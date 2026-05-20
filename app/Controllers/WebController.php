@@ -9,7 +9,7 @@ use Passway\Core\AuthContext;
 use Passway\Core\Request;
 use Passway\Core\Response;
 use Passway\Exceptions\AuthException;
-use Passway\Models\ApiKeyPermission;
+use Passway\Models\ApiKey;
 use Passway\Models\Directory;
 use Passway\Models\InviteLink;
 use Passway\Models\Organization;
@@ -29,6 +29,7 @@ use Passway\Services\RotationRegistryService;
 use Passway\Services\DirectoryService;
 use Passway\Services\InviteService;
 use Passway\Services\OrganizationService;
+use Passway\Services\PermissionService;
 use Passway\Services\SecretService;
 use Passway\Services\TemplateService;
 use Passway\Services\TotpService;
@@ -43,6 +44,7 @@ final class WebController
         private readonly OrganizationService $organizationService,
         private readonly DirectoryService $directoryService,
         private readonly SecretService $secretService,
+        private readonly PermissionService $permissionService,
         private readonly RotationService $rotationService,
         private readonly TemplateService $templateService,
         private readonly InviteService $inviteService,
@@ -193,7 +195,7 @@ final class WebController
         $user = AuthContext::requireUser();
         $org = $this->findOrgOrFail($request);
 
-        if (!$this->organizationService->hasPermission($org->id, $user->id, 'observer')) {
+        if (!$this->organizationService->hasPermission($org->id, $user->id, 'reader')) {
             return Response::redirect('/?error=' . \urlencode(__('ui.messages.access_denied')));
         }
 
@@ -205,7 +207,7 @@ final class WebController
         $search = \trim((string) ($request->query('q') ?? ''));
         $canManageOrganization = $this->organizationService->hasPermission($org->id, $user->id, 'admin');
         $canViewAudit = $canManageOrganization;
-        $canEditContent = $this->organizationService->hasPermission($org->id, $user->id, 'moderator');
+        $canEditContent = $this->organizationService->hasPermission($org->id, $user->id, 'editor');
         $rootSecretDirectory = $this->findRootSecretDirectory($org->id);
 
         if ($rootSecretDirectory === null && $canEditContent) {
@@ -261,6 +263,10 @@ final class WebController
         $parentDirectory = $currentDir !== null && $currentDir->parentId !== null
             ? ($directoryMap[$currentDir->parentId] ?? null)
             : null;
+        $organizationMembers = $this->serializeOrganizationMembers($org->id);
+        $canWriteCurrentDirectory = $currentDir !== null
+            ? $this->permissionService->can('write', $user->id, 'directory', $currentDir->id, $org->id)
+            : false;
 
         return $this->html($this->view->render('web/organization', [
             'title' => $org->name,
@@ -279,9 +285,15 @@ final class WebController
             'templates' => $this->templateService->listAvailable($org->id),
             'integrations' => $this->listActiveIntegrationsForOrg($org->id),
             'rotationServiceMap' => $this->buildRotationServiceMap(),
+            'organizationMembers' => $organizationMembers,
+            'organizationApiKeys' => $currentDir !== null && $currentDir->ownerUserId === $user->id
+                ? $this->serializeOrganizationApiKeys($org->id)
+                : [],
             'canManageOrganization' => $canManageOrganization,
             'canViewAudit' => $canViewAudit,
             'canEditContent' => $canEditContent,
+            'canWriteCurrentDirectory' => $canWriteCurrentDirectory,
+            'canManageCurrentDirectoryAcl' => $currentDir !== null && $currentDir->ownerUserId === $user->id,
             'queryError' => $request->query('error'),
             'search' => $search,
         ]));
@@ -292,7 +304,7 @@ final class WebController
         $user = AuthContext::requireUser();
         $org = $this->findOrgOrFail($request);
 
-        if (!$this->organizationService->hasPermission($org->id, $user->id, 'observer')) {
+        if (!$this->organizationService->hasPermission($org->id, $user->id, 'reader')) {
             return Response::redirect('/?error=' . \urlencode(__('ui.messages.access_denied')));
         }
 
@@ -389,7 +401,7 @@ final class WebController
     {
         $user = AuthContext::requireUser();
         $org = $this->findOrgOrFail($request);
-        $role = \trim((string) ($request->input('role') ?? 'user'));
+        $role = \trim((string) ($request->input('role') ?? 'reader'));
         $ttlHours = (int) ($request->input('ttl') ?? 1);
         if ($ttlHours < 1 || $ttlHours > 168) {
             $ttlHours = 1;
@@ -655,38 +667,12 @@ final class WebController
         ]));
     }
 
-    public function showApiKeyPermissions(Request $request): Response
-    {
-        $user = AuthContext::requireUser();
-        $org = $this->findOrgOrFail($request);
-        $keyUuid = (string) $request->routeParam('keyUuid');
-
-        try {
-            $apiKey = $this->apiKeyService->get($keyUuid, $org->id, $user->id);
-            $permissions = $this->apiKeyService->listPermissions($keyUuid, $org->id, $user->id);
-        } catch (\Throwable $e) {
-            return Response::redirect('/organizations/' . \urlencode($org->uuid) . '/api-keys?error=' . \urlencode($e->getMessage()));
-        }
-
-        return $this->html($this->view->render('web/api_key_permissions', [
-            'title' => __('ui.titles.api_key_permissions'),
-            'user' => $user,
-            'organization' => $org,
-            'apiKey' => $apiKey,
-            'owner' => $apiKey->userId !== null ? User::findById($apiKey->userId) : null,
-            'permissions' => $permissions,
-            'permissionTargets' => $this->buildApiKeyPermissionTargets($org),
-            'permissionLabels' => $this->buildApiKeyPermissionLabels($permissions, $org),
-            'queryError' => $request->query('error'),
-            'querySuccess' => $request->query('success'),
-        ]));
-    }
-
     public function createApiKey(Request $request): Response
     {
         $user = AuthContext::requireUser();
         $org = $this->findOrgOrFail($request);
         $name = \trim((string) ($request->input('name') ?? ''));
+        $role = \trim((string) ($request->input('role') ?? 'reader'));
         $expiresAt = \trim((string) ($request->input('expires_at') ?? ''));
 
         try {
@@ -694,6 +680,7 @@ final class WebController
                 $name,
                 $org->id,
                 $user->id,
+                $role,
                 $expiresAt !== '' ? $expiresAt : null,
             );
             $keys = $this->apiKeyService->listForOrg($org->id, $user->id);
@@ -713,22 +700,20 @@ final class WebController
         ]));
     }
 
-    public function createApiKeyPermission(Request $request): Response
+    public function updateApiKeyRole(Request $request): Response
     {
         $user = AuthContext::requireUser();
         $org = $this->findOrgOrFail($request);
         $keyUuid = (string) $request->routeParam('keyUuid');
-        $permission = \trim((string) ($request->input('permission') ?? 'read'));
-        $target = \trim((string) ($request->input('target') ?? 'organization:*'));
+        $role = \trim((string) ($request->input('role') ?? ''));
 
         try {
-            [$resourceType, $resourceId] = $this->resolveApiKeyPermissionTarget($target, $org);
-            $this->apiKeyService->addPermission($keyUuid, $resourceType, $resourceId, $permission, $org->id, $user->id);
+            $this->apiKeyService->updateRole($keyUuid, $role, $org->id, $user->id);
         } catch (\Throwable $e) {
-            return Response::redirect('/organizations/' . \urlencode($org->uuid) . '/api-keys/' . \urlencode($keyUuid) . '/permissions?error=' . \urlencode($e->getMessage()));
+            return Response::redirect('/organizations/' . \urlencode($org->uuid) . '/api-keys?error=' . \urlencode($e->getMessage()));
         }
 
-        return Response::redirect('/organizations/' . \urlencode($org->uuid) . '/api-keys/' . \urlencode($keyUuid) . '/permissions?success=' . \urlencode(__('ui.messages.permission_added')));
+        return Response::redirect('/organizations/' . \urlencode($org->uuid) . '/api-keys?success=' . \urlencode(__('ui.messages.api_key_role_updated')));
     }
 
     public function revokeApiKey(Request $request): Response
@@ -744,22 +729,6 @@ final class WebController
         }
 
         return Response::redirect('/organizations/' . \urlencode($org->uuid) . '/api-keys?success=' . \urlencode(__('ui.messages.api_key_revoked')));
-    }
-
-    public function removeApiKeyPermission(Request $request): Response
-    {
-        $user = AuthContext::requireUser();
-        $org = $this->findOrgOrFail($request);
-        $keyUuid = (string) $request->routeParam('keyUuid');
-        $permId = (string) $request->routeParam('permId');
-
-        try {
-            $this->apiKeyService->removePermission($keyUuid, $permId, $org->id, $user->id);
-        } catch (\Throwable $e) {
-            return Response::redirect('/organizations/' . \urlencode($org->uuid) . '/api-keys/' . \urlencode($keyUuid) . '/permissions?error=' . \urlencode($e->getMessage()));
-        }
-
-        return Response::redirect('/organizations/' . \urlencode($org->uuid) . '/api-keys/' . \urlencode($keyUuid) . '/permissions?success=' . \urlencode(__('ui.messages.permission_removed')));
     }
 
     public function showRotationServices(Request $request): Response
@@ -950,9 +919,12 @@ final class WebController
         $secUuid = (string) $request->routeParam('secUuid');
 
         try {
-            $dir = $this->directoryService->findInOrg($dirUuid, $org->id, $user->id);
             ['secret' => $secret, 'value' => $value] = $this->secretService->get($secUuid, $org->id, $user->id);
             $versions = $this->secretService->listVersions($secUuid, $org->id, $user->id);
+            $dir = Directory::findById($secret->directoryId);
+            if ($dir === null || $dir->organizationId !== $org->id) {
+                throw new \RuntimeException(__('ui.backend.directory.not_found'));
+            }
         } catch (AuthException | \RuntimeException | \Passway\Exceptions\DecryptionException $e) {
             return Response::redirect($this->organizationUrl($org->uuid, $dirUuid, $e->getMessage()));
         }
@@ -1001,6 +973,12 @@ final class WebController
             'templateParameterSchema' => $templateParameterSchema,
             'templateExtraFields' => $templateExtraFields,
             'dynamicRotationView' => $dynamicRotationView,
+            'organizationMembers' => $this->serializeOrganizationMembers($org->id),
+            'organizationApiKeys' => $secret->ownerUserId === $user->id
+                ? $this->serializeOrganizationApiKeys($org->id)
+                : [],
+            'canWriteSecret' => $this->permissionService->can('write', $user->id, 'secret', $secret->id, $org->id),
+            'canManageSecretAcl' => $secret->ownerUserId === $user->id,
             'error' => $request->query('error'),
         ]));
     }
@@ -1094,6 +1072,28 @@ final class WebController
         return Response::redirect($this->organizationUrl($org->uuid, $this->isRootSecretDirectoryUuid($org, $dirUuid) ? null : $dirUuid));
     }
 
+    public function transferSecretOwnership(Request $request): Response
+    {
+        $user = AuthContext::requireUser();
+        $org = $this->findOrgOrFail($request);
+        $dirUuid = (string) $request->routeParam('dirUuid');
+        $secUuid = (string) $request->routeParam('secUuid');
+        $userUuid = \trim((string) ($request->input('user_uuid') ?? ''));
+
+        $targetUser = User::findByUuid($userUuid);
+        if ($targetUser === null) {
+            return Response::redirect($this->secretUrl($org->uuid, $dirUuid, $secUuid, __('ui.backend.common.user_not_found')));
+        }
+
+        try {
+            $this->secretService->transferOwnership($secUuid, $org->id, $targetUser->id, $user->id);
+        } catch (\Throwable $e) {
+            return Response::redirect($this->secretUrl($org->uuid, $dirUuid, $secUuid, $e->getMessage()));
+        }
+
+        return Response::redirect($this->secretUrl($org->uuid, $dirUuid, $secUuid));
+    }
+
     public function renameDirectory(Request $request): Response
     {
         $user = AuthContext::requireUser();
@@ -1123,6 +1123,27 @@ final class WebController
         }
 
         return Response::redirect($this->organizationUrl($org->uuid));
+    }
+
+    public function transferDirectoryOwnership(Request $request): Response
+    {
+        $user = AuthContext::requireUser();
+        $org = $this->findOrgOrFail($request);
+        $dirUuid = (string) $request->routeParam('dirUuid');
+        $userUuid = \trim((string) ($request->input('user_uuid') ?? ''));
+
+        $targetUser = User::findByUuid($userUuid);
+        if ($targetUser === null) {
+            return Response::redirect($this->organizationUrl($org->uuid, $dirUuid, __('ui.backend.common.user_not_found')));
+        }
+
+        try {
+            $this->directoryService->transferOwnership($dirUuid, $org->id, $targetUser->id, $user->id);
+        } catch (\Throwable $e) {
+            return Response::redirect($this->organizationUrl($org->uuid, $dirUuid, $e->getMessage()));
+        }
+
+        return Response::redirect($this->organizationUrl($org->uuid, $dirUuid));
     }
 
     private function resolveCurrentOrganization(Request $request, array $orgs): ?Organization
@@ -1168,6 +1189,45 @@ final class WebController
             'createdOrganizationInvite' => $createdOrganizationInvite,
             'search' => $search,
         ]));
+    }
+
+    /** @return array<int, array{uuid:string,name:string,email:string,role:string}> */
+    private function serializeOrganizationMembers(string $orgId): array
+    {
+        $members = [];
+
+        foreach ($this->organizationService->listMembers($orgId) as $member) {
+            $memberUser = User::findById($member->userId);
+            if ($memberUser === null) {
+                continue;
+            }
+
+            $members[] = [
+                'uuid' => $memberUser->uuid,
+                'name' => display_name_for_user($memberUser),
+                'email' => $memberUser->email,
+                'role' => $member->role,
+            ];
+        }
+
+        return $members;
+    }
+
+    /** @return array<int, array{uuid:string,name:string,key_prefix:string,is_active:bool}> */
+    private function serializeOrganizationApiKeys(string $orgId): array
+    {
+        $keys = [];
+
+        foreach (ApiKey::findByOrgId($orgId) as $apiKey) {
+            $keys[] = [
+                'uuid' => $apiKey->uuid,
+                'name' => $apiKey->name,
+                'key_prefix' => $apiKey->keyPrefix,
+                'is_active' => $apiKey->isActive,
+            ];
+        }
+
+        return $keys;
     }
 
     /**
@@ -1300,116 +1360,6 @@ final class WebController
         }
 
         return implode(' / ', $segments);
-    }
-
-    /** @return array<int, array{value: string, label: string}> */
-    private function buildApiKeyPermissionTargets(Organization $org): array
-    {
-        $targets = [
-            ['value' => 'organization:*', 'label' => 'All organization-level resources'],
-            ['value' => 'organization:self', 'label' => 'This organization only'],
-            ['value' => 'directory:*', 'label' => 'All directories'],
-            ['value' => 'secret:*', 'label' => 'All secrets'],
-        ];
-
-        $directories = Directory::findByOrgId($org->id);
-        foreach ($directories as $directory) {
-            $targets[] = [
-                'value' => 'directory:' . $directory->uuid,
-                'label' => 'Directory: ' . str_repeat('  ', $directory->depth) . $directory->name,
-            ];
-        }
-
-        foreach ($directories as $directory) {
-            foreach (Secret::findByDirId($directory->id) as $secret) {
-                $targets[] = [
-                    'value' => 'secret:' . $secret->uuid,
-                    'label' => 'Secret: ' . $secret->name . ' (' . $directory->name . ')',
-                ];
-            }
-        }
-
-        return $targets;
-    }
-
-    /** @param ApiKeyPermission[] $permissions
-     *  @return array<string, string>
-     */
-    private function buildApiKeyPermissionLabels(array $permissions, Organization $org): array
-    {
-        $labels = [];
-        foreach ($permissions as $permission) {
-            $labels[$permission->id] = $this->describeApiKeyPermission($permission, $org);
-        }
-
-        return $labels;
-    }
-
-    /** @return array{0: string, 1: ?string} */
-    private function resolveApiKeyPermissionTarget(string $target, Organization $org): array
-    {
-        [$resourceType, $resourceRef] = \array_pad(\explode(':', $target, 2), 2, null);
-        $resourceType = \is_string($resourceType) ? \trim($resourceType) : '';
-        $resourceRef = \is_string($resourceRef) ? \trim($resourceRef) : '';
-
-        if ($resourceType === '' || $resourceRef === '') {
-            throw new \InvalidArgumentException(__('ui.backend.web.permission_target_required'));
-        }
-
-        if ($resourceRef === '*') {
-            return [$resourceType, null];
-        }
-
-        if ($resourceType === 'organization') {
-            if ($resourceRef !== 'self') {
-                throw new \InvalidArgumentException(__('ui.backend.web.invalid_organization_target'));
-            }
-
-            return ['organization', $org->id];
-        }
-
-        if ($resourceType === 'directory') {
-            $directory = Directory::findByUuid($resourceRef);
-            if ($directory === null || $directory->organizationId !== $org->id) {
-                throw new \RuntimeException(__('ui.backend.directory.not_found'));
-            }
-
-            return ['directory', $directory->id];
-        }
-
-        if ($resourceType === 'secret') {
-            $secret = Secret::findByUuid($resourceRef);
-            if ($secret === null || $secret->organizationId !== $org->id) {
-                throw new \RuntimeException(__('ui.backend.secret.not_found'));
-            }
-
-            return ['secret', $secret->id];
-        }
-
-        throw new \InvalidArgumentException(__('ui.backend.web.invalid_permission_target'));
-    }
-
-    private function describeApiKeyPermission(ApiKeyPermission $permission, Organization $org): string
-    {
-        if ($permission->resourceId === null) {
-            return 'All ' . $permission->resourceType . ' resources';
-        }
-
-        if ($permission->resourceType === 'organization') {
-            return 'Organization: ' . $org->name;
-        }
-
-        if ($permission->resourceType === 'directory') {
-            $directory = Directory::findById($permission->resourceId);
-            return 'Directory: ' . ($directory?->name ?? ('#' . $permission->resourceId));
-        }
-
-        if ($permission->resourceType === 'secret') {
-            $secret = Secret::findById($permission->resourceId);
-            return 'Secret: ' . ($secret?->name ?? ('#' . $permission->resourceId));
-        }
-
-        return $permission->resourceType . ': #' . $permission->resourceId;
     }
 
     /** @return array<string, RotationServiceModel> */

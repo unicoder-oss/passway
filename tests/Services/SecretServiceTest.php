@@ -8,6 +8,7 @@ use Passway\Core\Database;
 use Passway\Exceptions\AuthException;
 use Passway\Models\Secret;
 use Passway\Models\SecretVersion;
+use Passway\Services\ApiKeyService;
 use Passway\Services\DirectoryService;
 use Passway\Services\EncryptionService;
 use Passway\Services\GroupService;
@@ -28,6 +29,7 @@ final class SecretServiceTest extends DatabaseTestCase
     private SecretService      $svc;
     private OrganizationService $orgSvc;
     private DirectoryService   $dirSvc;
+    private PermissionService  $permSvc;
 
     public static function setUpBeforeClass(): void
     {
@@ -41,9 +43,9 @@ final class SecretServiceTest extends DatabaseTestCase
         parent::setUp();
 
         $this->orgSvc = new OrganizationService();
-        $permSvc      = new PermissionService($this->orgSvc, new GroupService($this->orgSvc));
-        $this->dirSvc = new DirectoryService($this->orgSvc, $permSvc);
-        $this->svc    = new SecretService($this->orgSvc, new EncryptionService(), $permSvc);
+        $this->permSvc = new PermissionService($this->orgSvc, new GroupService($this->orgSvc));
+        $this->dirSvc = new DirectoryService($this->orgSvc, $this->permSvc);
+        $this->svc    = new SecretService($this->orgSvc, new EncryptionService(), $this->permSvc);
 
         // team-режим — нет ограничений по числу организаций
         Database::getInstance()->query(
@@ -171,7 +173,7 @@ final class SecretServiceTest extends DatabaseTestCase
         $owner    = $this->createTestUser();
         $observer = $this->createTestUser('obs@example.com');
         $org      = $this->orgSvc->create('Org', $owner->id);
-        $this->orgSvc->addMember($org->id, $observer->id, 'observer', null);
+        $this->orgSvc->addMember($org->id, $observer->id, 'reader', null);
         $dir = $this->dirSvc->create($org->id, null, 'Dir', $owner->id);
 
         $this->expectException(AuthException::class);
@@ -255,7 +257,7 @@ final class SecretServiceTest extends DatabaseTestCase
         $owner    = $this->createTestUser();
         $observer = $this->createTestUser('obs@example.com');
         $org      = $this->orgSvc->create('Org', $owner->id);
-        $this->orgSvc->addMember($org->id, $observer->id, 'observer', null);
+        $this->orgSvc->addMember($org->id, $observer->id, 'reader', null);
         $dir    = $this->dirSvc->create($org->id, null, 'Dir', $owner->id);
         $secret = $this->svc->create($org->id, $dir->uuid, 'Token', 'static', 'value', $owner->id);
 
@@ -286,6 +288,171 @@ final class SecretServiceTest extends DatabaseTestCase
 
         $this->expectException(AuthException::class);
         $this->svc->get($secret->uuid, $org->id, $stranger->id);
+    }
+
+    public function test_get_denied_when_directory_read_denied_for_reader(): void
+    {
+        $owner = $this->createTestUser();
+        $reader = $this->createTestUser('reader@example.com');
+        $org = $this->orgSvc->create('Org', $owner->id);
+        $this->orgSvc->addMember($org->id, $reader->id, 'reader', null);
+        $dir = $this->dirSvc->create($org->id, null, 'Dir', $owner->id);
+        $secret = $this->svc->create($org->id, $dir->uuid, 'Secret', 'static', 'value', $owner->id);
+
+        $this->permSvc->grant('user', $reader->id, 'directory', $dir->id, 'read', true, null, $owner->id, $org->id);
+
+        $this->expectException(AuthException::class);
+        $this->svc->get($secret->uuid, $org->id, $reader->id);
+    }
+
+    public function test_get_allowed_by_secret_rule_when_directory_read_denied(): void
+    {
+        $owner = $this->createTestUser();
+        $reader = $this->createTestUser('reader@example.com');
+        $org = $this->orgSvc->create('Org', $owner->id);
+        $this->orgSvc->addMember($org->id, $reader->id, 'reader', null);
+        $dir = $this->dirSvc->create($org->id, null, 'Dir', $owner->id);
+        $secret = $this->svc->create($org->id, $dir->uuid, 'Secret', 'static', 'value', $owner->id);
+
+        $this->permSvc->grant('user', $reader->id, 'directory', $dir->id, 'read', true, null, $owner->id, $org->id);
+        $this->permSvc->grant('user', $reader->id, 'secret', $secret->id, 'read', false, null, $owner->id, $org->id);
+
+        ['value' => $value] = $this->svc->get($secret->uuid, $org->id, $reader->id);
+
+        $this->assertSame('value', $value);
+    }
+
+    public function test_update_allowed_by_secret_write_when_directory_write_denied(): void
+    {
+        $owner = $this->createTestUser();
+        $reader = $this->createTestUser('reader@example.com');
+        $org = $this->orgSvc->create('Org', $owner->id);
+        $this->orgSvc->addMember($org->id, $reader->id, 'reader', null);
+        $dir = $this->dirSvc->create($org->id, null, 'Dir', $owner->id);
+        $secret = $this->svc->create($org->id, $dir->uuid, 'Secret', 'static', 'old', $owner->id);
+
+        $this->permSvc->grant('user', $reader->id, 'directory', $dir->id, 'write', true, null, $owner->id, $org->id);
+        $this->permSvc->grant('user', $reader->id, 'secret', $secret->id, 'write', false, null, $owner->id, $org->id);
+
+        $this->svc->update($secret->uuid, $org->id, $reader->id, null, 'new');
+
+        ['value' => $value] = $this->svc->get($secret->uuid, $org->id, $owner->id);
+        $this->assertSame('new', $value);
+    }
+
+    public function test_secret_owner_can_read_even_with_explicit_secret_deny(): void
+    {
+        $owner = $this->createTestUser();
+        $org = $this->orgSvc->create('Org', $owner->id);
+        $dir = $this->dirSvc->create($org->id, null, 'Dir', $owner->id);
+        $secret = $this->svc->create($org->id, $dir->uuid, 'Secret', 'static', 'value', $owner->id);
+
+        $this->permSvc->grant('user', $owner->id, 'secret', $secret->id, 'read', true, null, $owner->id, $org->id);
+
+        ['value' => $value] = $this->svc->get($secret->uuid, $org->id, $owner->id);
+
+        $this->assertSame('value', $value);
+    }
+
+    public function test_secret_owner_can_write_even_with_explicit_secret_deny(): void
+    {
+        $owner = $this->createTestUser();
+        $org = $this->orgSvc->create('Org', $owner->id);
+        $dir = $this->dirSvc->create($org->id, null, 'Dir', $owner->id);
+        $secret = $this->svc->create($org->id, $dir->uuid, 'Secret', 'static', 'old', $owner->id);
+
+        $this->permSvc->grant('user', $owner->id, 'secret', $secret->id, 'write', true, null, $owner->id, $org->id);
+
+        $this->svc->update($secret->uuid, $org->id, $owner->id, null, 'new');
+
+        ['value' => $value] = $this->svc->get($secret->uuid, $org->id, $owner->id);
+        $this->assertSame('new', $value);
+    }
+
+    public function test_transfer_ownership_updates_secret_owner(): void
+    {
+        $owner = $this->createTestUser();
+        $newOwner = $this->createTestUser('new-owner@example.com');
+        $org = $this->orgSvc->create('Org', $owner->id);
+        $this->orgSvc->addMember($org->id, $newOwner->id, 'reader', null);
+        $dir = $this->dirSvc->create($org->id, null, 'Dir', $owner->id);
+        $secret = $this->svc->create($org->id, $dir->uuid, 'Secret', 'static', 'value', $owner->id);
+
+        $updated = $this->svc->transferOwnership($secret->uuid, $org->id, $newOwner->id, $owner->id);
+
+        $this->assertSame($newOwner->id, $updated->ownerUserId);
+    }
+
+    public function test_transfer_ownership_requires_secret_owner(): void
+    {
+        $owner = $this->createTestUser();
+        $editor = $this->createTestUser('editor@example.com');
+        $newOwner = $this->createTestUser('new-owner@example.com');
+        $org = $this->orgSvc->create('Org', $owner->id);
+        $this->orgSvc->addMember($org->id, $editor->id, 'editor', null);
+        $this->orgSvc->addMember($org->id, $newOwner->id, 'reader', null);
+        $dir = $this->dirSvc->create($org->id, null, 'Dir', $owner->id);
+        $secret = $this->svc->create($org->id, $dir->uuid, 'Secret', 'static', 'value', $owner->id);
+
+        $this->expectException(AuthException::class);
+        $this->svc->transferOwnership($secret->uuid, $org->id, $newOwner->id, $editor->id);
+    }
+
+    public function test_list_acl_requires_secret_owner(): void
+    {
+        $owner = $this->createTestUser();
+        $editor = $this->createTestUser('editor@example.com');
+        $org = $this->orgSvc->create('Org', $owner->id);
+        $this->orgSvc->addMember($org->id, $editor->id, 'editor', null);
+        $dir = $this->dirSvc->create($org->id, null, 'Dir', $owner->id);
+        $secret = $this->svc->create($org->id, $dir->uuid, 'Secret', 'static', 'value', $owner->id);
+
+        $this->expectException(AuthException::class);
+        $this->svc->listAcl($secret->uuid, $org->id, $editor->id);
+    }
+
+    public function test_replace_acl_stores_exact_secret_rules(): void
+    {
+        $owner = $this->createTestUser();
+        $reader = $this->createTestUser('reader@example.com');
+        $org = $this->orgSvc->create('Org', $owner->id);
+        $this->orgSvc->addMember($org->id, $reader->id, 'reader', null);
+        $dir = $this->dirSvc->create($org->id, null, 'Dir', $owner->id);
+        $secret = $this->svc->create($org->id, $dir->uuid, 'Secret', 'static', 'value', $owner->id);
+
+        $rules = $this->svc->replaceAcl($secret->uuid, $org->id, $owner->id, [[
+            'subject_type' => 'user',
+            'subject_id' => $reader->id,
+            'read' => 'allow',
+            'write' => 'deny',
+        ]]);
+
+        $this->assertCount(2, $rules);
+        $stored = $this->svc->listAcl($secret->uuid, $org->id, $owner->id);
+        $this->assertCount(2, $stored);
+    }
+
+    public function test_replace_acl_stores_api_key_subject_rules(): void
+    {
+        $owner = $this->createTestUser();
+        $org = $this->orgSvc->create('Org', $owner->id);
+        $dir = $this->dirSvc->create($org->id, null, 'Dir', $owner->id);
+        $secret = $this->svc->create($org->id, $dir->uuid, 'Secret', 'static', 'value', $owner->id);
+        $apiKeyService = new ApiKeyService($this->orgSvc);
+        ['key' => $apiKey] = $apiKeyService->create('Deploy key', $org->id, $owner->id);
+
+        $rules = $this->svc->replaceAcl($secret->uuid, $org->id, $owner->id, [[
+            'subject_type' => 'api_key',
+            'subject_id' => $apiKey->id,
+            'read' => 'deny',
+            'write' => 'allow',
+        ]]);
+
+        $this->assertCount(2, $rules);
+        $this->assertSame(['api_key'], array_values(array_unique(array_map(
+            static fn($rule) => $rule->subjectType,
+            $rules,
+        ))));
     }
 
     // ------------------------------------------------------------------ //
@@ -391,7 +558,7 @@ final class SecretServiceTest extends DatabaseTestCase
         $owner    = $this->createTestUser();
         $observer = $this->createTestUser('obs@example.com');
         $org      = $this->orgSvc->create('Org', $owner->id);
-        $this->orgSvc->addMember($org->id, $observer->id, 'observer', null);
+        $this->orgSvc->addMember($org->id, $observer->id, 'reader', null);
         $dir    = $this->dirSvc->create($org->id, null, 'Dir', $owner->id);
         $secret = $this->svc->create($org->id, $dir->uuid, 'Secret', 'static', 'val', $owner->id);
 
@@ -500,7 +667,7 @@ final class SecretServiceTest extends DatabaseTestCase
         $owner    = $this->createTestUser();
         $observer = $this->createTestUser('obs@example.com');
         $org      = $this->orgSvc->create('Org', $owner->id);
-        $this->orgSvc->addMember($org->id, $observer->id, 'observer', null);
+        $this->orgSvc->addMember($org->id, $observer->id, 'reader', null);
         $dir    = $this->dirSvc->create($org->id, null, 'Dir', $owner->id);
         $secret = $this->svc->create($org->id, $dir->uuid, 'Secret', 'static', 'v1', $owner->id);
         $this->svc->update($secret->uuid, $org->id, $owner->id, null, 'v2');
@@ -527,7 +694,7 @@ final class SecretServiceTest extends DatabaseTestCase
         $owner = $this->createTestUser();
         $observer = $this->createTestUser('obs@example.com');
         $org = $this->orgSvc->create('Org', $owner->id);
-        $this->orgSvc->addMember($org->id, $observer->id, 'observer', null);
+        $this->orgSvc->addMember($org->id, $observer->id, 'reader', null);
         $dir = $this->dirSvc->create($org->id, null, 'Dir', $owner->id);
         $secret = $this->svc->create($org->id, $dir->uuid, 'Secret', 'static', 'val', $owner->id);
 

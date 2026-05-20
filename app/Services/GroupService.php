@@ -14,8 +14,8 @@ use Passway\Models\OrganizationMember;
  * Сервис управления группами пользователей внутри организации.
  *
  * Авторизация:
- *   admin+    — создание/удаление групп, управление участниками
- *   observer+ — чтение (list, show, listMembers)
+ *   admin+  — создание/удаление групп, управление участниками
+ *   reader+ — чтение (list, show, listMembers)
  */
 final class GroupService
 {
@@ -93,21 +93,21 @@ final class GroupService
 
     /**
      * @return Group[]
-     * @throws AuthException если нет прав (observer+)
+     * @throws AuthException если нет прав (reader+)
      */
     public function list(string $orgId, string $userId): array
     {
-        $this->assertHasPermission($orgId, $userId, 'observer');
+        $this->assertHasPermission($orgId, $userId, 'reader');
         return Group::findByOrgId($orgId);
     }
 
     /**
-     * @throws AuthException     если нет прав (observer+)
+     * @throws AuthException     если нет прав (reader+)
      * @throws \RuntimeException если не найдена или принадлежит другой орг.
      */
     public function findInOrg(string $groupUuid, string $orgId, string $userId): Group
     {
-        $this->assertHasPermission($orgId, $userId, 'observer');
+        $this->assertHasPermission($orgId, $userId, 'reader');
         $group = Group::findByUuid($groupUuid);
         if ($group === null || $group->organizationId !== $orgId) {
             throw new \RuntimeException(__('ui.backend.group.not_found'));
@@ -237,12 +237,12 @@ final class GroupService
 
     /**
      * @return GroupMember[]
-     * @throws AuthException     если нет прав (observer+)
+     * @throws AuthException     если нет прав (reader+)
      * @throws \RuntimeException если группа не найдена
      */
     public function listMembers(string $groupUuid, string $orgId, string $userId): array
     {
-        $this->assertHasPermission($orgId, $userId, 'observer');
+        $this->assertHasPermission($orgId, $userId, 'reader');
         $group = Group::findByUuid($groupUuid);
         if ($group === null || $group->organizationId !== $orgId) {
             throw new \RuntimeException(__('ui.backend.group.not_found'));

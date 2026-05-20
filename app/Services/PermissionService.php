@@ -8,19 +8,17 @@ use Passway\Core\AuthContext;
 use Passway\Core\Database;
 use Passway\Exceptions\AuthException;
 use Passway\Models\Directory;
+use Passway\Models\Secret;
 use Passway\Models\UserPermission;
 
 /**
  * Сервис тонкогранулированного контроля доступа на уровне каталогов.
  *
  * Приоритет проверки:
- *   1. Роль в организации (owner/admin/moderator+ покрывают write/delete,
- *      observer+ покрывает read) — прямой обход fine-grained проверки.
- *   2. Явный запрет (is_deny=true) для пользователя или его группы
- *      на данном ресурсе.
- *   3. Явное разрешение для пользователя или его группы.
- *   4. Наследование от ближайшего предка (каталога выше).
- *   5. Нет совпадений → доступ запрещён.
+ *   1. ACL на целевом ресурсе.
+ *   2. ACL на ближайшем предке (для секретов: папка -> родительские папки).
+ *   3. Fallback на роль в организации, если ACL-правил не найдено.
+ *   4. Нет совпадений → доступ запрещён.
  */
 final class PermissionService
 {
@@ -31,10 +29,10 @@ final class PermissionService
      * Пользователи с этой ролью проходят проверку без fine-grained анализа.
      */
     private const PERM_TO_ORG_ROLE = [
-        'read'                  => 'observer',
-        'write'                 => 'moderator',
-        'delete'                => 'moderator',
-        'create_subdirectories' => 'moderator',
+        'read'                  => 'reader',
+        'write'                 => 'editor',
+        'delete'                => 'editor',
+        'create_subdirectories' => 'editor',
     ];
 
     public function __construct(
@@ -69,19 +67,20 @@ final class PermissionService
             return $this->getApiKeyAccessService()->can($apiKey->id, $permission, $resourceType, $resourceId, $orgId);
         }
 
-        // 1. Роль в организации — ранний выход
-        $minRole = self::PERM_TO_ORG_ROLE[$permission] ?? 'moderator';
-        if ($this->organizationService->hasPermission($orgId, $userId, $minRole)) {
-            return true;
-        }
-
         // Пользователь должен хотя бы состоять в организации
         if ($this->organizationService->getMemberRole($orgId, $userId) === null) {
             return false;
         }
 
-        // 2–4. Fine-grained: пользователь/группы + наследование
-        return $this->checkFineGrained($permission, $userId, $resourceType, $resourceId, $orgId);
+        // 1–2. Fine-grained ACL на ресурсе и его предках
+        $fineGrained = $this->checkFineGrained($permission, $userId, $resourceType, $resourceId, $orgId);
+        if ($fineGrained !== null) {
+            return $fineGrained;
+        }
+
+        // 3. Fallback на роль в организации
+        $minRole = self::PERM_TO_ORG_ROLE[$permission] ?? 'editor';
+        return $this->organizationService->hasPermission($orgId, $userId, $minRole);
     }
 
     // ------------------------------------------------------------------ //
@@ -229,13 +228,100 @@ final class PermissionService
         return UserPermission::findForResource('directory', $dirId);
     }
 
+    /**
+     * @return UserPermission[]
+     */
+    public function listForResource(string $resourceType, string $resourceId): array
+    {
+        return \array_values(\array_filter(
+            UserPermission::findForResource($resourceType, $resourceId),
+            static fn(UserPermission $permission): bool => \in_array($permission->permission, ['read', 'write'], true)
+        ));
+    }
+
+    /**
+     * @param array<int, array{subject_type:string,subject_id:string,read:?string,write:?string}> $rules
+     * @return UserPermission[]
+     */
+    public function replaceForResource(string $resourceType, string $resourceId, array $rules, string $grantedBy): array
+    {
+        if (!\in_array($resourceType, UserPermission::VALID_RESOURCE_TYPES, true)) {
+            throw new \InvalidArgumentException(
+                __('ui.backend.permission.invalid_resource_type', ['allowed' => \implode(', ', UserPermission::VALID_RESOURCE_TYPES)])
+            );
+        }
+
+        $now = now()->format('Y-m-d H:i:s');
+        $db = Database::getInstance();
+        $normalized = [];
+
+        foreach ($rules as $index => $rule) {
+            $subjectType = isset($rule['subject_type']) ? \trim((string) $rule['subject_type']) : '';
+            $subjectId = isset($rule['subject_id']) ? \trim((string) $rule['subject_id']) : '';
+
+            if (!\in_array($subjectType, UserPermission::VALID_SUBJECT_TYPES, true)) {
+                throw new \InvalidArgumentException(
+                    __('ui.backend.permission.invalid_subject_type', ['allowed' => \implode(', ', UserPermission::VALID_SUBJECT_TYPES)])
+                );
+            }
+
+            if ($subjectId === '') {
+                throw new \InvalidArgumentException(__('ui.backend.permission.subject_id_required'));
+            }
+
+            $read = $this->normalizeEffect($rule['read'] ?? null);
+            $write = $this->normalizeEffect($rule['write'] ?? null);
+            $key = $subjectType . ':' . $subjectId;
+
+            if (isset($normalized[$key])) {
+                throw new \InvalidArgumentException(__('ui.backend.permission.duplicate_subject_rule', ['index' => (string) ($index + 1)]));
+            }
+
+            $normalized[$key] = [
+                'subject_type' => $subjectType,
+                'subject_id' => $subjectId,
+                'read' => $read,
+                'write' => $write,
+            ];
+        }
+
+        $db->transaction(function () use ($db, $resourceType, $resourceId, $grantedBy, $now, $normalized): void {
+            $db->query(
+                'DELETE FROM user_permissions WHERE resource_type = ? AND resource_id = ?',
+                [$resourceType, (int) $resourceId]
+            );
+
+            foreach ($normalized as $rule) {
+                foreach (['read', 'write'] as $permission) {
+                    $effect = $rule[$permission];
+                    if ($effect === null) {
+                        continue;
+                    }
+
+                    $db->insert('user_permissions', [
+                        'subject_type' => $rule['subject_type'],
+                        'subject_id' => (int) $rule['subject_id'],
+                        'resource_type' => $resourceType,
+                        'resource_id' => (int) $resourceId,
+                        'permission' => $permission,
+                        'is_deny' => $effect === 'deny' ? 1 : 0,
+                        'expires_at' => null,
+                        'granted_by' => (int) $grantedBy,
+                        'created_at' => $now,
+                    ]);
+                }
+            }
+        });
+
+        return $this->listForResource($resourceType, $resourceId);
+    }
+
     // ------------------------------------------------------------------ //
     //  Вспомогательные                                                    //
     // ------------------------------------------------------------------ //
 
     /**
-     * Проверить тонкогранулированные права:
-     * пользователь + его группы, с наследованием от предков.
+     * Проверить ACL пользователя/групп на ресурсе и его предках.
      */
     private function checkFineGrained(
         string $permission,
@@ -243,18 +329,24 @@ final class PermissionService
         string $resourceType,
         string $resourceId,
         string $orgId,
-    ): bool {
+    ): ?bool {
         $groupIds      = $this->groupService->getUserGroupIds($userId, $orgId);
         $resourceChain = $this->buildResourceChain($resourceType, $resourceId);
 
-        foreach ($resourceChain as $resId) {
-            $result = $this->evalPermission($permission, $userId, $groupIds, $resourceType, $resId);
+        foreach ($resourceChain as $resource) {
+            $result = $this->evalPermission(
+                $permission,
+                $userId,
+                $groupIds,
+                $resource['resource_type'],
+                $resource['resource_id']
+            );
             if ($result !== null) {
                 return $result;
             }
         }
 
-        return false;
+        return null;
     }
 
     /**
@@ -298,25 +390,50 @@ final class PermissionService
     }
 
     /**
-     * Построить цепочку ресурсов для проверки наследования
-     * (от конкретного ресурса к корневому).
+     * Построить цепочку ресурсов для проверки ACL
+     * (от конкретного ресурса к корневому каталогу).
      *
-     * Для каталогов: [dirId, parentId, grandparentId, ...].
-     * Для остальных: [resourceId].
-     *
-     * @return string[]
+     * @return array<int, array{resource_type:string, resource_id:string}>
      */
     private function buildResourceChain(string $resourceType, string $resourceId): array
     {
-        if ($resourceType !== 'directory') {
-            return [$resourceId];
+        if ($resourceType === 'secret') {
+            $chain = [[
+                'resource_type' => 'secret',
+                'resource_id' => $resourceId,
+            ]];
+
+            $secret = Secret::findById($resourceId);
+            if ($secret === null) {
+                return $chain;
+            }
+
+            return [...$chain, ...$this->buildDirectoryResourceChain($secret->directoryId)];
         }
 
+        if ($resourceType === 'directory') {
+            return $this->buildDirectoryResourceChain($resourceId);
+        }
+
+        return [[
+            'resource_type' => $resourceType,
+            'resource_id' => $resourceId,
+        ]];
+    }
+
+    /**
+     * @return array<int, array{resource_type:string, resource_id:string}>
+     */
+    private function buildDirectoryResourceChain(string $directoryId): array
+    {
         $chain   = [];
-        $current = Directory::findById($resourceId);
+        $current = Directory::findById($directoryId);
 
         while ($current !== null) {
-            $chain[] = $current->id;
+            $chain[] = [
+                'resource_type' => 'directory',
+                'resource_id' => $current->id,
+            ];
             $current = $current->parentId !== null
                 ? Directory::findById($current->parentId)
                 : null;
@@ -334,6 +451,20 @@ final class PermissionService
             return true;
         }
         return \strtotime($perm->expiresAt) > \time();
+    }
+
+    private function normalizeEffect(mixed $effect): ?string
+    {
+        if ($effect === null || $effect === '') {
+            return null;
+        }
+
+        $value = \is_string($effect) ? \trim($effect) : '';
+        if (!\in_array($value, ['allow', 'deny'], true)) {
+            throw new \InvalidArgumentException(__('ui.backend.permission.invalid_effect'));
+        }
+
+        return $value;
     }
 
     private function getAuditService(): AuditService

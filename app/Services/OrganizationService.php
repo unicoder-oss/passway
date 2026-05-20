@@ -15,9 +15,8 @@ use Passway\Models\OrganizationMember;
  * Авторизация:
  *   owner      — всё
  *   admin      — управление участниками и инвайтами
- *   moderator  — управление каталогами/секретами
- *   user       — использование секретов по правам
- *   observer   — только чтение
+ *   editor     — управление каталогами/секретами
+ *   reader     — только чтение
  */
 final class OrganizationService
 {

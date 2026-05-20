@@ -7,6 +7,7 @@ namespace Passway\Tests\Services;
 use Passway\Core\Database;
 use Passway\Exceptions\AuthException;
 use Passway\Models\Directory;
+use Passway\Services\ApiKeyService;
 use Passway\Services\DirectoryService;
 use Passway\Services\GroupService;
 use Passway\Services\OrganizationService;
@@ -22,14 +23,15 @@ final class DirectoryServiceTest extends DatabaseTestCase
 {
     private DirectoryService   $svc;
     private OrganizationService $orgSvc;
+    private PermissionService  $permSvc;
 
     protected function setUp(): void
     {
         parent::setUp();
 
         $this->orgSvc = new OrganizationService();
-        $permSvc      = new PermissionService($this->orgSvc, new GroupService($this->orgSvc));
-        $this->svc    = new DirectoryService($this->orgSvc, $permSvc);
+        $this->permSvc = new PermissionService($this->orgSvc, new GroupService($this->orgSvc));
+        $this->svc    = new DirectoryService($this->orgSvc, $this->permSvc);
 
         // team-режим — нет ограничений по числу организаций
         Database::getInstance()->query(
@@ -130,7 +132,7 @@ final class DirectoryServiceTest extends DatabaseTestCase
         $owner    = $this->createTestUser();
         $observer = $this->createTestUser('obs@example.com');
         $org      = $this->orgSvc->create('Org', $owner->id);
-        $this->orgSvc->addMember($org->id, $observer->id, 'observer', null);
+        $this->orgSvc->addMember($org->id, $observer->id, 'reader', null);
 
         $this->expectException(AuthException::class);
         $this->svc->create($org->id, null, 'Dir', $observer->id);
@@ -246,6 +248,23 @@ final class DirectoryServiceTest extends DatabaseTestCase
         $this->svc->findInOrg($dir->uuid, $org2->id, $owner->id);
     }
 
+    public function test_find_in_org_allows_child_when_parent_read_denied_but_child_allowed(): void
+    {
+        $owner = $this->createTestUser();
+        $user  = $this->createTestUser('reader@example.com');
+        $org   = $this->orgSvc->create('Org', $owner->id);
+        $this->orgSvc->addMember($org->id, $user->id, 'reader', null);
+        $parent = $this->svc->create($org->id, null, 'Parent', $owner->id);
+        $child = $this->svc->create($org->id, $parent->uuid, 'Child', $owner->id);
+
+        $this->permSvc->grant('user', $user->id, 'directory', $parent->id, 'read', true, null, $owner->id, $org->id);
+        $this->permSvc->grant('user', $user->id, 'directory', $child->id, 'read', false, null, $owner->id, $org->id);
+
+        $found = $this->svc->findInOrg($child->uuid, $org->id, $user->id);
+
+        $this->assertSame($child->id, $found->id);
+    }
+
     // ------------------------------------------------------------------ //
     //  rename()                                                           //
     // ------------------------------------------------------------------ //
@@ -276,7 +295,7 @@ final class DirectoryServiceTest extends DatabaseTestCase
         $owner    = $this->createTestUser();
         $observer = $this->createTestUser('obs@example.com');
         $org      = $this->orgSvc->create('Org', $owner->id);
-        $this->orgSvc->addMember($org->id, $observer->id, 'observer', null);
+        $this->orgSvc->addMember($org->id, $observer->id, 'reader', null);
         $dir = $this->svc->create($org->id, null, 'Dir', $owner->id);
 
         $this->expectException(AuthException::class);
@@ -407,5 +426,113 @@ final class DirectoryServiceTest extends DatabaseTestCase
 
         $this->expectException(\RuntimeException::class);
         $this->svc->delete('non-existent-uuid', $org->id, $owner->id);
+    }
+
+    public function test_delete_requires_directory_owner(): void
+    {
+        $owner = $this->createTestUser();
+        $editor = $this->createTestUser('editor@example.com');
+        $org = $this->orgSvc->create('Org', $owner->id);
+        $this->orgSvc->addMember($org->id, $editor->id, 'editor', null);
+        $dir = $this->svc->create($org->id, null, 'Dir', $owner->id);
+
+        $this->expectException(AuthException::class);
+        $this->svc->delete($dir->uuid, $org->id, $editor->id);
+    }
+
+    public function test_delete_allows_directory_owner_even_without_editor_role(): void
+    {
+        $owner = $this->createTestUser();
+        $reader = $this->createTestUser('reader@example.com');
+        $org = $this->orgSvc->create('Org', $owner->id);
+        $this->orgSvc->addMember($org->id, $reader->id, 'reader', null);
+        $dir = $this->svc->create($org->id, null, 'Dir', $owner->id);
+
+        Database::getInstance()->update('directories', ['owner_user_id' => (int) $reader->id], ['id' => (int) $dir->id]);
+
+        $this->svc->delete($dir->uuid, $org->id, $reader->id);
+
+        $this->assertNull(Directory::findByUuid($dir->uuid));
+    }
+
+    public function test_transfer_ownership_updates_directory_owner(): void
+    {
+        $owner = $this->createTestUser();
+        $newOwner = $this->createTestUser('new-owner@example.com');
+        $org = $this->orgSvc->create('Org', $owner->id);
+        $this->orgSvc->addMember($org->id, $newOwner->id, 'reader', null);
+        $dir = $this->svc->create($org->id, null, 'Dir', $owner->id);
+
+        $updated = $this->svc->transferOwnership($dir->uuid, $org->id, $newOwner->id, $owner->id);
+
+        $this->assertSame($newOwner->id, $updated->ownerUserId);
+    }
+
+    public function test_transfer_ownership_requires_directory_owner(): void
+    {
+        $owner = $this->createTestUser();
+        $editor = $this->createTestUser('editor@example.com');
+        $newOwner = $this->createTestUser('new-owner@example.com');
+        $org = $this->orgSvc->create('Org', $owner->id);
+        $this->orgSvc->addMember($org->id, $editor->id, 'editor', null);
+        $this->orgSvc->addMember($org->id, $newOwner->id, 'reader', null);
+        $dir = $this->svc->create($org->id, null, 'Dir', $owner->id);
+
+        $this->expectException(AuthException::class);
+        $this->svc->transferOwnership($dir->uuid, $org->id, $newOwner->id, $editor->id);
+    }
+
+    public function test_list_acl_requires_directory_owner(): void
+    {
+        $owner = $this->createTestUser();
+        $editor = $this->createTestUser('editor@example.com');
+        $org = $this->orgSvc->create('Org', $owner->id);
+        $this->orgSvc->addMember($org->id, $editor->id, 'editor', null);
+        $dir = $this->svc->create($org->id, null, 'Dir', $owner->id);
+
+        $this->expectException(AuthException::class);
+        $this->svc->listAcl($dir->uuid, $org->id, $editor->id);
+    }
+
+    public function test_replace_acl_stores_exact_directory_rules(): void
+    {
+        $owner = $this->createTestUser();
+        $reader = $this->createTestUser('reader@example.com');
+        $org = $this->orgSvc->create('Org', $owner->id);
+        $this->orgSvc->addMember($org->id, $reader->id, 'reader', null);
+        $dir = $this->svc->create($org->id, null, 'Dir', $owner->id);
+
+        $rules = $this->svc->replaceAcl($dir->uuid, $org->id, $owner->id, [[
+            'subject_type' => 'user',
+            'subject_id' => $reader->id,
+            'read' => 'deny',
+            'write' => 'allow',
+        ]]);
+
+        $this->assertCount(2, $rules);
+        $stored = $this->svc->listAcl($dir->uuid, $org->id, $owner->id);
+        $this->assertCount(2, $stored);
+    }
+
+    public function test_replace_acl_stores_api_key_subject_rules(): void
+    {
+        $owner = $this->createTestUser();
+        $org = $this->orgSvc->create('Org', $owner->id);
+        $dir = $this->svc->create($org->id, null, 'Dir', $owner->id);
+        $apiKeyService = new ApiKeyService($this->orgSvc);
+        ['key' => $apiKey] = $apiKeyService->create('Deploy key', $org->id, $owner->id);
+
+        $rules = $this->svc->replaceAcl($dir->uuid, $org->id, $owner->id, [[
+            'subject_type' => 'api_key',
+            'subject_id' => $apiKey->id,
+            'read' => 'allow',
+            'write' => 'deny',
+        ]]);
+
+        $this->assertCount(2, $rules);
+        $this->assertSame(['api_key'], array_values(array_unique(array_map(
+            static fn($rule) => $rule->subjectType,
+            $rules,
+        ))));
     }
 }

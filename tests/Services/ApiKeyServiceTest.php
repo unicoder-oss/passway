@@ -7,7 +7,6 @@ namespace Passway\Tests\Services;
 use Passway\Core\Database;
 use Passway\Exceptions\AuthException;
 use Passway\Models\ApiKey;
-use Passway\Models\ApiKeyPermission;
 use Passway\Services\ApiKeyService;
 use Passway\Services\OrganizationService;
 use Passway\Tests\DatabaseTestCase;
@@ -50,8 +49,19 @@ final class ApiKeyServiceTest extends DatabaseTestCase
         $this->assertStringStartsWith('sv_', $raw);
         $this->assertSame(67, strlen($raw)); // sv_ (3) + 64 hex = 67
         $this->assertSame('CI key', $apiKey->name);
+        $this->assertSame('reader', $apiKey->role);
         $this->assertTrue($apiKey->isActive);
         $this->assertSame(hash('sha256', $raw), $apiKey->keyHash);
+    }
+
+    public function test_create_accepts_editor_role(): void
+    {
+        $owner = $this->createTestUser();
+        $org = $this->orgSvc->create('Org', $owner->id);
+
+        ['key' => $apiKey] = $this->svc->create('Deploy', $org->id, $owner->id, 'editor');
+
+        $this->assertSame('editor', $apiKey->role);
     }
 
     public function test_create_returns_plain_format_without_environment(): void
@@ -69,7 +79,7 @@ final class ApiKeyServiceTest extends DatabaseTestCase
         $owner = $this->createTestUser();
         $user  = $this->createTestUser('user@example.com');
         $org   = $this->orgSvc->create('Org', $owner->id);
-        $this->orgSvc->addMember($org->id, $user->id, 'user', $owner->id);
+        $this->orgSvc->addMember($org->id, $user->id, 'reader', $owner->id);
 
         $this->expectException(AuthException::class);
         $this->svc->create('Key', $org->id, $user->id);
@@ -82,6 +92,15 @@ final class ApiKeyServiceTest extends DatabaseTestCase
 
         $this->expectException(\InvalidArgumentException::class);
         $this->svc->create('', $org->id, $owner->id);
+    }
+
+    public function test_create_fails_with_invalid_role(): void
+    {
+        $owner = $this->createTestUser();
+        $org = $this->orgSvc->create('Org', $owner->id);
+
+        $this->expectException(\InvalidArgumentException::class);
+        $this->svc->create('Key', $org->id, $owner->id, 'owner');
     }
 
     // ------------------------------------------------------------------ //
@@ -106,7 +125,7 @@ final class ApiKeyServiceTest extends DatabaseTestCase
         $owner = $this->createTestUser();
         $user  = $this->createTestUser('user@example.com');
         $org   = $this->orgSvc->create('Org', $owner->id);
-        $this->orgSvc->addMember($org->id, $user->id, 'user', $owner->id);
+        $this->orgSvc->addMember($org->id, $user->id, 'reader', $owner->id);
 
         $this->expectException(AuthException::class);
         $this->svc->listForOrg($org->id, $user->id);
@@ -164,7 +183,7 @@ final class ApiKeyServiceTest extends DatabaseTestCase
         $owner = $this->createTestUser();
         $user  = $this->createTestUser('user@example.com');
         $org   = $this->orgSvc->create('Org', $owner->id);
-        $this->orgSvc->addMember($org->id, $user->id, 'user', $owner->id);
+        $this->orgSvc->addMember($org->id, $user->id, 'reader', $owner->id);
 
         ['key' => $key] = $this->svc->create('Key', $org->id, $owner->id);
 
@@ -257,43 +276,35 @@ final class ApiKeyServiceTest extends DatabaseTestCase
     }
 
     // ------------------------------------------------------------------ //
-    //  Permissions                                                        //
+    //  updateRole()                                                       //
     // ------------------------------------------------------------------ //
 
-    public function test_add_and_list_permissions(): void
+    public function test_update_role_changes_existing_key_role(): void
     {
         $owner = $this->createTestUser();
         $org   = $this->orgSvc->create('Org', $owner->id);
 
         ['key' => $key] = $this->svc->create('Key', $org->id, $owner->id);
 
-        $perm = $this->svc->addPermission(
-            $key->uuid, 'directory', null, 'read', $org->id, $owner->id
-        );
+        $updated = $this->svc->updateRole($key->uuid, 'editor', $org->id, $owner->id);
 
-        $this->assertInstanceOf(ApiKeyPermission::class, $perm);
-        $this->assertSame('directory', $perm->resourceType);
-        $this->assertNull($perm->resourceId);
-        $this->assertSame('read', $perm->permission);
-
-        $perms = $this->svc->listPermissions($key->uuid, $org->id, $owner->id);
-        $this->assertCount(1, $perms);
+        $this->assertSame('editor', $updated->role);
     }
 
-    public function test_add_permission_fails_for_non_admin(): void
+    public function test_update_role_fails_for_non_admin(): void
     {
         $owner = $this->createTestUser();
         $user  = $this->createTestUser('user@example.com');
         $org   = $this->orgSvc->create('Org', $owner->id);
-        $this->orgSvc->addMember($org->id, $user->id, 'user', $owner->id);
+        $this->orgSvc->addMember($org->id, $user->id, 'reader', $owner->id);
 
         ['key' => $key] = $this->svc->create('Key', $org->id, $owner->id);
 
         $this->expectException(AuthException::class);
-        $this->svc->addPermission($key->uuid, 'directory', null, 'read', $org->id, $user->id);
+        $this->svc->updateRole($key->uuid, 'editor', $org->id, $user->id);
     }
 
-    public function test_add_permission_fails_with_invalid_type(): void
+    public function test_update_role_fails_with_invalid_role(): void
     {
         $owner = $this->createTestUser();
         $org   = $this->orgSvc->create('Org', $owner->id);
@@ -301,39 +312,7 @@ final class ApiKeyServiceTest extends DatabaseTestCase
         ['key' => $key] = $this->svc->create('Key', $org->id, $owner->id);
 
         $this->expectException(\InvalidArgumentException::class);
-        $this->svc->addPermission($key->uuid, 'invalid_type', null, 'read', $org->id, $owner->id);
-    }
-
-    public function test_remove_permission(): void
-    {
-        $owner = $this->createTestUser();
-        $org   = $this->orgSvc->create('Org', $owner->id);
-
-        ['key' => $key] = $this->svc->create('Key', $org->id, $owner->id);
-        $perm = $this->svc->addPermission(
-            $key->uuid, 'directory', null, 'read', $org->id, $owner->id
-        );
-
-        $this->svc->removePermission($key->uuid, $perm->id, $org->id, $owner->id);
-
-        $perms = $this->svc->listPermissions($key->uuid, $org->id, $owner->id);
-        $this->assertCount(0, $perms);
-    }
-
-    public function test_remove_permission_fails_for_non_admin(): void
-    {
-        $owner = $this->createTestUser();
-        $user  = $this->createTestUser('user@example.com');
-        $org   = $this->orgSvc->create('Org', $owner->id);
-        $this->orgSvc->addMember($org->id, $user->id, 'user', $owner->id);
-
-        ['key' => $key] = $this->svc->create('Key', $org->id, $owner->id);
-        $perm = $this->svc->addPermission(
-            $key->uuid, 'directory', null, 'read', $org->id, $owner->id
-        );
-
-        $this->expectException(AuthException::class);
-        $this->svc->removePermission($key->uuid, $perm->id, $org->id, $user->id);
+        $this->svc->updateRole($key->uuid, 'owner', $org->id, $owner->id);
     }
 
     // ------------------------------------------------------------------ //

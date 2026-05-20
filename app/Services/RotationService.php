@@ -118,6 +118,7 @@ final class RotationService
             lastRotatedAt: null,
             version: 1,
             createdBy: $userId,
+            ownerUserId: $userId,
             createdAt: now()->format('Y-m-d H:i:s'),
             updatedAt: now()->format('Y-m-d H:i:s'),
             deletedAt: null,

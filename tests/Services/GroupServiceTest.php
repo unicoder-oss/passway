@@ -85,7 +85,7 @@ final class GroupServiceTest extends DatabaseTestCase
         $owner = $this->createTestUser('owner@test.com');
         $org   = $this->orgSvc->create('Org', $owner->id);
         $user  = $this->createTestUser('user@test.com');
-        $this->orgSvc->addMember($org->id, $user->id, 'user', null);
+        $this->orgSvc->addMember($org->id, $user->id, 'reader', null);
 
         $this->expectException(AuthException::class);
         $this->svc->create($org->id, 'Team', null, $user->id);
@@ -177,7 +177,7 @@ final class GroupServiceTest extends DatabaseTestCase
         $org   = $this->orgSvc->create('Org', $owner->id);
         $group = $this->svc->create($org->id, 'Team', null, $owner->id);
         $user  = $this->createTestUser('user@test.com');
-        $this->orgSvc->addMember($org->id, $user->id, 'moderator', null);
+        $this->orgSvc->addMember($org->id, $user->id, 'editor', null);
 
         $this->expectException(AuthException::class);
         $this->svc->delete($group->uuid, $org->id, $user->id);
@@ -193,7 +193,7 @@ final class GroupServiceTest extends DatabaseTestCase
         $org    = $this->orgSvc->create('Org', $owner->id);
         $group  = $this->svc->create($org->id, 'Dev', null, $owner->id);
         $member = $this->createTestUser('dev@test.com');
-        $this->orgSvc->addMember($org->id, $member->id, 'user', null);
+        $this->orgSvc->addMember($org->id, $member->id, 'reader', null);
 
         $gm = $this->svc->addMember($group->uuid, $member->id, $owner->id, $org->id);
 
@@ -208,8 +208,8 @@ final class GroupServiceTest extends DatabaseTestCase
         $group  = $this->svc->create($org->id, 'Dev', null, $owner->id);
         $mod    = $this->createTestUser('mod@test.com');
         $target = $this->createTestUser('target@test.com');
-        $this->orgSvc->addMember($org->id, $mod->id, 'moderator', null);
-        $this->orgSvc->addMember($org->id, $target->id, 'user', null);
+        $this->orgSvc->addMember($org->id, $mod->id, 'editor', null);
+        $this->orgSvc->addMember($org->id, $target->id, 'reader', null);
 
         $this->expectException(AuthException::class);
         $this->svc->addMember($group->uuid, $target->id, $mod->id, $org->id);
@@ -232,7 +232,7 @@ final class GroupServiceTest extends DatabaseTestCase
         $org    = $this->orgSvc->create('Org', $owner->id);
         $group  = $this->svc->create($org->id, 'Dev', null, $owner->id);
         $member = $this->createTestUser('dev@test.com');
-        $this->orgSvc->addMember($org->id, $member->id, 'user', null);
+        $this->orgSvc->addMember($org->id, $member->id, 'reader', null);
         $this->svc->addMember($group->uuid, $member->id, $owner->id, $org->id);
 
         $this->expectException(\RuntimeException::class);
@@ -245,7 +245,7 @@ final class GroupServiceTest extends DatabaseTestCase
         $org    = $this->orgSvc->create('Org', $owner->id);
         $group  = $this->svc->create($org->id, 'Dev', null, $owner->id);
         $member = $this->createTestUser('dev@test.com');
-        $this->orgSvc->addMember($org->id, $member->id, 'user', null);
+        $this->orgSvc->addMember($org->id, $member->id, 'reader', null);
         $this->svc->addMember($group->uuid, $member->id, $owner->id, $org->id);
 
         $this->svc->removeMember($group->uuid, $member->id, $owner->id, $org->id);
@@ -261,7 +261,7 @@ final class GroupServiceTest extends DatabaseTestCase
         $org    = $this->orgSvc->create('Org', $owner->id);
         $group  = $this->svc->create($org->id, 'Dev', null, $owner->id);
         $member = $this->createTestUser('dev@test.com');
-        $this->orgSvc->addMember($org->id, $member->id, 'user', null);
+        $this->orgSvc->addMember($org->id, $member->id, 'reader', null);
 
         $this->expectException(\RuntimeException::class);
         $this->svc->removeMember($group->uuid, $member->id, $owner->id, $org->id);
@@ -274,8 +274,8 @@ final class GroupServiceTest extends DatabaseTestCase
         $group  = $this->svc->create($org->id, 'Dev', null, $owner->id);
         $m1     = $this->createTestUser('m1@test.com');
         $m2     = $this->createTestUser('m2@test.com');
-        $this->orgSvc->addMember($org->id, $m1->id, 'user', null);
-        $this->orgSvc->addMember($org->id, $m2->id, 'user', null);
+        $this->orgSvc->addMember($org->id, $m1->id, 'reader', null);
+        $this->orgSvc->addMember($org->id, $m2->id, 'reader', null);
         $this->svc->addMember($group->uuid, $m1->id, $owner->id, $org->id);
         $this->svc->addMember($group->uuid, $m2->id, $owner->id, $org->id);
 
@@ -291,7 +291,7 @@ final class GroupServiceTest extends DatabaseTestCase
         $g1    = $this->svc->create($org->id, 'G1', null, $owner->id);
         $g2    = $this->svc->create($org->id, 'G2', null, $owner->id);
         $user  = $this->createTestUser('user@test.com');
-        $this->orgSvc->addMember($org->id, $user->id, 'user', null);
+        $this->orgSvc->addMember($org->id, $user->id, 'reader', null);
         $this->svc->addMember($g1->uuid, $user->id, $owner->id, $org->id);
         $this->svc->addMember($g2->uuid, $user->id, $owner->id, $org->id);
 

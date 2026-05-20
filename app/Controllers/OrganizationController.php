@@ -89,7 +89,7 @@ final class OrganizationController
             return Response::success($this->serializeOrg($org));
         }
 
-        if (!$this->organizationService->hasPermission($org->id, $user->id, 'observer')) {
+        if (!$this->organizationService->hasPermission($org->id, $user->id, 'reader')) {
             return Response::forbidden(__('ui.backend.organization.not_member'));
         }
 
@@ -110,7 +110,7 @@ final class OrganizationController
         $user    = AuthContext::requireUser();
         $org     = $this->findOrgOrFail($request);
 
-        if (!$this->organizationService->hasPermission($org->id, $user->id, 'observer')) {
+        if (!$this->organizationService->hasPermission($org->id, $user->id, 'reader')) {
             return Response::forbidden(__('ui.backend.organization.not_member'));
         }
 

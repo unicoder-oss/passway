@@ -341,6 +341,7 @@ final class Application
                 $c->make(\Passway\Services\OrganizationService::class),
                 $c->make(\Passway\Services\DirectoryService::class),
                 $c->make(\Passway\Services\SecretService::class),
+                $c->make(\Passway\Services\PermissionService::class),
                 $c->make(\Passway\Services\RotationService::class),
                 $c->make(\Passway\Services\TemplateService::class),
                 $c->make(\Passway\Services\InviteService::class),

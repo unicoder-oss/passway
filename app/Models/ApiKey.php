@@ -14,12 +14,15 @@ use Passway\Core\Database;
  */
 final class ApiKey
 {
+    public const VALID_ROLES = ['reader', 'editor'];
+
     public function __construct(
         public readonly string  $id,
         public readonly string  $uuid,
         public readonly string  $organizationId,
         public readonly ?string $userId,
         public readonly string  $name,
+        public readonly string  $role,
         public readonly string  $keyHash,
         public readonly string  $keyPrefix,
         public readonly bool    $isActive,
@@ -107,6 +110,7 @@ final class ApiKey
             organizationId: (string) $row['organization_id'],
             userId:         $row['user_id'] !== null ? (string) $row['user_id'] : null,
             name:           (string) $row['name'],
+            role:           isset($row['role']) ? (string) $row['role'] : 'reader',
             keyHash:        (string) $row['key_hash'],
             keyPrefix:      (string) $row['key_prefix'],
             isActive:       (bool)(int) $row['is_active'],

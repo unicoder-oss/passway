@@ -9,9 +9,14 @@ use Passway\Core\Request;
 use Passway\Core\Response;
 use Passway\Exceptions\AuthException;
 use Passway\Exceptions\DecryptionException;
+use Passway\Models\ApiKey;
+use Passway\Models\Group;
 use Passway\Models\Organization;
+use Passway\Models\OrganizationMember;
 use Passway\Models\Secret;
 use Passway\Models\SecretVersion;
+use Passway\Models\User;
+use Passway\Models\UserPermission;
 use Passway\Services\RotationService;
 use Passway\Services\SecretService;
 
@@ -24,6 +29,9 @@ use Passway\Services\SecretService;
  * PATCH  /api/v1/organizations/:uuid/directories/:dirUuid/secrets/:secUuid         — обновить
  * DELETE /api/v1/organizations/:uuid/directories/:dirUuid/secrets/:secUuid         — мягкое удаление
  * GET    /api/v1/organizations/:uuid/directories/:dirUuid/secrets/:secUuid/versions — история
+ * GET    /api/v1/organizations/:uuid/secrets/:secUuid/acl                           — exact ACL
+ * PUT    /api/v1/organizations/:uuid/secrets/:secUuid/acl                           — replace exact ACL
+ * POST   /api/v1/organizations/:uuid/secrets/:secUuid/owner                         — transfer ownership
  */
 final class SecretController
 {
@@ -356,6 +364,79 @@ final class SecretController
         return Response::success(\array_map(fn($v) => $this->serializeVersion($v), $versions));
     }
 
+    public function acl(Request $request): Response
+    {
+        $user = AuthContext::requireUser();
+        $org = $this->findOrgOrFail($request);
+        $secUuid = (string) $request->routeParam('secUuid');
+
+        try {
+            $rules = $this->secretService->listAcl($secUuid, $org->id, $user->id);
+        } catch (AuthException $e) {
+            return Response::error($e->getMessage(), $e->getCode() ?: 403);
+        } catch (\RuntimeException $e) {
+            return Response::notFound($e->getMessage());
+        }
+
+        return Response::success(['rules' => $this->serializeAclRules($rules)]);
+    }
+
+    public function replaceAcl(Request $request): Response
+    {
+        $user = AuthContext::requireUser();
+        $org = $this->findOrgOrFail($request);
+        $secUuid = (string) $request->routeParam('secUuid');
+        $rulesInput = $request->input('rules');
+
+        if (!\is_array($rulesInput)) {
+            return Response::validationError(['rules' => [__('ui.backend.permission.rules_array_required')]]);
+        }
+
+        try {
+            $rules = $this->secretService->replaceAcl(
+                $secUuid,
+                $org->id,
+                $user->id,
+                $this->normalizeAclRules($rulesInput, $org->id)
+            );
+        } catch (AuthException $e) {
+            return Response::error($e->getMessage(), $e->getCode() ?: 403);
+        } catch (\InvalidArgumentException $e) {
+            return Response::validationError(['rules' => [$e->getMessage()]]);
+        } catch (\RuntimeException $e) {
+            return Response::error($e->getMessage(), 422);
+        }
+
+        return Response::success(['rules' => $this->serializeAclRules($rules)]);
+    }
+
+    public function transferOwnership(Request $request): Response
+    {
+        $user = AuthContext::requireUser();
+        $org = $this->findOrgOrFail($request);
+        $secUuid = (string) $request->routeParam('secUuid');
+        $userUuid = \trim((string) ($request->input('user_uuid') ?? ''));
+
+        if ($userUuid === '') {
+            return Response::validationError(['user_uuid' => [__('ui.backend.group.user_uuid_required')]]);
+        }
+
+        $targetUser = User::findByUuid($userUuid);
+        if ($targetUser === null) {
+            return Response::notFound(__('ui.backend.common.user_not_found'));
+        }
+
+        try {
+            $secret = $this->secretService->transferOwnership($secUuid, $org->id, $targetUser->id, $user->id);
+        } catch (AuthException $e) {
+            return Response::error($e->getMessage(), $e->getCode() ?: 403);
+        } catch (\RuntimeException $e) {
+            return Response::error($e->getMessage(), 422);
+        }
+
+        return Response::success($this->serializeMeta($secret));
+    }
+
     // ------------------------------------------------------------------ //
     //  Helpers                                                            //
     // ------------------------------------------------------------------ //
@@ -376,6 +457,7 @@ final class SecretController
         return [
             'uuid'              => $s->uuid,
             'name'              => $s->name,
+            'owner_user_uuid'   => $s->ownerUserId !== null ? User::findById($s->ownerUserId)?->uuid : null,
             'type'              => $s->type,
             'requires_approval' => $s->requiresApproval,
             'version'           => $s->version,
@@ -446,5 +528,115 @@ final class SecretController
         }
 
         return false;
+    }
+
+    /**
+     * @param array<int, mixed> $rulesInput
+     * @return array<int, array{subject_type:string,subject_id:string,read:?string,write:?string}>
+     */
+    private function normalizeAclRules(array $rulesInput, string $orgId): array
+    {
+        $rules = [];
+
+        foreach ($rulesInput as $rule) {
+            if (!\is_array($rule)) {
+                throw new \InvalidArgumentException(__('ui.backend.permission.invalid_rule_shape'));
+            }
+
+            $subjectType = \trim((string) ($rule['subject_type'] ?? ''));
+            $subjectUuid = \trim((string) ($rule['subject_uuid'] ?? ''));
+            if ($subjectType === '' || $subjectUuid === '') {
+                throw new \InvalidArgumentException(__('ui.backend.permission.subject_uuid_required'));
+            }
+
+            $subjectId = match ($subjectType) {
+                'user' => $this->resolveUserSubjectId($subjectUuid, $orgId),
+                'group' => $this->resolveGroupSubjectId($subjectUuid, $orgId),
+                'api_key' => $this->resolveApiKeySubjectId($subjectUuid, $orgId),
+                default => null,
+            };
+
+            if ($subjectId === null) {
+                throw new \InvalidArgumentException(__('ui.backend.common.subject_not_found'));
+            }
+
+            $rules[] = [
+                'subject_type' => $subjectType,
+                'subject_id' => $subjectId,
+                'read' => isset($rule['read']) ? (string) $rule['read'] : null,
+                'write' => isset($rule['write']) ? (string) $rule['write'] : null,
+            ];
+        }
+
+        return $rules;
+    }
+
+    /** @param UserPermission[] $rules */
+    private function serializeAclRules(array $rules): array
+    {
+        $grouped = [];
+
+        foreach ($rules as $rule) {
+            $key = $rule->subjectType . ':' . $rule->subjectId;
+            if (!isset($grouped[$key])) {
+                $grouped[$key] = [
+                    'subject_type' => $rule->subjectType,
+                    'subject_uuid' => null,
+                    'subject_name' => null,
+                    'subject_email' => null,
+                    'read' => null,
+                    'write' => null,
+                ];
+
+                if ($rule->subjectType === 'user') {
+                    $subject = User::findById($rule->subjectId);
+                    $grouped[$key]['subject_uuid'] = $subject?->uuid;
+                    $grouped[$key]['subject_name'] = $subject !== null ? display_name_for_user($subject) : null;
+                    $grouped[$key]['subject_email'] = $subject?->email;
+                } elseif ($rule->subjectType === 'group') {
+                    $subject = Group::findById($rule->subjectId);
+                    $grouped[$key]['subject_uuid'] = $subject?->uuid;
+                    $grouped[$key]['subject_name'] = $subject?->name;
+                } elseif ($rule->subjectType === 'api_key') {
+                    $subject = ApiKey::findById($rule->subjectId);
+                    $grouped[$key]['subject_uuid'] = $subject?->uuid;
+                    $grouped[$key]['subject_name'] = $subject?->name;
+                }
+            }
+
+            $grouped[$key][$rule->permission] = $rule->isDeny ? 'deny' : 'allow';
+        }
+
+        return \array_values($grouped);
+    }
+
+    private function resolveUserSubjectId(string $subjectUuid, string $orgId): ?string
+    {
+        $user = User::findByUuid($subjectUuid);
+        if ($user === null) {
+            return null;
+        }
+
+        return OrganizationMember::findByOrgAndUser($orgId, $user->id)?->userId;
+    }
+
+    private function resolveGroupSubjectId(string $subjectUuid, string $orgId): ?string
+    {
+        $group = Group::findByUuid($subjectUuid);
+        if ($group === null || $group->organizationId !== $orgId) {
+            return null;
+        }
+
+        return $group->id;
+    }
+
+    private function resolveApiKeySubjectId(string $subjectUuid, string $orgId): ?string
+    {
+        $apiKey = ApiKey::findByUuid($subjectUuid);
+        if ($apiKey === null || $apiKey->organizationId !== $orgId) {
+            return null;
+        }
+
+        return $apiKey->id;
     }
 }

@@ -7,7 +7,7 @@ namespace Passway\Models;
 use Passway\Core\Database;
 
 /**
- * Тонкая модель гранулярного права субъекта (user/group) на ресурс (directory/secret).
+ * Тонкая модель гранулярного права субъекта (user/group/api_key) на ресурс (directory/secret).
  *
  * Приоритет проверки (см. PermissionService):
  *   1. Явный запрет (is_deny=true) — запрещает доступ
@@ -17,7 +17,7 @@ use Passway\Core\Database;
  */
 final class UserPermission
 {
-    public const VALID_SUBJECT_TYPES  = ['user', 'group'];
+    public const VALID_SUBJECT_TYPES  = ['user', 'group', 'api_key'];
     public const VALID_RESOURCE_TYPES = ['directory', 'secret'];
     public const VALID_PERMISSIONS    = ['read', 'write', 'delete', 'create_subdirectories'];
 

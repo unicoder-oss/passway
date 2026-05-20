@@ -8,28 +8,28 @@ use Passway\Core\Database;
 use Passway\Exceptions\AuthException;
 use Passway\Models\ApprovalRequest;
 use Passway\Models\ApprovalReviewer;
-use Passway\Models\OrganizationMember;
 use Passway\Models\Secret;
 
 /**
  * Сервис системы одобрений.
  *
  * Жизненный цикл запроса:
- *   1. request()  — создаёт approval_request со статусом pending; назначает ревьюверов (admin+)
+ *   1. request()  — создаёт approval_request со статусом pending; назначает ревьювера (owner секрета)
  *   2. approve()  — ревьювер одобряет; генерируется одноразовый токен (TTL 1 ч.)
  *   3. useToken() — запрашивающий предъявляет токен и получает расшифрованное значение секрета
  *
  * Правила:
  *   - requires_approval=true обязателен для создания запроса
  *   - Дублирующий pending-запрос (same user + secret + type) запрещён
- *   - Ревьюверы = admin+ в организации
- *   - Одобрение может сделать любой admin+ (не только назначенный ревьювер)
+ *   - Ревьювер = текущий owner секрета
+ *   - Одобрить/отклонить запрос может только owner секрета
  *   - Токен действителен 1 час; одноразовый — после использования статус → expired
- *   - Отозвать (revoke) может: сам запрашивающий (pending) или admin+ (любой статус)
+ *   - Отозвать (revoke) может: сам запрашивающий (pending), owner секрета или admin+
  *
  * Авторизация доступа к секрету (requires_approval):
- *   - moderator+  — обходит проверку requires_approval (прямой доступ)
- *   - user/observer — обязаны пройти workflow одобрения
+ *   - owner секрета — обходит проверку requires_approval (прямой доступ)
+ *   - editor+  — обходит проверку requires_approval (прямой доступ)
+ *   - reader — обязан пройти workflow одобрения
  */
 final class ApprovalService
 {
@@ -82,14 +82,21 @@ final class ApprovalService
             );
         }
 
+        if ($secret->ownerUserId === null) {
+            throw new \RuntimeException(__('ui.backend.approval.secret_owner_missing'));
+        }
+
+        if ($secret->ownerUserId === $userId) {
+            throw new \InvalidArgumentException(__('ui.backend.approval.secret_direct_access'));
+        }
+
         if (ApprovalRequest::hasPending($secret->id, $userId, $requestType)) {
             throw new \RuntimeException(
                 __('ui.backend.approval.pending_exists')
             );
         }
 
-        // Найти ревьюверов: все admin+ в организации
-        $reviewerIds = $this->findReviewerIds($orgId);
+        $reviewerIds = [$secret->ownerUserId];
 
         $uuid      = generate_uuid();
         $now       = now();
@@ -165,14 +172,15 @@ final class ApprovalService
 
     /**
      * Список pending-запросов, где пользователь является ревьювером.
-     * Требуется admin+.
      *
      * @return ApprovalRequest[]
-     * @throws AuthException если нет прав admin+
+     * @throws AuthException если нет членства
      */
     public function listPending(string $reviewerId, string $orgId): array
     {
-        $this->assertHasPermission($orgId, $reviewerId, 'admin');
+        if ($this->organizationService->getMemberRole($orgId, $reviewerId) === null) {
+            throw new AuthException(__('ui.backend.organization.not_member'), 403);
+        }
 
         $rows = Database::getInstance()->fetchAll(
             "SELECT ar.* FROM approval_requests ar
@@ -188,7 +196,7 @@ final class ApprovalService
 
     /**
      * Просмотр конкретного запроса.
-     * Может смотреть: сам запрашивающий или admin+.
+     * Может смотреть: сам запрашивающий или owner секрета.
      *
      * @throws AuthException     если нет прав на просмотр
      * @throws \RuntimeException если не найден
@@ -198,10 +206,10 @@ final class ApprovalService
         $approvalReq = $this->findRequestInOrg($requestUuid, $orgId);
 
         $isRequester = $approvalReq->requestedBy === $userId;
-        $isAdmin     = $this->organizationService->hasPermission($orgId, $userId, 'admin');
+        $isReviewer  = $this->isReviewer($approvalReq, $userId);
 
-        if (!$isRequester && !$isAdmin) {
-            throw new AuthException(__('ui.backend.approval.view_own_only'), 403);
+        if (!$isRequester && !$isReviewer) {
+            throw new AuthException(__('ui.backend.approval.view_request_denied'), 403);
         }
 
         return $approvalReq;
@@ -216,7 +224,7 @@ final class ApprovalService
      * Генерирует одноразовый токен (TTL 1 ч.); токен возвращается открытым ОДИН РАЗ.
      * В БД хранится только SHA-256 хэш.
      *
-     * Требуется admin+.
+     * Требуется owner секрета.
      *
      * @return array{request: ApprovalRequest, token: string}
      * @throws AuthException     если нет прав или пытается одобрить свой запрос
@@ -224,9 +232,8 @@ final class ApprovalService
      */
     public function approve(string $requestUuid, string $reviewerId, string $orgId): array
     {
-        $this->assertHasPermission($orgId, $reviewerId, 'admin');
-
         $approvalReq = $this->findRequestInOrg($requestUuid, $orgId);
+        $this->assertReviewer($approvalReq, $reviewerId);
 
         if ($approvalReq->requestedBy === $reviewerId) {
             throw new AuthException(__('ui.backend.approval.cannot_approve_own'), 403);
@@ -271,7 +278,7 @@ final class ApprovalService
 
     /**
      * Отклонить запрос.
-     * Требуется admin+.
+     * Требуется owner секрета.
      *
      * @throws AuthException     если нет прав
      * @throws \RuntimeException если запрос не в статусе pending
@@ -282,9 +289,8 @@ final class ApprovalService
         string  $reviewerId,
         string  $orgId,
     ): ApprovalRequest {
-        $this->assertHasPermission($orgId, $reviewerId, 'admin');
-
         $approvalReq = $this->findRequestInOrg($requestUuid, $orgId);
+        $this->assertReviewer($approvalReq, $reviewerId);
 
         if ($approvalReq->status !== 'pending') {
             throw new \RuntimeException(
@@ -322,7 +328,7 @@ final class ApprovalService
     /**
      * Отозвать запрос.
      *   - Сам запрашивающий может отозвать только pending-запрос.
-     *   - admin+ может отозвать любой активный запрос (pending или approved).
+     *   - owner секрета и admin+ могут отозвать pending или approved.
      *
      * @throws AuthException     если нет прав
      * @throws \RuntimeException если запрос не найден или уже finalized
@@ -332,12 +338,13 @@ final class ApprovalService
         $approvalReq = $this->findRequestInOrg($requestUuid, $orgId);
         $isAdmin     = $this->organizationService->hasPermission($orgId, $userId, 'admin');
         $isRequester = $approvalReq->requestedBy === $userId;
+        $isReviewer  = $this->isReviewer($approvalReq, $userId);
 
-        if (!$isAdmin && !$isRequester) {
+        if (!$isAdmin && !$isRequester && !$isReviewer) {
             throw new AuthException(__('ui.backend.approval.cannot_revoke_request'), 403);
         }
 
-        $revokableStatuses = $isAdmin ? ['pending', 'approved'] : ['pending'];
+        $revokableStatuses = ($isAdmin || $isReviewer) ? ['pending', 'approved'] : ['pending'];
 
         if (!\in_array($approvalReq->status, $revokableStatuses, true)) {
             throw new \RuntimeException(
@@ -446,23 +453,6 @@ final class ApprovalService
     // ------------------------------------------------------------------ //
 
     /**
-     * @return string[] ID пользователей с ролью admin+ в организации
-     */
-    private function findReviewerIds(string $orgId): array
-    {
-        $members = $this->organizationService->listMembers($orgId);
-        $ids     = [];
-
-        foreach ($members as $member) {
-            if (OrganizationMember::roleHasPermission($member->role, 'admin')) {
-                $ids[] = $member->userId;
-            }
-        }
-
-        return $ids;
-    }
-
-    /**
      * @throws \RuntimeException если секрет не найден или принадлежит другой орг.
      */
     private function findSecretInOrg(string $secretUuid, string $orgId): Secret
@@ -491,6 +481,21 @@ final class ApprovalService
         }
 
         return $req;
+    }
+
+    /**
+     * @throws AuthException (code 403)
+     */
+    private function assertReviewer(ApprovalRequest $approvalReq, string $reviewerId): void
+    {
+        if (!$this->isReviewer($approvalReq, $reviewerId)) {
+            throw new AuthException(__('ui.backend.approval.requires_secret_owner_review'), 403);
+        }
+    }
+
+    private function isReviewer(ApprovalRequest $approvalReq, string $reviewerId): bool
+    {
+        return ApprovalReviewer::isReviewer($approvalReq->id, $reviewerId);
     }
 
     /**

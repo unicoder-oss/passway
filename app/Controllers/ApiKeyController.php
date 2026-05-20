@@ -9,7 +9,6 @@ use Passway\Core\Request;
 use Passway\Core\Response;
 use Passway\Exceptions\AuthException;
 use Passway\Models\ApiKey;
-use Passway\Models\ApiKeyPermission;
 use Passway\Models\Organization;
 use Passway\Services\ApiKeyService;
 
@@ -19,10 +18,8 @@ use Passway\Services\ApiKeyService;
  * GET    /api/v1/organizations/:uuid/api-keys                             — список ключей
  * POST   /api/v1/organizations/:uuid/api-keys                             — создать ключ
  * GET    /api/v1/organizations/:uuid/api-keys/:keyUuid                    — детали ключа
+ * PATCH  /api/v1/organizations/:uuid/api-keys/:keyUuid                    — сменить роль ключа
  * DELETE /api/v1/organizations/:uuid/api-keys/:keyUuid                    — отозвать ключ
- * GET    /api/v1/organizations/:uuid/api-keys/:keyUuid/permissions        — список прав
- * POST   /api/v1/organizations/:uuid/api-keys/:keyUuid/permissions        — добавить право
- * DELETE /api/v1/organizations/:uuid/api-keys/:keyUuid/permissions/:permId — удалить право
  */
 final class ApiKeyController
 {
@@ -58,6 +55,7 @@ final class ApiKeyController
         $org  = $this->findOrgOrFail($request);
 
         $name        = \trim((string) ($request->input('name') ?? ''));
+        $role        = \trim((string) ($request->input('role') ?? 'reader'));
         $expiresAt   = $request->input('expires_at') !== null
             ? \trim((string) $request->input('expires_at'))
             : null;
@@ -71,6 +69,7 @@ final class ApiKeyController
                 $name,
                 $org->id,
                 $user->id,
+                $role,
                 $expiresAt !== '' ? $expiresAt : null,
             );
         } catch (AuthException $e) {
@@ -107,6 +106,30 @@ final class ApiKeyController
         return Response::success($this->serializeKey($apiKey));
     }
 
+    public function update(Request $request): Response
+    {
+        $user = AuthContext::requireUser();
+        $org = $this->findOrgOrFail($request);
+        $keyUuid = (string) $request->routeParam('keyUuid');
+        $role = \trim((string) ($request->input('role') ?? ''));
+
+        if ($role === '') {
+            return Response::validationError(['role' => [__('ui.backend.common.role_required')]]);
+        }
+
+        try {
+            $apiKey = $this->apiKeyService->updateRole($keyUuid, $role, $org->id, $user->id);
+        } catch (AuthException $e) {
+            return Response::error($e->getMessage(), $e->getCode() ?: 403);
+        } catch (\InvalidArgumentException $e) {
+            return Response::validationError(['role' => [$e->getMessage()]]);
+        } catch (\RuntimeException $e) {
+            return Response::notFound($e->getMessage());
+        }
+
+        return Response::success($this->serializeKey($apiKey));
+    }
+
     // ------------------------------------------------------------------ //
     //  DELETE .../api-keys/:keyUuid                                       //
     // ------------------------------------------------------------------ //
@@ -119,92 +142,6 @@ final class ApiKeyController
 
         try {
             $this->apiKeyService->revoke($keyUuid, $org->id, $user->id);
-        } catch (AuthException $e) {
-            return Response::error($e->getMessage(), $e->getCode() ?: 403);
-        } catch (\RuntimeException $e) {
-            return Response::notFound($e->getMessage());
-        }
-
-        return Response::success();
-    }
-
-    // ------------------------------------------------------------------ //
-    //  GET .../api-keys/:keyUuid/permissions                              //
-    // ------------------------------------------------------------------ //
-
-    public function listPermissions(Request $request): Response
-    {
-        $user    = AuthContext::requireUser();
-        $org     = $this->findOrgOrFail($request);
-        $keyUuid = (string) $request->routeParam('keyUuid');
-
-        try {
-            $perms = $this->apiKeyService->listPermissions($keyUuid, $org->id, $user->id);
-        } catch (AuthException $e) {
-            return Response::forbidden($e->getMessage());
-        } catch (\RuntimeException $e) {
-            return Response::notFound($e->getMessage());
-        }
-
-        return Response::success(\array_map(fn($p) => $this->serializePerm($p), $perms));
-    }
-
-    // ------------------------------------------------------------------ //
-    //  POST .../api-keys/:keyUuid/permissions                             //
-    // ------------------------------------------------------------------ //
-
-    public function addPermission(Request $request): Response
-    {
-        $user    = AuthContext::requireUser();
-        $org     = $this->findOrgOrFail($request);
-        $keyUuid = (string) $request->routeParam('keyUuid');
-
-        $resourceType = \trim((string) ($request->input('resource_type') ?? ''));
-        $resourceId   = $request->input('resource_id') !== null
-            ? \trim((string) $request->input('resource_id'))
-            : null;
-        $permission   = \trim((string) ($request->input('permission') ?? ''));
-
-        if ($resourceType === '') {
-            return Response::validationError(['resource_type' => [__('ui.backend.apikey.resource_type_required')]]);
-        }
-        if ($permission === '') {
-            return Response::validationError(['permission' => [__('ui.backend.apikey.permission_required')]]);
-        }
-
-        try {
-            $perm = $this->apiKeyService->addPermission(
-                $keyUuid,
-                $resourceType,
-                $resourceId !== '' ? $resourceId : null,
-                $permission,
-                $org->id,
-                $user->id,
-            );
-        } catch (AuthException $e) {
-            return Response::error($e->getMessage(), $e->getCode() ?: 403);
-        } catch (\InvalidArgumentException $e) {
-            return Response::validationError(['permission' => [$e->getMessage()]]);
-        } catch (\RuntimeException $e) {
-            return Response::error($e->getMessage(), 422);
-        }
-
-        return Response::success($this->serializePerm($perm), 201);
-    }
-
-    // ------------------------------------------------------------------ //
-    //  DELETE .../api-keys/:keyUuid/permissions/:permId                   //
-    // ------------------------------------------------------------------ //
-
-    public function removePermission(Request $request): Response
-    {
-        $user    = AuthContext::requireUser();
-        $org     = $this->findOrgOrFail($request);
-        $keyUuid = (string) $request->routeParam('keyUuid');
-        $permId  = (string) $request->routeParam('permId');
-
-        try {
-            $this->apiKeyService->removePermission($keyUuid, $permId, $org->id, $user->id);
         } catch (AuthException $e) {
             return Response::error($e->getMessage(), $e->getCode() ?: 403);
         } catch (\RuntimeException $e) {
@@ -234,23 +171,12 @@ final class ApiKeyController
         return [
             'uuid'         => $k->uuid,
             'name'         => $k->name,
+            'role'         => $k->role,
             'key_prefix'   => $k->keyPrefix,
             'is_active'    => $k->isActive,
             'last_used_at' => $k->lastUsedAt,
             'expires_at'   => $k->expiresAt,
             'created_at'   => $k->createdAt,
-        ];
-    }
-
-    /** @return array<string, mixed> */
-    private function serializePerm(ApiKeyPermission $p): array
-    {
-        return [
-            'id'            => $p->id,
-            'resource_type' => $p->resourceType,
-            'resource_id'   => $p->resourceId,
-            'permission'    => $p->permission,
-            'created_at'    => $p->createdAt,
         ];
     }
 }

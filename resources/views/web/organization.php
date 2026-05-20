@@ -9,6 +9,12 @@ $secretAction = $currentDir !== null
     ? '/organizations/' . $organization->uuid . '/directories/' . $currentDir->uuid . '/secrets'
     : '/organizations/' . $organization->uuid . '/secrets';
 $secretDirUuid = $currentDir?->uuid ?? $rootSecretDirectory?->uuid ?? '';
+$currentDirAclApiUrl = $currentDir !== null
+    ? '/api/v1/organizations/' . $organization->uuid . '/directories/' . $currentDir->uuid . '/acl'
+    : null;
+$currentDirOwnerAction = $currentDir !== null
+    ? '/organizations/' . $organization->uuid . '/directories/' . $currentDir->uuid . '/owner'
+    : null;
 $templateNamesById = [];
 foreach ($templates as $template) {
     $templateNamesById[$template->id] = $template->name;
@@ -191,10 +197,66 @@ require base_path('resources/views/partials/auth_topbar.php');
             .template-param-check span {
                 text-align: left;
             }
+            .acl-rule-list,
+            .owner-candidate-list {
+                display: grid;
+                gap: .75rem;
+            }
+            .acl-rule-row,
+            .owner-candidate {
+                padding: .85rem 1rem;
+                border: 1px solid var(--border);
+                background: var(--panel-subtle);
+                display: grid;
+                gap: .75rem;
+            }
+            .acl-rule-row {
+                grid-template-columns: minmax(0, 1.4fr) repeat(2, minmax(0, .7fr)) auto;
+                align-items: end;
+            }
+            .acl-subject-copy {
+                min-width: 0;
+                display: grid;
+                gap: .2rem;
+            }
+            .acl-subject-line {
+                display: flex;
+                gap: .5rem;
+                align-items: center;
+                flex-wrap: wrap;
+            }
+            .acl-tabs {
+                display: flex;
+                gap: .5rem;
+                flex-wrap: wrap;
+            }
+            .acl-tab.is-active {
+                background: var(--button);
+                color: var(--button-fg);
+                border-color: var(--button);
+            }
+            .owner-candidate {
+                grid-template-columns: auto minmax(0, 1fr);
+                align-items: start;
+            }
+            .owner-candidate input {
+                width: auto;
+                margin-top: .2rem;
+            }
+            .owner-candidate-copy {
+                min-width: 0;
+                display: grid;
+                gap: .2rem;
+            }
             @media (min-width: 720px) {
                 .template-params-columns {
                     grid-template-columns: minmax(0, 1fr) minmax(0, 1fr);
                     align-items: start;
+                }
+            }
+            @media (max-width: 719px) {
+                .acl-rule-row {
+                    grid-template-columns: minmax(0, 1fr);
                 }
             }
         </style>
@@ -206,24 +268,28 @@ require base_path('resources/views/partials/auth_topbar.php');
                     <div class="org-entry-path" style="margin-top:.25rem;"><?= e($currentDirPath) ?></div>
                 <?php endif; ?>
             </div>
-            <?php if ($canEditContent): ?>
+            <?php if (($currentDir !== null && (!empty($canWriteCurrentDirectory) || !empty($canManageCurrentDirectoryAcl))) || $canEditContent): ?>
                 <div class="actions">
-                    <?php if ($currentDir !== null): ?>
+                    <?php if ($currentDir !== null && (!empty($canWriteCurrentDirectory) || !empty($canManageCurrentDirectoryAcl))): ?>
                         <div class="org-menu js-delayed-menu">
                             <button type="button"><?= e(__('ui.organization.manage_directory')) ?></button>
                             <div class="org-menu-panel panel">
-                                <button type="button" class="secondary" data-open-modal="rename-directory-modal"><?= e(__('ui.organization.rename_directory')) ?></button>
-                                <button type="button" class="secondary danger" data-open-modal="delete-directory-modal"><?= e(__('ui.organization.delete_directory')) ?></button>
+                                <?php if (!empty($canWriteCurrentDirectory)): ?><button type="button" class="secondary" data-open-modal="rename-directory-modal"><?= e(__('ui.organization.rename_directory')) ?></button><?php endif; ?>
+                                <?php if (!empty($canManageCurrentDirectoryAcl)): ?><button type="button" class="secondary" data-open-modal="directory-acl-modal" id="open-directory-acl-modal"><?= e(__('ui.organization.configure_acl')) ?></button><?php endif; ?>
+                                <?php if (!empty($canManageCurrentDirectoryAcl)): ?><button type="button" class="secondary" data-open-modal="transfer-directory-owner-modal"><?= e(__('ui.organization.transfer_owner')) ?></button><?php endif; ?>
+                                <?php if (!empty($canManageCurrentDirectoryAcl)): ?><button type="button" class="secondary danger" data-open-modal="delete-directory-modal"><?= e(__('ui.organization.delete_directory')) ?></button><?php endif; ?>
                             </div>
                         </div>
                     <?php endif; ?>
-                    <div class="org-menu js-delayed-menu">
-                        <button type="button" aria-label="<?= e(__('ui.organization.actions')) ?>">+</button>
-                        <div class="org-menu-panel panel">
-                            <button type="button" class="secondary" data-open-modal="directory-modal"><?= e(__('ui.organization.add_directory_short')) ?></button>
-                            <button type="button" class="secondary" data-open-modal="secret-modal"><?= e(__('ui.organization.add_secret_short')) ?></button>
+                    <?php if (($currentDir === null && $canEditContent) || ($currentDir !== null && !empty($canWriteCurrentDirectory))): ?>
+                        <div class="org-menu js-delayed-menu">
+                            <button type="button" aria-label="<?= e(__('ui.organization.actions')) ?>">+</button>
+                            <div class="org-menu-panel panel">
+                                <button type="button" class="secondary" data-open-modal="directory-modal"><?= e(__('ui.organization.add_directory_short')) ?></button>
+                                <button type="button" class="secondary" data-open-modal="secret-modal"><?= e(__('ui.organization.add_secret_short')) ?></button>
+                            </div>
                         </div>
-                    </div>
+                    <?php endif; ?>
                 </div>
             <?php endif; ?>
         </div>
@@ -328,7 +394,8 @@ require base_path('resources/views/partials/auth_topbar.php');
     </section>
 </section>
 
-<?php if ($canEditContent): ?>
+<?php if ($canEditContent || ($currentDir !== null && !empty($canManageCurrentDirectoryAcl))): ?>
+    <?php if ($canEditContent): ?>
     <dialog id="directory-modal" class="modal">
         <div class="modal-body">
             <div>
@@ -348,43 +415,132 @@ require base_path('resources/views/partials/auth_topbar.php');
             </form>
         </div>
     </dialog>
-
-    <?php if ($currentDir !== null): ?>
-        <dialog id="rename-directory-modal" class="modal">
-            <div class="modal-body">
-                <div>
-                    <h3 style="margin:0 0 .35rem;"><?= e(__('ui.organization.rename_directory')) ?></h3>
-                </div>
-                <form method="POST" action="/organizations/<?= e($organization->uuid) ?>/directories/<?= e($currentDir->uuid) ?>/rename" class="grid" style="gap:1rem;">
-                    <div>
-                        <label for="rename-dir-name"><?= e(__('ui.home.directory_name')) ?></label>
-                        <input id="rename-dir-name" name="name" value="<?= e($currentDir->name) ?>" required>
-                    </div>
-                    <div class="actions-end">
-                        <button type="button" class="secondary" data-close-modal="rename-directory-modal"><?= e(__('ui.organization.cancel')) ?></button>
-                        <button type="submit"><?= e(__('ui.home.rename')) ?></button>
-                    </div>
-                </form>
-            </div>
-        </dialog>
-
-        <dialog id="delete-directory-modal" class="modal">
-            <div class="modal-body">
-                <div>
-                    <h3 style="margin:0 0 .35rem;"><?= e(__('ui.organization.delete_directory')) ?></h3>
-                    <div class="wizard-meta"><?= e(__('ui.organization.delete_directory_confirm')) ?></div>
-                    <?php if ($currentDirStats !== null): ?>
-                        <div class="wizard-meta" style="margin-top:.5rem;"><?= e(__('ui.organization.delete_directory_summary', ['directories' => (string) $currentDirStats['directories'], 'secrets' => (string) $currentDirStats['secrets']])) ?></div>
-                    <?php endif; ?>
-                </div>
-                <form method="POST" action="/organizations/<?= e($organization->uuid) ?>/directories/<?= e($currentDir->uuid) ?>/delete" class="actions-end">
-                    <button type="button" class="secondary" data-close-modal="delete-directory-modal"><?= e(__('ui.organization.cancel')) ?></button>
-                    <button type="submit" class="danger"><?= e(__('ui.organization.delete_directory')) ?></button>
-                </form>
-            </div>
-        </dialog>
     <?php endif; ?>
 
+    <?php if ($currentDir !== null): ?>
+        <?php if ($canEditContent): ?>
+            <dialog id="rename-directory-modal" class="modal">
+                <div class="modal-body">
+                    <div>
+                        <h3 style="margin:0 0 .35rem;"><?= e(__('ui.organization.rename_directory')) ?></h3>
+                    </div>
+                    <form method="POST" action="/organizations/<?= e($organization->uuid) ?>/directories/<?= e($currentDir->uuid) ?>/rename" class="grid" style="gap:1rem;">
+                        <div>
+                            <label for="rename-dir-name"><?= e(__('ui.home.directory_name')) ?></label>
+                            <input id="rename-dir-name" name="name" value="<?= e($currentDir->name) ?>" required>
+                        </div>
+                        <div class="actions-end">
+                            <button type="button" class="secondary" data-close-modal="rename-directory-modal"><?= e(__('ui.organization.cancel')) ?></button>
+                            <button type="submit"><?= e(__('ui.home.rename')) ?></button>
+                        </div>
+                    </form>
+                </div>
+            </dialog>
+        <?php endif; ?>
+
+        <?php if (!empty($canManageCurrentDirectoryAcl)): ?>
+            <dialog id="directory-acl-modal" class="modal">
+                <div class="modal-body">
+                    <div>
+                        <h3 style="margin:0 0 .35rem;"><?= e(__('ui.organization.configure_acl')) ?></h3>
+                        <div class="wizard-meta" id="directory-acl-status"><?= e(__('ui.organization.acl_modal_hint')) ?></div>
+                    </div>
+                    <div class="grid" style="gap:1rem;">
+                        <div class="acl-tabs">
+                            <button type="button" class="secondary acl-tab is-active" data-directory-acl-tab="users"><?= e(__('ui.organization.acl_tab_users')) ?></button>
+                            <button type="button" class="secondary acl-tab" data-directory-acl-tab="keys"><?= e(__('ui.organization.acl_tab_keys')) ?></button>
+                        </div>
+                        <section data-directory-acl-panel="users" class="grid" style="gap:.75rem;">
+                            <div class="grid field-actions-2" style="gap:.75rem; align-items:end;">
+                                <div>
+                                    <label for="directory-acl-user-select"><?= e(__('ui.organization.acl_add_user')) ?></label>
+                                    <select id="directory-acl-user-select">
+                                        <option value=""><?= e(__('ui.organization.acl_select_user')) ?></option>
+                                        <?php foreach ($organizationMembers as $member): ?>
+                                            <?php if ($member['role'] === 'owner') { continue; } ?>
+                                            <option value="<?= e($member['uuid']) ?>"><?= e($member['name'] . ' <' . $member['email'] . '>') ?></option>
+                                        <?php endforeach; ?>
+                                    </select>
+                                </div>
+                                <button type="button" class="secondary" id="directory-acl-add-user"><?= e(__('ui.organization.acl_add_rule')) ?></button>
+                            </div>
+                        </section>
+                        <section data-directory-acl-panel="keys" class="grid hidden" style="gap:.75rem;">
+                            <div class="grid field-actions-2" style="gap:.75rem; align-items:end;">
+                                <div>
+                                    <label for="directory-acl-key-select"><?= e(__('ui.organization.acl_add_key')) ?></label>
+                                    <select id="directory-acl-key-select">
+                                        <option value=""><?= e(__('ui.organization.acl_select_key')) ?></option>
+                                        <?php foreach ($organizationApiKeys as $apiKey): ?>
+                                            <option value="<?= e($apiKey['uuid']) ?>"><?= e($apiKey['name'] . ' (' . $apiKey['key_prefix'] . ')') ?></option>
+                                        <?php endforeach; ?>
+                                    </select>
+                                </div>
+                                <button type="button" class="secondary" id="directory-acl-add-key"><?= e(__('ui.organization.acl_add_rule')) ?></button>
+                            </div>
+                        </section>
+                        <div id="directory-acl-rules" class="acl-rule-list"></div>
+                        <div class="actions-end">
+                            <button type="button" class="secondary" data-close-modal="directory-acl-modal"><?= e(__('ui.organization.cancel')) ?></button>
+                            <button type="button" id="directory-acl-save-button"><?= e(__('ui.app.save')) ?></button>
+                        </div>
+                    </div>
+                </div>
+            </dialog>
+
+            <dialog id="transfer-directory-owner-modal" class="modal">
+                <div class="modal-body">
+                    <div>
+                        <h3 style="margin:0 0 .35rem;"><?= e(__('ui.organization.transfer_owner')) ?></h3>
+                        <div class="wizard-meta"><?= e(__('ui.organization.transfer_owner_hint')) ?></div>
+                    </div>
+                    <div class="grid" style="gap:1rem;">
+                        <div>
+                            <label for="directory-owner-search"><?= e(__('ui.organization.owner_search')) ?></label>
+                            <input id="directory-owner-search" placeholder="<?= e(__('ui.organization.owner_search_placeholder')) ?>">
+                        </div>
+                        <div id="directory-owner-candidates" class="owner-candidate-list"></div>
+                        <div class="actions-end">
+                            <button type="button" class="secondary" data-close-modal="transfer-directory-owner-modal"><?= e(__('ui.organization.cancel')) ?></button>
+                            <button type="button" id="directory-owner-continue-button"><?= e(__('ui.organization.transfer_owner_continue')) ?></button>
+                        </div>
+                    </div>
+                </div>
+            </dialog>
+
+            <dialog id="confirm-directory-owner-modal" class="modal">
+                <div class="modal-body">
+                    <div>
+                        <h3 style="margin:0 0 .35rem;"><?= e(__('ui.organization.transfer_owner_confirm_title')) ?></h3>
+                        <div class="wizard-meta" id="confirm-directory-owner-text"></div>
+                    </div>
+                    <form method="POST" action="<?= e((string) $currentDirOwnerAction) ?>" class="actions-end">
+                        <input type="hidden" name="user_uuid" id="confirm-directory-owner-uuid">
+                        <button type="button" class="secondary" data-close-modal="confirm-directory-owner-modal"><?= e(__('ui.organization.cancel')) ?></button>
+                        <button type="submit"><?= e(__('ui.organization.transfer_owner_confirm_button')) ?></button>
+                    </form>
+                </div>
+            </dialog>
+
+            <dialog id="delete-directory-modal" class="modal">
+                <div class="modal-body">
+                    <div>
+                        <h3 style="margin:0 0 .35rem;"><?= e(__('ui.organization.delete_directory')) ?></h3>
+                        <div class="wizard-meta"><?= e(__('ui.organization.delete_directory_confirm')) ?></div>
+                        <?php if ($currentDirStats !== null): ?>
+                            <div class="wizard-meta" style="margin-top:.5rem;"><?= e(__('ui.organization.delete_directory_summary', ['directories' => (string) $currentDirStats['directories'], 'secrets' => (string) $currentDirStats['secrets']])) ?></div>
+                        <?php endif; ?>
+                    </div>
+                    <form method="POST" action="/organizations/<?= e($organization->uuid) ?>/directories/<?= e($currentDir->uuid) ?>/delete" class="actions-end">
+                        <button type="button" class="secondary" data-close-modal="delete-directory-modal"><?= e(__('ui.organization.cancel')) ?></button>
+                        <button type="submit" class="danger"><?= e(__('ui.organization.delete_directory')) ?></button>
+                    </form>
+                </div>
+            </dialog>
+        <?php endif; ?>
+    <?php endif; ?>
+
+    <?php if ($canEditContent): ?>
     <dialog id="secret-modal" class="modal">
         <div class="modal-body">
             <div>
@@ -480,6 +636,7 @@ require base_path('resources/views/partials/auth_topbar.php');
             </form>
         </div>
     </dialog>
+    <?php endif; ?>
 
     <script>
     (() => {
@@ -547,6 +704,405 @@ require base_path('resources/views/partials/auth_topbar.php');
                 }
             });
         });
+
+        const directoryAclModal = document.getElementById('directory-acl-modal');
+        const openDirectoryAclButton = document.getElementById('open-directory-acl-modal');
+        const directoryAclStatus = document.getElementById('directory-acl-status');
+        const directoryAclRules = document.getElementById('directory-acl-rules');
+        const directoryAclSaveButton = document.getElementById('directory-acl-save-button');
+        const directoryAclUserSelect = document.getElementById('directory-acl-user-select');
+        const directoryAclAddUserButton = document.getElementById('directory-acl-add-user');
+        const directoryAclKeySelect = document.getElementById('directory-acl-key-select');
+        const directoryAclAddKeyButton = document.getElementById('directory-acl-add-key');
+        const directoryAclTabButtons = Array.from(document.querySelectorAll('[data-directory-acl-tab]'));
+        const directoryAclPanels = Array.from(document.querySelectorAll('[data-directory-acl-panel]'));
+        const transferDirectoryOwnerModal = document.getElementById('transfer-directory-owner-modal');
+        const directoryOwnerSearch = document.getElementById('directory-owner-search');
+        const directoryOwnerCandidates = document.getElementById('directory-owner-candidates');
+        const directoryOwnerContinueButton = document.getElementById('directory-owner-continue-button');
+        const confirmDirectoryOwnerModal = document.getElementById('confirm-directory-owner-modal');
+        const confirmDirectoryOwnerText = document.getElementById('confirm-directory-owner-text');
+        const confirmDirectoryOwnerUuid = document.getElementById('confirm-directory-owner-uuid');
+        const directoryAclApiUrl = <?= json_encode($currentDirAclApiUrl) ?>;
+        const organizationMembers = <?= json_encode($organizationMembers, JSON_UNESCAPED_UNICODE | JSON_UNESCAPED_SLASHES) ?>;
+        const organizationApiKeys = <?= json_encode($organizationApiKeys, JSON_UNESCAPED_UNICODE | JSON_UNESCAPED_SLASHES) ?>;
+        const currentUserUuid = <?= json_encode($user->uuid) ?>;
+        const currentDirectoryOwnerUuid = <?= json_encode($currentDir !== null && $currentDir->ownerUserId !== null ? \Passway\Models\User::findById($currentDir->ownerUserId)?->uuid : null) ?>;
+        const directoryAclLabels = {
+            inherit: <?= json_encode((string) __('ui.organization.acl_effect_inherit')) ?>,
+            allow: <?= json_encode((string) __('ui.organization.acl_effect_allow')) ?>,
+            deny: <?= json_encode((string) __('ui.organization.acl_effect_deny')) ?>,
+            user: <?= json_encode((string) __('ui.organization.acl_subject_user')) ?>,
+            group: <?= json_encode((string) __('ui.organization.acl_subject_group')) ?>,
+            api_key: <?= json_encode((string) __('ui.organization.acl_subject_api_key')) ?>,
+            empty: <?= json_encode((string) __('ui.organization.acl_no_rules')) ?>,
+            loading: <?= json_encode((string) __('ui.organization.acl_loading')) ?>,
+            saving: <?= json_encode((string) __('ui.organization.acl_saving')) ?>,
+            saved: <?= json_encode((string) __('ui.organization.acl_saved')) ?>,
+            duplicate: <?= json_encode((string) __('ui.organization.acl_duplicate_subject')) ?>,
+            addUser: <?= json_encode((string) __('ui.organization.acl_add_user_required')) ?>,
+            addKey: <?= json_encode((string) __('ui.organization.acl_add_key_required')) ?>,
+            ownerEmpty: <?= json_encode((string) __('ui.organization.owner_no_candidates')) ?>,
+        };
+        let directoryAclState = [];
+        let selectedDirectoryOwnerUuid = null;
+
+        const setDirectoryAclTab = (tab) => {
+            directoryAclTabButtons.forEach((button) => {
+                const isActive = button.getAttribute('data-directory-acl-tab') === tab;
+                button.classList.toggle('is-active', isActive);
+            });
+            directoryAclPanels.forEach((panel) => {
+                panel.classList.toggle('hidden', panel.getAttribute('data-directory-acl-panel') !== tab);
+            });
+        };
+
+        const renderDirectoryAclRules = () => {
+            if (!directoryAclRules) {
+                return;
+            }
+
+            directoryAclRules.innerHTML = '';
+            if (directoryAclState.length === 0) {
+                const empty = document.createElement('div');
+                empty.className = 'muted';
+                empty.textContent = directoryAclLabels.empty;
+                directoryAclRules.appendChild(empty);
+                return;
+            }
+
+            const createEffectSelect = (permission, index, currentValue) => {
+                const wrapper = document.createElement('div');
+                const label = document.createElement('label');
+                label.textContent = permission === 'read'
+                    ? <?= json_encode((string) __('ui.organization.acl_read')) ?>
+                    : <?= json_encode((string) __('ui.organization.acl_write')) ?>;
+                const select = document.createElement('select');
+                ['', 'allow', 'deny'].forEach((value) => {
+                    const option = document.createElement('option');
+                    option.value = value;
+                    option.textContent = value === '' ? directoryAclLabels.inherit : directoryAclLabels[value];
+                    option.selected = currentValue === value || (currentValue === null && value === '');
+                    select.appendChild(option);
+                });
+                select.addEventListener('change', () => {
+                    directoryAclState[index][permission] = select.value === '' ? null : select.value;
+                });
+                wrapper.appendChild(label);
+                wrapper.appendChild(select);
+                return wrapper;
+            };
+
+            directoryAclState.forEach((rule, index) => {
+                const row = document.createElement('div');
+                row.className = 'acl-rule-row';
+                const subject = document.createElement('div');
+                subject.className = 'acl-subject-copy';
+                const line = document.createElement('div');
+                line.className = 'acl-subject-line';
+                const title = document.createElement('strong');
+                title.textContent = rule.subject_name || rule.subject_uuid;
+                const pill = document.createElement('span');
+                pill.className = 'pill';
+                pill.textContent = directoryAclLabels[rule.subject_type] || rule.subject_type;
+                line.appendChild(title);
+                line.appendChild(pill);
+                subject.appendChild(line);
+                if (rule.subject_email) {
+                    const email = document.createElement('div');
+                    email.className = 'muted';
+                    email.textContent = rule.subject_email;
+                    subject.appendChild(email);
+                }
+                row.appendChild(subject);
+                row.appendChild(createEffectSelect('read', index, rule.read));
+                row.appendChild(createEffectSelect('write', index, rule.write));
+
+                const removeButton = document.createElement('button');
+                removeButton.type = 'button';
+                removeButton.className = 'secondary danger';
+                removeButton.textContent = <?= json_encode((string) __('ui.app.remove')) ?>;
+                removeButton.addEventListener('click', () => {
+                    directoryAclState.splice(index, 1);
+                    renderDirectoryAclRules();
+                });
+                row.appendChild(removeButton);
+                directoryAclRules.appendChild(row);
+            });
+        };
+
+        const loadDirectoryAcl = async () => {
+            if (!directoryAclApiUrl || !directoryAclStatus) {
+                return;
+            }
+
+            directoryAclStatus.textContent = directoryAclLabels.loading;
+            if (directoryAclSaveButton) {
+                directoryAclSaveButton.disabled = true;
+            }
+
+            try {
+                const response = await fetch(directoryAclApiUrl, {
+                    headers: {
+                        'Accept': 'application/json',
+                        'X-Requested-With': 'XMLHttpRequest',
+                    },
+                    credentials: 'same-origin',
+                });
+                const payload = await response.json();
+                if (!response.ok || !payload.success) {
+                    throw new Error(payload.error || <?= json_encode((string) __('ui.messages.access_denied')) ?>);
+                }
+
+                const rules = payload.data && Array.isArray(payload.data.rules) ? payload.data.rules : [];
+                directoryAclState = rules.map((rule) => ({
+                    subject_type: rule.subject_type,
+                    subject_uuid: rule.subject_uuid,
+                    subject_name: rule.subject_name,
+                    subject_email: rule.subject_email,
+                    read: rule.read,
+                    write: rule.write,
+                })).filter((rule) => !(rule.subject_type === 'user' && rule.subject_uuid === currentDirectoryOwnerUuid));
+                renderDirectoryAclRules();
+                directoryAclStatus.textContent = <?= json_encode((string) __('ui.organization.acl_modal_hint')) ?>;
+            } catch (error) {
+                directoryAclStatus.textContent = error instanceof Error ? error.message : <?= json_encode((string) __('ui.organization.acl_load_failed')) ?>;
+            } finally {
+                if (directoryAclSaveButton) {
+                    directoryAclSaveButton.disabled = false;
+                }
+            }
+        };
+
+        const saveDirectoryAcl = async () => {
+            if (!directoryAclApiUrl || !directoryAclSaveButton || !directoryAclStatus) {
+                return;
+            }
+
+            directoryAclSaveButton.disabled = true;
+            directoryAclStatus.textContent = directoryAclLabels.saving;
+
+            try {
+                const response = await fetch(directoryAclApiUrl, {
+                    method: 'PUT',
+                    headers: {
+                        'Content-Type': 'application/json',
+                        'Accept': 'application/json',
+                        'X-Requested-With': 'XMLHttpRequest',
+                    },
+                    credentials: 'same-origin',
+                    body: JSON.stringify({
+                        rules: directoryAclState.map((rule) => ({
+                            subject_type: rule.subject_type,
+                            subject_uuid: rule.subject_uuid,
+                            read: rule.read,
+                            write: rule.write,
+                        })),
+                    }),
+                });
+                const payload = await response.json();
+                if (!response.ok || !payload.success) {
+                    throw new Error(payload.error || <?= json_encode((string) __('ui.organization.acl_save_failed')) ?>);
+                }
+
+                const rules = payload.data && Array.isArray(payload.data.rules) ? payload.data.rules : directoryAclState;
+                directoryAclState = rules.map((rule) => ({
+                    subject_type: rule.subject_type,
+                    subject_uuid: rule.subject_uuid,
+                    subject_name: rule.subject_name,
+                    subject_email: rule.subject_email,
+                    read: rule.read,
+                    write: rule.write,
+                })).filter((rule) => !(rule.subject_type === 'user' && rule.subject_uuid === currentDirectoryOwnerUuid));
+                renderDirectoryAclRules();
+                directoryAclStatus.textContent = directoryAclLabels.saved;
+            } catch (error) {
+                directoryAclStatus.textContent = error instanceof Error ? error.message : <?= json_encode((string) __('ui.organization.acl_save_failed')) ?>;
+            } finally {
+                directoryAclSaveButton.disabled = false;
+            }
+        };
+
+        const renderDirectoryOwnerCandidates = () => {
+            if (!directoryOwnerCandidates || !directoryOwnerContinueButton) {
+                return;
+            }
+
+            const query = directoryOwnerSearch ? directoryOwnerSearch.value.trim().toLowerCase() : '';
+            const candidates = organizationMembers.filter((member) => {
+                if (member.uuid === currentUserUuid || member.role === 'owner') {
+                    return false;
+                }
+
+                if (query === '') {
+                    return true;
+                }
+
+                return `${member.name} ${member.email} ${member.role}`.toLowerCase().includes(query);
+            });
+
+            directoryOwnerCandidates.innerHTML = '';
+            if (candidates.length === 0) {
+                const empty = document.createElement('div');
+                empty.className = 'muted';
+                empty.textContent = directoryAclLabels.ownerEmpty;
+                directoryOwnerCandidates.appendChild(empty);
+                directoryOwnerContinueButton.disabled = true;
+                return;
+            }
+
+            candidates.forEach((member) => {
+                const label = document.createElement('label');
+                label.className = 'owner-candidate';
+                const radio = document.createElement('input');
+                radio.type = 'radio';
+                radio.name = 'directory-owner-user';
+                radio.value = member.uuid;
+                radio.checked = selectedDirectoryOwnerUuid === member.uuid;
+                radio.addEventListener('change', () => {
+                    selectedDirectoryOwnerUuid = member.uuid;
+                    directoryOwnerContinueButton.disabled = false;
+                });
+
+                const copy = document.createElement('div');
+                copy.className = 'owner-candidate-copy';
+                const title = document.createElement('strong');
+                title.textContent = member.name;
+                const meta = document.createElement('div');
+                meta.className = 'muted';
+                meta.textContent = `${member.email} · ${member.role}`;
+                copy.appendChild(title);
+                copy.appendChild(meta);
+                label.appendChild(radio);
+                label.appendChild(copy);
+                directoryOwnerCandidates.appendChild(label);
+            });
+
+            directoryOwnerContinueButton.disabled = selectedDirectoryOwnerUuid === null;
+        };
+
+        if (openDirectoryAclButton && directoryAclModal) {
+            openDirectoryAclButton.addEventListener('click', () => {
+                setDirectoryAclTab('users');
+                void loadDirectoryAcl();
+            });
+        }
+
+        directoryAclTabButtons.forEach((button) => {
+            button.addEventListener('click', () => setDirectoryAclTab(button.getAttribute('data-directory-acl-tab') || 'users'));
+        });
+
+        if (directoryAclAddUserButton && directoryAclUserSelect && directoryAclStatus) {
+            directoryAclAddUserButton.addEventListener('click', () => {
+                const subjectUuid = directoryAclUserSelect.value;
+                if (subjectUuid === '') {
+                    directoryAclStatus.textContent = directoryAclLabels.addUser;
+                    return;
+                }
+
+                if (directoryAclState.some((rule) => rule.subject_type === 'user' && rule.subject_uuid === subjectUuid)) {
+                    directoryAclStatus.textContent = directoryAclLabels.duplicate;
+                    return;
+                }
+
+                const member = organizationMembers.find((item) => item.uuid === subjectUuid && item.role !== 'owner');
+                if (!member) {
+                    directoryAclStatus.textContent = directoryAclLabels.addUser;
+                    return;
+                }
+
+                directoryAclState.push({
+                    subject_type: 'user',
+                    subject_uuid: member.uuid,
+                    subject_name: member.name,
+                    subject_email: member.email,
+                    read: null,
+                    write: null,
+                });
+                directoryAclUserSelect.value = '';
+                directoryAclStatus.textContent = <?= json_encode((string) __('ui.organization.acl_modal_hint')) ?>;
+                renderDirectoryAclRules();
+            });
+        }
+
+        if (directoryAclAddKeyButton && directoryAclKeySelect && directoryAclStatus) {
+            directoryAclAddKeyButton.addEventListener('click', () => {
+                const subjectUuid = directoryAclKeySelect.value;
+                if (subjectUuid === '') {
+                    directoryAclStatus.textContent = directoryAclLabels.addKey;
+                    return;
+                }
+
+                if (directoryAclState.some((rule) => rule.subject_type === 'api_key' && rule.subject_uuid === subjectUuid)) {
+                    directoryAclStatus.textContent = directoryAclLabels.duplicate;
+                    return;
+                }
+
+                const apiKey = organizationApiKeys.find((item) => item.uuid === subjectUuid);
+                if (!apiKey) {
+                    directoryAclStatus.textContent = directoryAclLabels.addKey;
+                    return;
+                }
+
+                directoryAclState.push({
+                    subject_type: 'api_key',
+                    subject_uuid: apiKey.uuid,
+                    subject_name: apiKey.name,
+                    subject_email: null,
+                    read: null,
+                    write: null,
+                });
+                directoryAclKeySelect.value = '';
+                directoryAclStatus.textContent = <?= json_encode((string) __('ui.organization.acl_modal_hint')) ?>;
+                renderDirectoryAclRules();
+            });
+        }
+
+        if (directoryAclSaveButton) {
+            directoryAclSaveButton.addEventListener('click', () => {
+                void saveDirectoryAcl();
+            });
+        }
+
+        if (directoryAclModal) {
+            directoryAclModal.addEventListener('close', () => {
+                directoryAclState = [];
+                if (directoryAclStatus) {
+                    directoryAclStatus.textContent = <?= json_encode((string) __('ui.organization.acl_modal_hint')) ?>;
+                }
+                renderDirectoryAclRules();
+            });
+        }
+
+        if (transferDirectoryOwnerModal) {
+            transferDirectoryOwnerModal.addEventListener('close', () => {
+                selectedDirectoryOwnerUuid = null;
+                if (directoryOwnerSearch) {
+                    directoryOwnerSearch.value = '';
+                }
+                renderDirectoryOwnerCandidates();
+            });
+        }
+
+        if (directoryOwnerSearch) {
+            directoryOwnerSearch.addEventListener('input', renderDirectoryOwnerCandidates);
+        }
+
+        if (directoryOwnerContinueButton && confirmDirectoryOwnerModal && confirmDirectoryOwnerText && confirmDirectoryOwnerUuid) {
+            directoryOwnerContinueButton.addEventListener('click', () => {
+                const member = organizationMembers.find((item) => item.uuid === selectedDirectoryOwnerUuid);
+                if (!member) {
+                    return;
+                }
+
+                confirmDirectoryOwnerUuid.value = member.uuid;
+                confirmDirectoryOwnerText.textContent = `<?= e(__('ui.organization.transfer_owner_confirm_text', ['user' => ':user'])) ?>`
+                    .replace(':user', `${member.name} <${member.email}>`);
+                confirmDirectoryOwnerModal.showModal();
+            });
+        }
+
+        renderDirectoryOwnerCandidates();
 
         const wizardForm = document.getElementById('secret-modal-form');
         if (!wizardForm) {

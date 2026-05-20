@@ -70,7 +70,7 @@ final class ApprovalServiceTest extends DatabaseTestCase
 
         $org = $this->orgSvc->create('TestOrg', $owner->id);
         $this->orgSvc->addMember($org->id, $admin->id, 'admin', $owner->id);
-        $this->orgSvc->addMember($org->id, $requester->id, 'user', $owner->id);
+        $this->orgSvc->addMember($org->id, $requester->id, 'reader', $owner->id);
 
         $dir = $this->dirSvc->create($org->id, null, 'Secrets', $owner->id);
 
@@ -107,17 +107,26 @@ final class ApprovalServiceTest extends DatabaseTestCase
         $this->assertNull($req->resolvedAt);
     }
 
-    public function test_request_assigns_admin_reviewers(): void
+    public function test_request_assigns_secret_owner_as_reviewer(): void
     {
-        ['admin' => $admin, 'requester' => $requester, 'orgId' => $orgId, 'secretUuid' => $secUuid] =
+        ['owner' => $owner, 'requester' => $requester, 'orgId' => $orgId, 'secretUuid' => $secUuid] =
             $this->setupApprovalScenario();
 
         $req      = $this->svc->request($secUuid, 'read', null, $requester->id, $orgId);
         $reviewers = \Passway\Models\ApprovalReviewer::findByRequestId($req->id);
 
-        // owner + admin должны быть ревьюверами
+        // Единственный ревьювер — owner секрета
         $reviewerIds = \array_map(fn($r) => $r->reviewerId, $reviewers);
-        $this->assertContains($admin->id, $reviewerIds);
+        $this->assertSame([$owner->id], $reviewerIds);
+    }
+
+    public function test_request_fails_for_secret_owner_with_direct_access(): void
+    {
+        ['owner' => $owner, 'orgId' => $orgId, 'secretUuid' => $secUuid] =
+            $this->setupApprovalScenario();
+
+        $this->expectException(\InvalidArgumentException::class);
+        $this->svc->request($secUuid, 'read', null, $owner->id, $orgId);
     }
 
     public function test_request_fails_for_non_member(): void
@@ -181,18 +190,7 @@ final class ApprovalServiceTest extends DatabaseTestCase
         $this->assertCount(0, $ownerMine);
     }
 
-    public function test_list_pending_requires_admin(): void
-    {
-        ['requester' => $requester, 'orgId' => $orgId, 'secretUuid' => $secUuid] =
-            $this->setupApprovalScenario();
-
-        $this->svc->request($secUuid, 'read', null, $requester->id, $orgId);
-
-        $this->expectException(AuthException::class);
-        $this->svc->listPending($requester->id, $orgId);
-    }
-
-    public function test_list_pending_shows_pending_requests(): void
+    public function test_list_pending_returns_empty_for_non_reviewer(): void
     {
         ['admin' => $admin, 'requester' => $requester, 'orgId' => $orgId, 'secretUuid' => $secUuid] =
             $this->setupApprovalScenario();
@@ -200,6 +198,18 @@ final class ApprovalServiceTest extends DatabaseTestCase
         $this->svc->request($secUuid, 'read', null, $requester->id, $orgId);
 
         $pending = $this->svc->listPending($admin->id, $orgId);
+
+        $this->assertCount(0, $pending);
+    }
+
+    public function test_list_pending_shows_pending_requests(): void
+    {
+        ['owner' => $owner, 'requester' => $requester, 'orgId' => $orgId, 'secretUuid' => $secUuid] =
+            $this->setupApprovalScenario();
+
+        $this->svc->request($secUuid, 'read', null, $requester->id, $orgId);
+
+        $pending = $this->svc->listPending($owner->id, $orgId);
         $this->assertCount(1, $pending);
         $this->assertSame('pending', $pending[0]->status);
     }
@@ -219,13 +229,13 @@ final class ApprovalServiceTest extends DatabaseTestCase
         $this->assertSame($created->uuid, $fetched->uuid);
     }
 
-    public function test_get_by_admin(): void
+    public function test_get_by_secret_owner(): void
     {
-        ['admin' => $admin, 'requester' => $requester, 'orgId' => $orgId, 'secretUuid' => $secUuid] =
+        ['owner' => $owner, 'requester' => $requester, 'orgId' => $orgId, 'secretUuid' => $secUuid] =
             $this->setupApprovalScenario();
 
         $created = $this->svc->request($secUuid, 'read', null, $requester->id, $orgId);
-        $fetched = $this->svc->get($created->uuid, $admin->id, $orgId);
+        $fetched = $this->svc->get($created->uuid, $owner->id, $orgId);
 
         $this->assertSame($created->uuid, $fetched->uuid);
     }
@@ -236,7 +246,7 @@ final class ApprovalServiceTest extends DatabaseTestCase
             $this->setupApprovalScenario();
 
         $other   = $this->createTestUser('other@test.com');
-        $this->orgSvc->addMember($orgId, $other->id, 'user', $requester->id);
+        $this->orgSvc->addMember($orgId, $other->id, 'reader', $requester->id);
 
         $created = $this->svc->request($secUuid, 'read', null, $requester->id, $orgId);
 
@@ -250,14 +260,14 @@ final class ApprovalServiceTest extends DatabaseTestCase
 
     public function test_approve_generates_token(): void
     {
-        ['admin' => $admin, 'requester' => $requester, 'orgId' => $orgId, 'secretUuid' => $secUuid] =
+        ['owner' => $owner, 'requester' => $requester, 'orgId' => $orgId, 'secretUuid' => $secUuid] =
             $this->setupApprovalScenario();
 
         $req = $this->svc->request($secUuid, 'read', null, $requester->id, $orgId);
-        ['request' => $approved, 'token' => $token] = $this->svc->approve($req->uuid, $admin->id, $orgId);
+        ['request' => $approved, 'token' => $token] = $this->svc->approve($req->uuid, $owner->id, $orgId);
 
         $this->assertSame('approved', $approved->status);
-        $this->assertSame($admin->id, $approved->approvedBy);
+        $this->assertSame($owner->id, $approved->approvedBy);
         $this->assertNotNull($approved->accessTokenHash);
         $this->assertNotEmpty($token);
         // Токен - hex 64 символа (32 байта)
@@ -279,42 +289,40 @@ final class ApprovalServiceTest extends DatabaseTestCase
         $this->assertNotNull($approvedAudit);
     }
 
-    public function test_approve_requires_admin(): void
-    {
-        ['requester' => $requester, 'orgId' => $orgId, 'secretUuid' => $secUuid] =
-            $this->setupApprovalScenario();
-
-        $req = $this->svc->request($secUuid, 'read', null, $requester->id, $orgId);
-
-        $this->expectException(AuthException::class);
-        $this->svc->approve($req->uuid, $requester->id, $orgId);
-    }
-
-    public function test_approve_cannot_approve_own_request(): void
-    {
-        ['owner' => $owner, 'orgId' => $orgId, 'secretUuid' => $secUuid] =
-            $this->setupApprovalScenario();
-
-        // Owner создаёт запрос (owner имеет moderator+ доступ, но requires_approval включён)
-        // Для теста сделаем owner запрашивающим: нужно пройти request()
-        // owner = member with role 'owner', но request() требует только членства
-        $req = $this->svc->request($secUuid, 'read', null, $owner->id, $orgId);
-
-        $this->expectException(AuthException::class);
-        $this->svc->approve($req->uuid, $owner->id, $orgId);
-    }
-
-    public function test_approve_fails_if_not_pending(): void
+    public function test_approve_requires_secret_owner(): void
     {
         ['admin' => $admin, 'requester' => $requester, 'orgId' => $orgId, 'secretUuid' => $secUuid] =
             $this->setupApprovalScenario();
 
         $req = $this->svc->request($secUuid, 'read', null, $requester->id, $orgId);
+
+        $this->expectException(AuthException::class);
         $this->svc->approve($req->uuid, $admin->id, $orgId);
+    }
+
+    public function test_approve_fails_if_requester_became_owner(): void
+    {
+        ['owner' => $owner, 'requester' => $requester, 'orgId' => $orgId, 'secretUuid' => $secUuid] =
+            $this->setupApprovalScenario();
+
+        $req = $this->svc->request($secUuid, 'read', null, $requester->id, $orgId);
+        $this->secretSvc->transferOwnership($secUuid, $orgId, $requester->id, $owner->id);
+
+        $this->expectException(AuthException::class);
+        $this->svc->approve($req->uuid, $requester->id, $orgId);
+    }
+
+    public function test_approve_fails_if_not_pending(): void
+    {
+        ['owner' => $owner, 'requester' => $requester, 'orgId' => $orgId, 'secretUuid' => $secUuid] =
+            $this->setupApprovalScenario();
+
+        $req = $this->svc->request($secUuid, 'read', null, $requester->id, $orgId);
+        $this->svc->approve($req->uuid, $owner->id, $orgId);
 
         // Пытаемся одобрить повторно
         $this->expectException(\RuntimeException::class);
-        $this->svc->approve($req->uuid, $admin->id, $orgId);
+        $this->svc->approve($req->uuid, $owner->id, $orgId);
     }
 
     // ------------------------------------------------------------------ //
@@ -323,39 +331,39 @@ final class ApprovalServiceTest extends DatabaseTestCase
 
     public function test_reject_sets_status(): void
     {
-        ['admin' => $admin, 'requester' => $requester, 'orgId' => $orgId, 'secretUuid' => $secUuid] =
+        ['owner' => $owner, 'requester' => $requester, 'orgId' => $orgId, 'secretUuid' => $secUuid] =
             $this->setupApprovalScenario();
 
         $req      = $this->svc->request($secUuid, 'read', null, $requester->id, $orgId);
-        $rejected = $this->svc->reject($req->uuid, 'Not authorized', $admin->id, $orgId);
+        $rejected = $this->svc->reject($req->uuid, 'Not authorized', $owner->id, $orgId);
 
         $this->assertSame('rejected', $rejected->status);
         $this->assertSame('Not authorized', $rejected->rejectionReason);
-        $this->assertSame($admin->id, $rejected->approvedBy);
+        $this->assertSame($owner->id, $rejected->approvedBy);
         $this->assertNotNull($rejected->resolvedAt);
     }
 
-    public function test_reject_requires_admin(): void
+    public function test_reject_requires_secret_owner(): void
     {
-        ['requester' => $requester, 'orgId' => $orgId, 'secretUuid' => $secUuid] =
+        ['admin' => $admin, 'requester' => $requester, 'orgId' => $orgId, 'secretUuid' => $secUuid] =
             $this->setupApprovalScenario();
 
         $req = $this->svc->request($secUuid, 'read', null, $requester->id, $orgId);
 
         $this->expectException(AuthException::class);
-        $this->svc->reject($req->uuid, null, $requester->id, $orgId);
+        $this->svc->reject($req->uuid, null, $admin->id, $orgId);
     }
 
     public function test_reject_fails_if_not_pending(): void
     {
-        ['admin' => $admin, 'requester' => $requester, 'orgId' => $orgId, 'secretUuid' => $secUuid] =
+        ['owner' => $owner, 'requester' => $requester, 'orgId' => $orgId, 'secretUuid' => $secUuid] =
             $this->setupApprovalScenario();
 
         $req = $this->svc->request($secUuid, 'read', null, $requester->id, $orgId);
-        $this->svc->reject($req->uuid, null, $admin->id, $orgId);
+        $this->svc->reject($req->uuid, null, $owner->id, $orgId);
 
         $this->expectException(\RuntimeException::class);
-        $this->svc->reject($req->uuid, null, $admin->id, $orgId);
+        $this->svc->reject($req->uuid, null, $owner->id, $orgId);
     }
 
     // ------------------------------------------------------------------ //
@@ -388,11 +396,11 @@ final class ApprovalServiceTest extends DatabaseTestCase
 
     public function test_admin_can_revoke_approved(): void
     {
-        ['admin' => $admin, 'requester' => $requester, 'orgId' => $orgId, 'secretUuid' => $secUuid] =
+        ['owner' => $owner, 'admin' => $admin, 'requester' => $requester, 'orgId' => $orgId, 'secretUuid' => $secUuid] =
             $this->setupApprovalScenario();
 
         $req = $this->svc->request($secUuid, 'read', null, $requester->id, $orgId);
-        $this->svc->approve($req->uuid, $admin->id, $orgId);
+        $this->svc->approve($req->uuid, $owner->id, $orgId);
         $this->svc->revoke($req->uuid, $admin->id, $orgId);
 
         $updated = ApprovalRequest::findByUuid($req->uuid);
@@ -401,11 +409,11 @@ final class ApprovalServiceTest extends DatabaseTestCase
 
     public function test_requester_cannot_revoke_approved(): void
     {
-        ['admin' => $admin, 'requester' => $requester, 'orgId' => $orgId, 'secretUuid' => $secUuid] =
+        ['owner' => $owner, 'requester' => $requester, 'orgId' => $orgId, 'secretUuid' => $secUuid] =
             $this->setupApprovalScenario();
 
         $req = $this->svc->request($secUuid, 'read', null, $requester->id, $orgId);
-        $this->svc->approve($req->uuid, $admin->id, $orgId);
+        $this->svc->approve($req->uuid, $owner->id, $orgId);
 
         $this->expectException(\RuntimeException::class);
         $this->svc->revoke($req->uuid, $requester->id, $orgId);
@@ -417,7 +425,7 @@ final class ApprovalServiceTest extends DatabaseTestCase
             $this->setupApprovalScenario();
 
         $other = $this->createTestUser('other2@test.com');
-        $this->orgSvc->addMember($orgId, $other->id, 'user', $requester->id);
+        $this->orgSvc->addMember($orgId, $other->id, 'reader', $requester->id);
 
         $req = $this->svc->request($secUuid, 'read', null, $requester->id, $orgId);
 
@@ -431,11 +439,11 @@ final class ApprovalServiceTest extends DatabaseTestCase
 
     public function test_use_token_returns_decrypted_value(): void
     {
-        ['admin' => $admin, 'requester' => $requester, 'orgId' => $orgId, 'secretUuid' => $secUuid] =
+        ['owner' => $owner, 'requester' => $requester, 'orgId' => $orgId, 'secretUuid' => $secUuid] =
             $this->setupApprovalScenario();
 
         $req = $this->svc->request($secUuid, 'read', null, $requester->id, $orgId);
-        ['token' => $token] = $this->svc->approve($req->uuid, $admin->id, $orgId);
+        ['token' => $token] = $this->svc->approve($req->uuid, $owner->id, $orgId);
 
         ['secret' => $secret, 'value' => $value] =
             $this->svc->useToken($req->uuid, $token, $requester->id, $orgId);
@@ -446,11 +454,11 @@ final class ApprovalServiceTest extends DatabaseTestCase
 
     public function test_use_token_consumes_token(): void
     {
-        ['admin' => $admin, 'requester' => $requester, 'orgId' => $orgId, 'secretUuid' => $secUuid] =
+        ['owner' => $owner, 'requester' => $requester, 'orgId' => $orgId, 'secretUuid' => $secUuid] =
             $this->setupApprovalScenario();
 
         $req = $this->svc->request($secUuid, 'read', null, $requester->id, $orgId);
-        ['token' => $token] = $this->svc->approve($req->uuid, $admin->id, $orgId);
+        ['token' => $token] = $this->svc->approve($req->uuid, $owner->id, $orgId);
 
         $this->svc->useToken($req->uuid, $token, $requester->id, $orgId);
 
@@ -461,11 +469,11 @@ final class ApprovalServiceTest extends DatabaseTestCase
 
     public function test_use_token_fails_with_wrong_token(): void
     {
-        ['admin' => $admin, 'requester' => $requester, 'orgId' => $orgId, 'secretUuid' => $secUuid] =
+        ['owner' => $owner, 'requester' => $requester, 'orgId' => $orgId, 'secretUuid' => $secUuid] =
             $this->setupApprovalScenario();
 
         $req = $this->svc->request($secUuid, 'read', null, $requester->id, $orgId);
-        $this->svc->approve($req->uuid, $admin->id, $orgId);
+        $this->svc->approve($req->uuid, $owner->id, $orgId);
 
         $this->expectException(AuthException::class);
         $this->svc->useToken($req->uuid, 'wrong_token', $requester->id, $orgId);
@@ -473,14 +481,14 @@ final class ApprovalServiceTest extends DatabaseTestCase
 
     public function test_use_token_fails_for_non_requester(): void
     {
-        ['admin' => $admin, 'requester' => $requester, 'orgId' => $orgId, 'secretUuid' => $secUuid] =
+        ['owner' => $owner, 'requester' => $requester, 'orgId' => $orgId, 'secretUuid' => $secUuid] =
             $this->setupApprovalScenario();
 
         $other = $this->createTestUser('other3@test.com');
-        $this->orgSvc->addMember($orgId, $other->id, 'user', $requester->id);
+        $this->orgSvc->addMember($orgId, $other->id, 'reader', $requester->id);
 
         $req = $this->svc->request($secUuid, 'read', null, $requester->id, $orgId);
-        ['token' => $token] = $this->svc->approve($req->uuid, $admin->id, $orgId);
+        ['token' => $token] = $this->svc->approve($req->uuid, $owner->id, $orgId);
 
         $this->expectException(AuthException::class);
         $this->svc->useToken($req->uuid, $token, $other->id, $orgId);
@@ -510,12 +518,12 @@ final class ApprovalServiceTest extends DatabaseTestCase
         $this->secretSvc->get($secUuid, $orgId, $requester->id);
     }
 
-    public function test_secret_get_allowed_for_moderator_with_requires_approval(): void
+    public function test_secret_get_allowed_for_owner_with_requires_approval(): void
     {
         ['owner' => $owner, 'orgId' => $orgId, 'secretUuid' => $secUuid] =
             $this->setupApprovalScenario();
 
-        // owner — тоже moderator+ (highest role), прямой доступ разрешён
+        // owner секрета имеет прямой доступ даже при requires_approval=true
         ['value' => $value] = $this->secretSvc->get($secUuid, $orgId, $owner->id);
         $this->assertSame('supersecret', $value);
     }

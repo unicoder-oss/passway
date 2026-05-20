@@ -12,11 +12,11 @@ use Passway\Models\Directory;
 /**
  * Сервис управления каталогами.
  *
- * Авторизация (через PermissionService, который включает org-level и fine-grained):
+ * Авторизация (через PermissionService, который включает ACL и role fallback):
  *   read                  — list, show
  *   write                 — create, rename, move
- *   delete                — delete
- *   create_subdirectories — создание вложенного каталога (проверяется на родителе)
+ *   delete                — только владелец каталога
+ *   create_subdirectories — legacy alias для write на родителе
  *
  * Структура пути (materialized path):
  *   Корневой каталог : /{uuid}
@@ -48,7 +48,7 @@ final class DirectoryService
      * @param string      $name       Имя каталога
      * @param string      $userId     ID создателя
      *
-     * @throws AuthException             если нет прав (требуется moderator+)
+     * @throws AuthException             если нет прав (требуется editor+)
      * @throws \InvalidArgumentException при пустом/слишком длинном имени
      * @throws \RuntimeException         если родитель не найден или превышена глубина
      */
@@ -77,11 +77,11 @@ final class DirectoryService
                     __('ui.backend.directory.max_depth_reached', ['levels' => (string) (self::MAX_DEPTH + 1)])
                 );
             }
-            // Проверить право на создание вложенных каталогов в родителе
-            $this->assertCan('create_subdirectories', $userId, 'directory', $parent->id, $orgId);
+            // В новой модели вложенные каталоги регулируются правом write на родителе.
+            $this->assertCan('write', $userId, 'directory', $parent->id, $orgId);
         } else {
-            // Корневой каталог — org-level moderator
-            $this->assertHasPermission($orgId, $userId, 'moderator');
+            // Корневой каталог — org-level editor
+            $this->assertHasPermission($orgId, $userId, 'editor');
         }
 
         $uuid  = generate_uuid();
@@ -97,6 +97,7 @@ final class DirectoryService
             'depth'           => $depth,
             'path'            => $path,
             'created_by'      => (int) $userId,
+            'owner_user_id'   => (int) $userId,
             'created_at'      => $now,
             'updated_at'      => $now,
         ]);
@@ -113,11 +114,11 @@ final class DirectoryService
      * Список всех каталогов организации (плоский, сортировка по depth/path).
      *
      * @return Directory[]
-     * @throws AuthException если нет прав (требуется observer+)
+     * @throws AuthException если нет прав (требуется reader+)
      */
     public function listAll(string $orgId, string $userId): array
     {
-        $this->assertHasPermission($orgId, $userId, 'observer');
+        $this->assertHasPermission($orgId, $userId, 'reader');
         return Directory::findByOrgId($orgId);
     }
 
@@ -130,7 +131,7 @@ final class DirectoryService
      */
     public function listChildren(string $orgId, ?string $parentUuid, string $userId): array
     {
-        $this->assertHasPermission($orgId, $userId, 'observer');
+        $this->assertHasPermission($orgId, $userId, 'reader');
 
         $parentId = null;
         if ($parentUuid !== null) {
@@ -169,7 +170,7 @@ final class DirectoryService
     /**
      * Переименовать каталог.
      *
-     * @throws AuthException             если нет прав (требуется moderator+)
+     * @throws AuthException             если нет прав (требуется editor+)
      * @throws \InvalidArgumentException при пустом/слишком длинном имени
      * @throws \RuntimeException         если не найден
      */
@@ -208,7 +209,7 @@ final class DirectoryService
      * Переместить каталог (и все его потомки) к новому родителю.
      * Если newParentUuid = null — переместить в корень организации.
      *
-     * @throws AuthException     если нет прав (требуется moderator+)
+     * @throws AuthException     если нет прав (требуется editor+)
      * @throws \RuntimeException при кольцевой ссылке, превышении глубины или
      *                           если каталог/родитель не найден
      */
@@ -290,7 +291,7 @@ final class DirectoryService
     /**
      * Мягкое удаление каталога и всех его потомков (устанавливает deleted_at).
      *
-     * @throws AuthException     если нет прав (требуется moderator+)
+     * @throws AuthException     если пользователь не владелец каталога
      * @throws \RuntimeException если не найден
      */
     public function delete(string $dirUuid, string $orgId, string $userId): void
@@ -300,7 +301,7 @@ final class DirectoryService
             throw new \RuntimeException(__('ui.backend.directory.not_found'));
         }
 
-        $this->assertCan('delete', $userId, 'directory', $dir->id, $orgId);
+        $this->assertOwnedBy($dir, $userId);
 
         $now = now()->format('Y-m-d H:i:s');
         $db  = Database::getInstance();
@@ -323,6 +324,59 @@ final class DirectoryService
         });
     }
 
+    public function transferOwnership(string $dirUuid, string $orgId, string $newOwnerId, string $requesterId): Directory
+    {
+        $dir = Directory::findByUuid($dirUuid);
+        if ($dir === null || $dir->organizationId !== $orgId) {
+            throw new \RuntimeException(__('ui.backend.directory.not_found'));
+        }
+
+        $this->assertOwnedBy($dir, $requesterId, 'ui.backend.directory.owner_transfer_required');
+
+        if ($this->organizationService->getMemberRole($orgId, $newOwnerId) === null) {
+            throw new \RuntimeException(__('ui.backend.directory.new_owner_must_be_member'));
+        }
+
+        if ($dir->ownerUserId === $newOwnerId) {
+            return $dir;
+        }
+
+        $dir->update([
+            'owner_user_id' => (int) $newOwnerId,
+            'updated_at' => now()->format('Y-m-d H:i:s'),
+        ]);
+
+        return Directory::findByUuid($dirUuid)
+            ?? throw new \RuntimeException(__('ui.backend.directory.not_found'));
+    }
+
+    /** @return \Passway\Models\UserPermission[] */
+    public function listAcl(string $dirUuid, string $orgId, string $requesterId): array
+    {
+        $dir = Directory::findByUuid($dirUuid);
+        if ($dir === null || $dir->organizationId !== $orgId) {
+            throw new \RuntimeException(__('ui.backend.directory.not_found'));
+        }
+
+        $this->assertOwnedBy($dir, $requesterId, 'ui.backend.directory.owner_acl_required');
+        return $this->permissionService->listForResource('directory', $dir->id);
+    }
+
+    /**
+     * @param array<int, array{subject_type:string,subject_id:string,read:?string,write:?string}> $rules
+     * @return \Passway\Models\UserPermission[]
+     */
+    public function replaceAcl(string $dirUuid, string $orgId, string $requesterId, array $rules): array
+    {
+        $dir = Directory::findByUuid($dirUuid);
+        if ($dir === null || $dir->organizationId !== $orgId) {
+            throw new \RuntimeException(__('ui.backend.directory.not_found'));
+        }
+
+        $this->assertOwnedBy($dir, $requesterId, 'ui.backend.directory.owner_acl_required');
+        return $this->permissionService->replaceForResource('directory', $dir->id, $rules, $requesterId);
+    }
+
     // ------------------------------------------------------------------ //
     //  Вспомогательные                                                    //
     // ------------------------------------------------------------------ //
@@ -335,7 +389,7 @@ final class DirectoryService
         $apiKey = AuthContext::getApiKey();
         if ($apiKey !== null) {
             $permission = match ($minRole) {
-                'observer' => 'read',
+                'reader' => 'read',
                 default => 'write',
             };
 
@@ -370,6 +424,19 @@ final class DirectoryService
         if (!$this->permissionService->can($permission, $userId, $resourceType, $resourceId, $orgId)) {
             throw new AuthException(
                 __('ui.backend.directory.access_permission_required', ['permission' => $permission]),
+                403
+            );
+        }
+    }
+
+    /**
+     * @throws AuthException (code 403)
+     */
+    private function assertOwnedBy(Directory $directory, string $userId, string $messageKey = 'ui.backend.directory.owner_delete_required'): void
+    {
+        if ($directory->ownerUserId !== $userId) {
+            throw new AuthException(
+                __($messageKey),
                 403
             );
         }

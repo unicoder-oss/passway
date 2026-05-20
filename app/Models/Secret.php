@@ -15,7 +15,7 @@ use Passway\Core\Database;
  *   - encrypted_value (XChaCha20-Poly1305, base64), nonce (hex, 48 chars)
  *   - template_id (nullable), requires_approval (bool)
  *   - rotation_integration_id, rotation_schedule, last_rotated_at
- *   - version (для истории ротаций), created_by
+ *   - version (для истории ротаций), created_by, owner_user_id
  *   - created_at, updated_at, deleted_at (soft delete)
  */
 final class Secret
@@ -36,6 +36,7 @@ final class Secret
         public readonly ?string $lastRotatedAt,
         public readonly int     $version,
         public readonly ?string $createdBy,
+        public readonly ?string $ownerUserId,
         public readonly string  $createdAt,
         public readonly string  $updatedAt,
         public readonly ?string $deletedAt,
@@ -69,6 +70,8 @@ final class Secret
             version:               (int) $row['version'],
             createdBy:             isset($row['created_by']) && $row['created_by'] !== null
                 ? (string) $row['created_by'] : null,
+            ownerUserId:           isset($row['owner_user_id']) && $row['owner_user_id'] !== null
+                ? (string) $row['owner_user_id'] : null,
             createdAt:             (string) $row['created_at'],
             updatedAt:             (string) $row['updated_at'],
             deletedAt:             isset($row['deleted_at']) && $row['deleted_at'] !== null

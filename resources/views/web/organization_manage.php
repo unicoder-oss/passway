@@ -17,29 +17,46 @@ require base_path('resources/views/partials/auth_topbar.php');
 </section>
 
 <div class="grid grid-2-compact" style="align-items:start; padding-bottom:2rem;">
+    <style>
+        .org-manage-member-card,
+        .org-manage-invite-card {
+            min-width: 0;
+        }
+        .org-manage-invite-link {
+            width: 100%;
+            min-width: 0;
+        }
+        .org-manage-invite-copy {
+            overflow-wrap: anywhere;
+        }
+    </style>
     <section class="panel" style="padding:1.5rem;">
         <h2 style="margin:0 0 1rem;"><?= e(__('ui.organization_manage.members')) ?></h2>
         <div class="grid" style="gap:.8rem;">
             <?php foreach ($members as $member): $memberUser = \Passway\Models\User::findById($member->userId); ?>
-                <div class="panel panel-muted" style="padding:1rem; display:grid; gap:.75rem;">
+                <div class="panel panel-muted org-manage-member-card" style="padding:1rem; display:grid; gap:.75rem;">
                     <div>
                         <div style="font-weight:700;"><?= e($memberUser?->email ?? __('ui.organization_manage.unknown_user')) ?></div>
                         <div class="muted" style="font-size:.92rem;"><?= e(__('ui.organization_manage.joined', ['date' => $member->joinedAt])) ?></div>
                     </div>
-                    <form method="POST" action="/organizations/<?= e($organization->uuid) ?>/members/<?= e($memberUser?->uuid ?? '') ?>/role" class="grid field-actions-3" style="gap:.75rem;">
-                        <div>
-                            <label><?= e(__('ui.organization_manage.role')) ?></label>
-                            <select name="role">
-                                <?php foreach (\Passway\Models\OrganizationMember::ROLES as $role): ?>
-                                    <option value="<?= e($role) ?>" <?= $member->role === $role ? 'selected' : '' ?>><?= e(__('ui.organization_manage.roles.' . $role)) ?></option>
-                                <?php endforeach; ?>
-                            </select>
-                        </div>
-                        <button type="submit"><?= e(__('ui.app.update')) ?></button>
-                        <?php if (($memberUser?->uuid ?? '') !== $user->uuid): ?>
-                            <button type="submit" class="danger" formaction="/organizations/<?= e($organization->uuid) ?>/members/<?= e($memberUser?->uuid ?? '') ?>/remove"><?= e(__('ui.app.remove')) ?></button>
-                        <?php endif; ?>
-                    </form>
+                    <?php if ($member->role === 'owner' || empty($canManageSettings)): ?>
+                        <div class="muted" style="font-size:.92rem;"><?= e(__('ui.organization_manage.roles.' . $member->role)) ?></div>
+                    <?php else: ?>
+                        <form method="POST" action="/organizations/<?= e($organization->uuid) ?>/members/<?= e($memberUser?->uuid ?? '') ?>/role" class="grid field-actions-3" style="gap:.75rem;">
+                            <div>
+                                <label><?= e(__('ui.organization_manage.role')) ?></label>
+                                <select name="role">
+                                    <?php foreach (array_values(array_filter(\Passway\Models\OrganizationMember::ROLES, static fn(string $role): bool => $role !== 'owner')) as $role): ?>
+                                        <option value="<?= e($role) ?>" <?= $member->role === $role ? 'selected' : '' ?>><?= e(__('ui.organization_manage.roles.' . $role)) ?></option>
+                                    <?php endforeach; ?>
+                                </select>
+                            </div>
+                            <button type="submit"><?= e(__('ui.app.update')) ?></button>
+                            <?php if (($memberUser?->uuid ?? '') !== $user->uuid): ?>
+                                <button type="submit" class="danger" formaction="/organizations/<?= e($organization->uuid) ?>/members/<?= e($memberUser?->uuid ?? '') ?>/remove"><?= e(__('ui.app.remove')) ?></button>
+                            <?php endif; ?>
+                        </form>
+                    <?php endif; ?>
                 </div>
             <?php endforeach; ?>
         </div>
@@ -83,9 +100,8 @@ require base_path('resources/views/partials/auth_topbar.php');
                 <div>
                     <label for="invite-role"><?= e(__('ui.organization_manage.role')) ?></label>
                     <select id="invite-role" name="role">
-                        <option value="user"><?= e(__('ui.organization_manage.roles.user')) ?></option>
-                        <option value="observer"><?= e(__('ui.organization_manage.roles.observer')) ?></option>
-                        <option value="moderator"><?= e(__('ui.organization_manage.roles.moderator')) ?></option>
+                        <option value="reader"><?= e(__('ui.organization_manage.roles.reader')) ?></option>
+                        <option value="editor"><?= e(__('ui.organization_manage.roles.editor')) ?></option>
                         <option value="admin"><?= e(__('ui.organization_manage.roles.admin')) ?></option>
                     </select>
                 </div>
@@ -102,12 +118,12 @@ require base_path('resources/views/partials/auth_topbar.php');
             <div class="grid" style="gap:.75rem;">
                 <?php foreach ($invites as $invite): ?>
                     <?php $inviteUrl = app_url('/invite/' . $invite->token); ?>
-                    <div class="panel panel-muted" style="padding:1rem;">
+                    <div class="panel panel-muted org-manage-invite-card" style="padding:1rem;">
                         <div style="font-weight:700;"><?= e(__('ui.organization_manage.role')) ?>: <?= e($invite->role) ?></div>
                         <div class="muted" style="font-size:.92rem;"><?= __('ui.organization_manage.expires', ['date' => local_datetime($invite->expiresAt)]) ?></div>
                         <div style="margin:.5rem 0 .75rem;">
-                            <label><?= e(__('ui.organization_manage.link', ['link' => $inviteUrl])) ?></label>
-                            <input class="mono js-copy-on-click" value="<?= e($inviteUrl) ?>" readonly>
+                            <label class="org-manage-invite-copy"><?= e(__('ui.organization_manage.link', ['link' => $inviteUrl])) ?></label>
+                            <input class="mono js-copy-on-click org-manage-invite-link" value="<?= e($inviteUrl) ?>" readonly>
                         </div>
                         <form method="POST" action="/organizations/<?= e($organization->uuid) ?>/invites/<?= e($invite->uuid) ?>/revoke">
                             <button type="submit" class="danger"><?= e(__('ui.organization_manage.revoke_invite')) ?></button>

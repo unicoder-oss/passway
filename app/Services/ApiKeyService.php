@@ -7,7 +7,6 @@ namespace Passway\Services;
 use Passway\Core\Database;
 use Passway\Exceptions\AuthException;
 use Passway\Models\ApiKey;
-use Passway\Models\ApiKeyPermission;
 use Passway\Models\Organization;
 use Passway\Models\User;
 
@@ -51,11 +50,14 @@ final class ApiKeyService
         string  $name,
         string  $orgId,
         string  $userId,
+        string  $role = 'reader',
         ?string $expiresAt   = null,
     ): array {
         if (trim($name) === '') {
             throw new \InvalidArgumentException(__('ui.backend.apikey.name_required'));
         }
+
+        $this->assertValidRole($role);
 
         if (!$this->organizationService->hasPermission($orgId, $userId, 'admin')) {
             throw new AuthException(__('ui.backend.apikey.requires_admin_create'), 403);
@@ -73,6 +75,7 @@ final class ApiKeyService
             'organization_id' => $orgId,
             'user_id'         => $userId,
             'name'            => trim($name),
+            'role'            => $role,
             'key_hash'        => $keyHash,
             'key_prefix'      => $keyPrefix,
             'is_active'       => 1,
@@ -132,6 +135,46 @@ final class ApiKeyService
     }
 
     /**
+     * Изменить роль API-ключа (admin+).
+     *
+     * @throws AuthException
+     * @throws \InvalidArgumentException
+     * @throws \RuntimeException
+     */
+    public function updateRole(string $keyUuid, string $role, string $orgId, string $userId): ApiKey
+    {
+        $this->assertValidRole($role);
+
+        if (!$this->organizationService->hasPermission($orgId, $userId, 'admin')) {
+            throw new AuthException(__('ui.backend.apikey.requires_admin_permissions'), 403);
+        }
+
+        $apiKey = $this->findKeyInOrg($keyUuid, $orgId);
+        if ($apiKey->role === $role) {
+            return $apiKey;
+        }
+
+        Database::getInstance()->update('api_keys', ['role' => $role], ['id' => $apiKey->id]);
+
+        $updated = ApiKey::findById($apiKey->id);
+        if ($updated === null) {
+            throw new \RuntimeException(__('ui.backend.apikey.key_not_found'));
+        }
+
+        $this->getAuditService()->record(
+            action: 'apikey.role_update',
+            organizationId: $orgId,
+            userId: $userId,
+            resourceType: 'api_key',
+            resourceId: $updated->id,
+            resourceUuid: $updated->uuid,
+            details: ['role' => $role],
+        );
+
+        return $updated;
+    }
+
+    /**
      * Отозвать (деактивировать) API-ключ.
      *
      * @throws AuthException     если нет прав
@@ -161,146 +204,6 @@ final class ApiKeyService
             resourceType: 'api_key',
             resourceId: $apiKey->id,
             resourceUuid: $apiKey->uuid,
-        );
-    }
-
-    // ------------------------------------------------------------------ //
-    //  Права ключа                                                        //
-    // ------------------------------------------------------------------ //
-
-    /**
-     * Добавить право к API-ключу (admin+).
-     *
-     * @throws AuthException             если нет прав
-     * @throws \InvalidArgumentException при некорректных параметрах
-     * @throws \RuntimeException         если ключ не найден или право уже есть
-     */
-    public function addPermission(
-        string  $keyUuid,
-        string  $resourceType,
-        ?string $resourceId,
-        string  $permission,
-        string  $orgId,
-        string  $userId,
-    ): ApiKeyPermission {
-        if (!in_array($resourceType, ApiKeyPermission::VALID_RESOURCE_TYPES, true)) {
-            throw new \InvalidArgumentException(
-                __('ui.backend.apikey.invalid_resource_type', ['allowed' => implode(', ', ApiKeyPermission::VALID_RESOURCE_TYPES)])
-            );
-        }
-
-        if (!in_array($permission, ApiKeyPermission::VALID_PERMISSIONS, true)) {
-            throw new \InvalidArgumentException(
-                __('ui.backend.apikey.invalid_permission', ['allowed' => implode(', ', ApiKeyPermission::VALID_PERMISSIONS)])
-            );
-        }
-
-        if (!$this->organizationService->hasPermission($orgId, $userId, 'admin')) {
-            throw new AuthException(__('ui.backend.apikey.requires_admin_permissions'), 403);
-        }
-
-        $apiKey = $this->findKeyInOrg($keyUuid, $orgId);
-
-        $db = Database::getInstance();
-
-        // Проверяем дубликат
-        $existing = $db->fetchOne(
-            'SELECT id FROM api_key_permissions
-              WHERE api_key_id    = ?
-                AND resource_type = ?
-                AND permission    = ?
-                AND (resource_id IS NULL AND ? IS NULL OR resource_id = ?)',
-            [$apiKey->id, $resourceType, $permission, $resourceId, $resourceId]
-        );
-
-        if ($existing !== null) {
-            throw new \RuntimeException(__('ui.backend.apikey.permission_exists'));
-        }
-
-        $id = $db->insert('api_key_permissions', [
-            'api_key_id'    => $apiKey->id,
-            'resource_type' => $resourceType,
-            'resource_id'   => $resourceId,
-            'permission'    => $permission,
-        ]);
-
-        $perms = ApiKeyPermission::findByKeyId($apiKey->id);
-        foreach ($perms as $perm) {
-            if ($perm->id === (string) $id) {
-                $this->getAuditService()->record(
-                    action: 'apikey.permission_add',
-                    organizationId: $orgId,
-                    userId: $userId,
-                    resourceType: 'api_key',
-                    resourceId: $apiKey->id,
-                    resourceUuid: $apiKey->uuid,
-                    details: ['resource_type' => $resourceType, 'permission' => $permission],
-                );
-                return $perm;
-            }
-        }
-
-        throw new \RuntimeException(__('ui.backend.apikey.failed_load_created_permission'));
-    }
-
-    /**
-     * Список прав API-ключа (admin+ или владелец ключа).
-     *
-     * @return ApiKeyPermission[]
-     * @throws AuthException
-     * @throws \RuntimeException
-     */
-    public function listPermissions(string $keyUuid, string $orgId, string $userId): array
-    {
-        $apiKey  = $this->findKeyInOrg($keyUuid, $orgId);
-        $isAdmin = $this->organizationService->hasPermission($orgId, $userId, 'admin');
-        $isOwner = $apiKey->userId === $userId;
-
-        if (!$isAdmin && !$isOwner) {
-            throw new AuthException(__('ui.backend.apikey.access_denied'), 403);
-        }
-
-        return ApiKeyPermission::findByKeyId($apiKey->id);
-    }
-
-    /**
-     * Удалить право с API-ключа (admin+).
-     *
-     * @throws AuthException
-     * @throws \RuntimeException
-     */
-    public function removePermission(
-        string $keyUuid,
-        string $permId,
-        string $orgId,
-        string $userId,
-    ): void {
-        if (!$this->organizationService->hasPermission($orgId, $userId, 'admin')) {
-            throw new AuthException(__('ui.backend.apikey.requires_admin_permissions'), 403);
-        }
-
-        $apiKey = $this->findKeyInOrg($keyUuid, $orgId);
-
-        $db  = Database::getInstance();
-        $row = $db->fetchOne(
-            'SELECT id FROM api_key_permissions WHERE id = ? AND api_key_id = ?',
-            [$permId, $apiKey->id]
-        );
-
-        if ($row === null) {
-            throw new \RuntimeException(__('ui.backend.apikey.permission_not_found'));
-        }
-
-        $db->delete('api_key_permissions', ['id' => $permId]);
-
-        $this->getAuditService()->record(
-            action: 'apikey.permission_remove',
-            organizationId: $orgId,
-            userId: $userId,
-            resourceType: 'api_key',
-            resourceId: $apiKey->id,
-            resourceUuid: $apiKey->uuid,
-            details: ['permission_id' => $permId],
         );
     }
 
@@ -483,5 +386,14 @@ final class ApiKeyService
     private function getAuditService(): AuditService
     {
         return $this->auditService ?? new AuditService(new LoggerService(), $this->organizationService);
+    }
+
+    private function assertValidRole(string $role): void
+    {
+        if (!\in_array($role, ApiKey::VALID_ROLES, true)) {
+            throw new \InvalidArgumentException(
+                __('ui.backend.organization.invalid_role', ['allowed' => \implode(', ', ApiKey::VALID_ROLES)])
+            );
+        }
     }
 }

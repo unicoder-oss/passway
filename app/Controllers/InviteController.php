@@ -45,7 +45,7 @@ final class InviteController
         $user = AuthContext::requireUser();
         $org  = $this->findOrgOrFail($request);
 
-        $role       = \trim((string) ($request->input('role') ?? 'user'));
+        $role       = \trim((string) ($request->input('role') ?? 'reader'));
         $ttlSeconds = (int) ($request->input('ttl') ?? OrganizationService::DEFAULT_INVITE_TTL);
 
         if ($ttlSeconds < 60 || $ttlSeconds > 7 * 86400) {

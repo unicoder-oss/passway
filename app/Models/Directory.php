@@ -12,7 +12,7 @@ use Passway\Core\Database;
  * Структура таблицы directories:
  *   - id, uuid, organization_id, parent_id (nullable)
  *   - name, depth (0 = корень), path (materialized path: /uuid/.../uuid)
- *   - created_by, created_at, updated_at, deleted_at (soft delete)
+ *   - created_by, owner_user_id, created_at, updated_at, deleted_at (soft delete)
  */
 final class Directory
 {
@@ -25,6 +25,7 @@ final class Directory
         public readonly int     $depth,
         public readonly string  $path,
         public readonly ?string $createdBy,
+        public readonly ?string $ownerUserId,
         public readonly string  $createdAt,
         public readonly string  $updatedAt,
         public readonly ?string $deletedAt,
@@ -48,6 +49,8 @@ final class Directory
             path:           (string) $row['path'],
             createdBy:      isset($row['created_by']) && $row['created_by'] !== null
                 ? (string) $row['created_by'] : null,
+            ownerUserId:    isset($row['owner_user_id']) && $row['owner_user_id'] !== null
+                ? (string) $row['owner_user_id'] : null,
             createdAt:      (string) $row['created_at'],
             updatedAt:      (string) $row['updated_at'],
             deletedAt:      isset($row['deleted_at']) && $row['deleted_at'] !== null

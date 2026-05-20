@@ -5,8 +5,9 @@ declare(strict_types=1);
 namespace Passway\Services;
 
 use Passway\Models\ApiKey;
-use Passway\Models\ApiKeyPermission;
 use Passway\Models\Directory;
+use Passway\Models\Secret;
+use Passway\Models\UserPermission;
 
 final class ApiKeyAccessService
 {
@@ -32,23 +33,75 @@ final class ApiKeyAccessService
             return false;
         }
 
-        return ApiKeyPermission::canDo($apiKeyId, $permission, 'organization', $orgId);
+        return $this->roleAllowsPermission($apiKey->role, $permission);
     }
 
     public function canDirectory(string $apiKeyId, string $directoryId, string $permission): bool
     {
-        foreach ($this->buildDirectoryChain($directoryId) as $candidateId) {
-            if (ApiKeyPermission::canDo($apiKeyId, $permission, 'directory', $candidateId)) {
-                return true;
-            }
-        }
-
-        return false;
+        $acl = $this->checkDirectoryAclChain($apiKeyId, $permission, $directoryId);
+        return $acl ?? false;
     }
 
     public function canSecret(string $apiKeyId, string $secretId, string $permission): bool
     {
-        return ApiKeyPermission::canDo($apiKeyId, $permission, 'secret', $secretId);
+        $acl = $this->checkSecretAclChain($apiKeyId, $permission, $secretId);
+        return $acl ?? false;
+    }
+
+    private function checkSecretAclChain(string $apiKeyId, string $permission, string $secretId): ?bool
+    {
+        $result = $this->evalApiKeyAcl($apiKeyId, $permission, 'secret', $secretId);
+        if ($result !== null) {
+            return $result;
+        }
+
+        $secret = Secret::findById($secretId);
+        if ($secret === null) {
+            return null;
+        }
+
+        return $this->checkDirectoryAclChain($apiKeyId, $permission, $secret->directoryId);
+    }
+
+    private function checkDirectoryAclChain(string $apiKeyId, string $permission, string $directoryId): ?bool
+    {
+        foreach ($this->buildDirectoryChain($directoryId) as $candidateId) {
+            $result = $this->evalApiKeyAcl($apiKeyId, $permission, 'directory', $candidateId);
+            if ($result !== null) {
+                return $result;
+            }
+        }
+
+        return null;
+    }
+
+    private function evalApiKeyAcl(string $apiKeyId, string $permission, string $resourceType, string $resourceId): ?bool
+    {
+        $perms = \array_filter(
+            UserPermission::findForSubject('api_key', $apiKeyId, $resourceType, $resourceId),
+            fn(UserPermission $perm): bool => $perm->permission === $permission && $this->isActive($perm)
+        );
+
+        foreach ($perms as $perm) {
+            if ($perm->isDeny) {
+                return false;
+            }
+        }
+
+        foreach ($perms as $_perm) {
+            return true;
+        }
+
+        return null;
+    }
+
+    private function isActive(UserPermission $perm): bool
+    {
+        if ($perm->expiresAt === null) {
+            return true;
+        }
+
+        return \strtotime($perm->expiresAt) > \time();
     }
 
     /** @return string[] */
@@ -63,5 +116,14 @@ final class ApiKeyAccessService
         }
 
         return $chain;
+    }
+
+    private function roleAllowsPermission(string $role, string $permission): bool
+    {
+        return match ($role) {
+            'editor' => \in_array($permission, ['read', 'write', 'delete', 'create_subdirectories'], true),
+            'reader' => $permission === 'read',
+            default => false,
+        };
     }
 }

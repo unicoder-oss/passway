@@ -45,11 +45,11 @@ final class InviteServiceTest extends DatabaseTestCase
         $owner = $this->createTestUser();
         $org   = $this->orgSvc->create('Org', $owner->id);
 
-        $invite = $this->svc->createJoinOrgInvite($org->id, 'user', $owner->id);
+        $invite = $this->svc->createJoinOrgInvite($org->id, 'reader', $owner->id);
 
         $this->assertInstanceOf(InviteLink::class, $invite);
         $this->assertSame(InviteLink::TYPE_JOIN_ORG, $invite->type);
-        $this->assertSame('user', $invite->role);
+        $this->assertSame('reader', $invite->role);
         $this->assertSame(64, \strlen($invite->token));
     }
 
@@ -59,10 +59,10 @@ final class InviteServiceTest extends DatabaseTestCase
         $member = $this->createTestUser('member@example.com');
         $org    = $this->orgSvc->create('Org', $owner->id);
 
-        $this->orgSvc->addMember($org->id, $member->id, 'user', null);
+        $this->orgSvc->addMember($org->id, $member->id, 'reader', null);
 
         $this->expectException(AuthException::class);
-        $this->svc->createJoinOrgInvite($org->id, 'user', $member->id);
+        $this->svc->createJoinOrgInvite($org->id, 'reader', $member->id);
     }
 
     public function test_create_admin_invite_requires_owner(): void
@@ -128,7 +128,7 @@ final class InviteServiceTest extends DatabaseTestCase
     {
         $owner  = $this->createTestUser();
         $org    = $this->orgSvc->create('Org', $owner->id);
-        $invite = $this->svc->createJoinOrgInvite($org->id, 'user', $owner->id);
+        $invite = $this->svc->createJoinOrgInvite($org->id, 'reader', $owner->id);
 
         $found = $this->svc->findValid($invite->token);
         $this->assertSame($invite->uuid, $found->uuid);
@@ -144,7 +144,7 @@ final class InviteServiceTest extends DatabaseTestCase
     {
         $owner  = $this->createTestUser();
         $org    = $this->orgSvc->create('Org', $owner->id);
-        $invite = $this->svc->createJoinOrgInvite($org->id, 'user', $owner->id, 1);
+        $invite = $this->svc->createJoinOrgInvite($org->id, 'reader', $owner->id, 1);
 
         // Принудительно истечь инвайт
         Database::getInstance()->update(
@@ -167,13 +167,13 @@ final class InviteServiceTest extends DatabaseTestCase
         $acceptor = $this->createTestUser('acceptor@example.com');
         $org      = $this->orgSvc->create('Org', $owner->id);
 
-        $invite = $this->svc->createJoinOrgInvite($org->id, 'user', $owner->id);
+        $invite = $this->svc->createJoinOrgInvite($org->id, 'reader', $owner->id);
         $joinedOrg = $this->svc->acceptJoinOrg($invite->token, $acceptor->id);
 
         $this->assertSame($org->id, $joinedOrg->id);
         $member = OrganizationMember::findByOrgAndUser($org->id, $acceptor->id);
         $this->assertNotNull($member);
-        $this->assertSame('user', $member->role);
+        $this->assertSame('reader', $member->role);
     }
 
     public function test_accept_marks_invite_as_used(): void
@@ -182,7 +182,7 @@ final class InviteServiceTest extends DatabaseTestCase
         $acceptor = $this->createTestUser('acceptor@example.com');
         $org      = $this->orgSvc->create('Org', $owner->id);
 
-        $invite = $this->svc->createJoinOrgInvite($org->id, 'user', $owner->id);
+        $invite = $this->svc->createJoinOrgInvite($org->id, 'reader', $owner->id);
         $this->svc->acceptJoinOrg($invite->token, $acceptor->id);
 
         $this->expectException(AuthException::class);
@@ -195,9 +195,9 @@ final class InviteServiceTest extends DatabaseTestCase
         $acceptor = $this->createTestUser('acceptor@example.com');
         $org      = $this->orgSvc->create('Org', $owner->id);
 
-        $this->orgSvc->addMember($org->id, $acceptor->id, 'user', null);
+        $this->orgSvc->addMember($org->id, $acceptor->id, 'reader', null);
 
-        $invite = $this->svc->createJoinOrgInvite($org->id, 'user', $owner->id);
+        $invite = $this->svc->createJoinOrgInvite($org->id, 'reader', $owner->id);
 
         $this->expectException(\RuntimeException::class);
         $this->svc->acceptJoinOrg($invite->token, $acceptor->id);
@@ -211,7 +211,7 @@ final class InviteServiceTest extends DatabaseTestCase
     {
         $owner  = $this->createTestUser();
         $org    = $this->orgSvc->create('Org', $owner->id);
-        $invite = $this->svc->createJoinOrgInvite($org->id, 'user', $owner->id);
+        $invite = $this->svc->createJoinOrgInvite($org->id, 'reader', $owner->id);
 
         $this->svc->revoke($invite->uuid, $owner->id);
 
@@ -225,8 +225,8 @@ final class InviteServiceTest extends DatabaseTestCase
         $member  = $this->createTestUser('member@example.com');
         $org     = $this->orgSvc->create('Org', $owner->id);
 
-        $this->orgSvc->addMember($org->id, $member->id, 'user', null);
-        $invite = $this->svc->createJoinOrgInvite($org->id, 'user', $owner->id);
+        $this->orgSvc->addMember($org->id, $member->id, 'reader', null);
+        $invite = $this->svc->createJoinOrgInvite($org->id, 'reader', $owner->id);
 
         $this->expectException(AuthException::class);
         $this->svc->revoke($invite->uuid, $member->id);
@@ -237,7 +237,7 @@ final class InviteServiceTest extends DatabaseTestCase
         $owner    = $this->createTestUser();
         $acceptor = $this->createTestUser('acceptor@example.com');
         $org      = $this->orgSvc->create('Org', $owner->id);
-        $invite   = $this->svc->createJoinOrgInvite($org->id, 'user', $owner->id);
+        $invite   = $this->svc->createJoinOrgInvite($org->id, 'reader', $owner->id);
 
         $this->svc->acceptJoinOrg($invite->token, $acceptor->id);
 
@@ -254,8 +254,8 @@ final class InviteServiceTest extends DatabaseTestCase
         $owner  = $this->createTestUser();
         $org    = $this->orgSvc->create('Org', $owner->id);
 
-        $active  = $this->svc->createJoinOrgInvite($org->id, 'user', $owner->id);
-        $expired = $this->svc->createJoinOrgInvite($org->id, 'user', $owner->id, 1);
+        $active  = $this->svc->createJoinOrgInvite($org->id, 'reader', $owner->id);
+        $expired = $this->svc->createJoinOrgInvite($org->id, 'reader', $owner->id, 1);
 
         Database::getInstance()->update(
             'invite_links',

@@ -10,7 +10,9 @@ $replaceAction = '/organizations/' . $organization->uuid . '/directories/' . $di
 $regenerateAction = '/organizations/' . $organization->uuid . '/directories/' . $directory->uuid . '/secrets/' . $secret->uuid . '/regenerate';
 $rotateAction = '/organizations/' . $organization->uuid . '/directories/' . $directory->uuid . '/secrets/' . $secret->uuid . '/rotate';
 $deleteAction = '/organizations/' . $organization->uuid . '/directories/' . $directory->uuid . '/secrets/' . $secret->uuid . '/delete';
+$transferOwnerAction = '/organizations/' . $organization->uuid . '/directories/' . $directory->uuid . '/secrets/' . $secret->uuid . '/owner';
 $templatePreviewUrl = '/api/v1/organizations/' . $organization->uuid . '/directories/' . $directory->uuid . '/secrets/template-preview';
+$secretAclApiUrl = '/api/v1/organizations/' . $organization->uuid . '/secrets/' . $secret->uuid . '/acl';
 $dynamicRotationOutputs = $dynamicRotationView['outputs'] ?? [];
 $dynamicRotationInputs = $dynamicRotationView['input'] ?? [];
 $dynamicRotationPrimaryField = $dynamicRotationView['primary_field'] ?? null;
@@ -124,6 +126,62 @@ $renderReadonlyRotationField = static function (array $field, array $values): vo
     .manual-actions-grid > form > button {
         width: 100%;
     }
+    .acl-rule-list,
+    .owner-candidate-list {
+        display: grid;
+        gap: .75rem;
+    }
+    .acl-rule-row,
+    .owner-candidate {
+        padding: .85rem 1rem;
+        border: 1px solid var(--border);
+        background: var(--panel-subtle);
+        display: grid;
+        gap: .75rem;
+    }
+    .acl-rule-row {
+        grid-template-columns: minmax(0, 1.4fr) repeat(2, minmax(0, .7fr)) auto;
+        align-items: end;
+    }
+    .acl-subject-copy {
+        min-width: 0;
+        display: grid;
+        gap: .2rem;
+    }
+    .acl-subject-line {
+        display: flex;
+        gap: .5rem;
+        align-items: center;
+        flex-wrap: wrap;
+    }
+    .acl-tabs {
+        display: flex;
+        gap: .5rem;
+        flex-wrap: wrap;
+    }
+    .acl-tab.is-active {
+        background: var(--button);
+        color: var(--button-fg);
+        border-color: var(--button);
+    }
+    .owner-candidate {
+        grid-template-columns: auto minmax(0, 1fr);
+        align-items: start;
+    }
+    .owner-candidate input {
+        width: auto;
+        margin-top: .2rem;
+    }
+    .owner-candidate-copy {
+        min-width: 0;
+        display: grid;
+        gap: .2rem;
+    }
+    @media (max-width: 719px) {
+        .acl-rule-row {
+            grid-template-columns: minmax(0, 1fr);
+        }
+    }
     @media (min-width: 720px) {
         .secret-page-shell {
             grid-template-columns: auto minmax(0, 1fr);
@@ -200,15 +258,19 @@ $renderReadonlyRotationField = static function (array $field, array $values): vo
         <div class="panel" style="padding:1rem;">
             <h3 style="margin:0 0 .75rem;"><?= e(__('ui.secret.manual_actions')) ?></h3>
             <div class="grid manual-actions-grid" style="gap:.75rem;">
-                <button type="button" class="secondary" data-open-modal="rename-secret-modal"><?= e(__('ui.secret.rename_secret')) ?></button>
-                <?php if (!$isDynamicSecret): ?><button type="button" class="secondary" data-open-modal="replace-secret-modal"><?= e(__('ui.secret.replace_value')) ?></button><?php endif; ?>
-                <?php if ($isDynamicSecret): ?>
+                <?php if (!empty($canWriteSecret)): ?><button type="button" class="secondary" data-open-modal="rename-secret-modal"><?= e(__('ui.secret.rename_secret')) ?></button><?php endif; ?>
+                <?php if (!empty($canWriteSecret) && !$isDynamicSecret): ?><button type="button" class="secondary" data-open-modal="replace-secret-modal"><?= e(__('ui.secret.replace_value')) ?></button><?php endif; ?>
+                <?php if (!empty($canWriteSecret) && $isDynamicSecret): ?>
                     <button type="button" class="secondary" data-open-modal="rotation-secret-modal"><?= e(__('ui.secret.rotation_integration')) ?></button>
                     <form method="POST" action="<?= e($rotateAction) ?>">
                         <button type="submit"><?= e(__('ui.secret.rotate_secret')) ?></button>
                     </form>
                 <?php endif; ?>
-                <button type="button" class="danger" data-open-modal="delete-secret-modal"><?= e(__('ui.secret.delete_secret')) ?></button>
+                <?php if (!empty($canManageSecretAcl)): ?>
+                    <button type="button" class="secondary" data-open-modal="secret-acl-modal" id="open-secret-acl-modal"><?= e(__('ui.secret.configure_acl')) ?></button>
+                    <button type="button" class="secondary" data-open-modal="transfer-secret-owner-modal"><?= e(__('ui.secret.transfer_owner')) ?></button>
+                <?php endif; ?>
+                <?php if (!empty($canWriteSecret)): ?><button type="button" class="danger" data-open-modal="delete-secret-modal"><?= e(__('ui.secret.delete_secret')) ?></button><?php endif; ?>
             </div>
         </div>
         <div class="panel" style="padding:1rem;">
@@ -354,6 +416,91 @@ $renderReadonlyRotationField = static function (array $field, array $values): vo
     </div>
 </dialog>
 
+<?php if (!empty($canManageSecretAcl)): ?>
+    <dialog id="secret-acl-modal" class="modal">
+        <div class="modal-body">
+            <div>
+                <h3 style="margin:0 0 .35rem;"><?= e(__('ui.secret.configure_acl')) ?></h3>
+                <div class="wizard-meta" id="secret-acl-status"><?= e(__('ui.secret.acl_modal_hint')) ?></div>
+            </div>
+            <div class="grid" style="gap:1rem;">
+                <div class="acl-tabs">
+                    <button type="button" class="secondary acl-tab is-active" data-acl-tab="users"><?= e(__('ui.secret.acl_tab_users')) ?></button>
+                    <button type="button" class="secondary acl-tab" data-acl-tab="keys"><?= e(__('ui.secret.acl_tab_keys')) ?></button>
+                </div>
+                <section data-acl-panel="users" class="grid" style="gap:.75rem;">
+                    <div class="grid field-actions-2" style="gap:.75rem; align-items:end;">
+                        <div>
+                            <label for="secret-acl-user-select"><?= e(__('ui.secret.acl_add_user')) ?></label>
+                            <select id="secret-acl-user-select">
+                                <option value=""><?= e(__('ui.secret.acl_select_user')) ?></option>
+                                <?php foreach ($organizationMembers as $member): ?>
+                                    <?php if ($member['role'] === 'owner') { continue; } ?>
+                                    <option value="<?= e($member['uuid']) ?>"><?= e($member['name'] . ' <' . $member['email'] . '>') ?></option>
+                                <?php endforeach; ?>
+                            </select>
+                        </div>
+                        <button type="button" class="secondary" id="secret-acl-add-user"><?= e(__('ui.secret.acl_add_rule')) ?></button>
+                    </div>
+                </section>
+                <section data-acl-panel="keys" class="grid hidden" style="gap:.75rem;">
+                    <div class="grid field-actions-2" style="gap:.75rem; align-items:end;">
+                        <div>
+                            <label for="secret-acl-key-select"><?= e(__('ui.secret.acl_add_key')) ?></label>
+                            <select id="secret-acl-key-select">
+                                <option value=""><?= e(__('ui.secret.acl_select_key')) ?></option>
+                                <?php foreach ($organizationApiKeys as $apiKey): ?>
+                                    <option value="<?= e($apiKey['uuid']) ?>"><?= e($apiKey['name'] . ' (' . $apiKey['key_prefix'] . ')') ?></option>
+                                <?php endforeach; ?>
+                            </select>
+                        </div>
+                        <button type="button" class="secondary" id="secret-acl-add-key"><?= e(__('ui.secret.acl_add_rule')) ?></button>
+                    </div>
+                </section>
+                <div id="secret-acl-rules" class="acl-rule-list"></div>
+                <div class="actions-end">
+                    <button type="button" class="secondary" data-close-modal="secret-acl-modal"><?= e(__('ui.organization.cancel')) ?></button>
+                    <button type="button" id="secret-acl-save-button"><?= e(__('ui.app.save')) ?></button>
+                </div>
+            </div>
+        </div>
+    </dialog>
+
+    <dialog id="transfer-secret-owner-modal" class="modal">
+        <div class="modal-body">
+            <div>
+                <h3 style="margin:0 0 .35rem;"><?= e(__('ui.secret.transfer_owner')) ?></h3>
+                <div class="wizard-meta"><?= e(__('ui.secret.transfer_owner_hint')) ?></div>
+            </div>
+            <div class="grid" style="gap:1rem;">
+                <div>
+                    <label for="secret-owner-search"><?= e(__('ui.secret.owner_search')) ?></label>
+                    <input id="secret-owner-search" placeholder="<?= e(__('ui.secret.owner_search_placeholder')) ?>">
+                </div>
+                <div id="secret-owner-candidates" class="owner-candidate-list"></div>
+                <div class="actions-end">
+                    <button type="button" class="secondary" data-close-modal="transfer-secret-owner-modal"><?= e(__('ui.organization.cancel')) ?></button>
+                    <button type="button" id="secret-owner-continue-button"><?= e(__('ui.secret.transfer_owner_continue')) ?></button>
+                </div>
+            </div>
+        </div>
+    </dialog>
+
+    <dialog id="confirm-secret-owner-modal" class="modal">
+        <div class="modal-body">
+            <div>
+                <h3 style="margin:0 0 .35rem;"><?= e(__('ui.secret.transfer_owner_confirm_title')) ?></h3>
+                <div class="wizard-meta" id="confirm-secret-owner-text"></div>
+            </div>
+            <form method="POST" action="<?= e($transferOwnerAction) ?>" class="actions-end">
+                <input type="hidden" name="user_uuid" id="confirm-secret-owner-uuid">
+                <button type="button" class="secondary" data-close-modal="confirm-secret-owner-modal"><?= e(__('ui.organization.cancel')) ?></button>
+                <button type="submit"><?= e(__('ui.secret.transfer_owner_confirm_button')) ?></button>
+            </form>
+        </div>
+    </dialog>
+<?php endif; ?>
+
     </div>
 </div>
 
@@ -439,6 +586,406 @@ $renderReadonlyRotationField = static function (array $field, array $values): vo
             valueActions.classList.add('hidden');
         });
     }
+
+    const secretAclModal = document.getElementById('secret-acl-modal');
+    const openSecretAclButton = document.getElementById('open-secret-acl-modal');
+    const secretAclStatus = document.getElementById('secret-acl-status');
+    const secretAclRules = document.getElementById('secret-acl-rules');
+    const secretAclSaveButton = document.getElementById('secret-acl-save-button');
+    const secretAclUserSelect = document.getElementById('secret-acl-user-select');
+    const secretAclAddUserButton = document.getElementById('secret-acl-add-user');
+    const secretAclKeySelect = document.getElementById('secret-acl-key-select');
+    const secretAclAddKeyButton = document.getElementById('secret-acl-add-key');
+    const aclTabButtons = Array.from(document.querySelectorAll('[data-acl-tab]'));
+    const aclTabPanels = Array.from(document.querySelectorAll('[data-acl-panel]'));
+    const transferSecretOwnerModal = document.getElementById('transfer-secret-owner-modal');
+    const secretOwnerSearch = document.getElementById('secret-owner-search');
+    const secretOwnerCandidates = document.getElementById('secret-owner-candidates');
+    const secretOwnerContinueButton = document.getElementById('secret-owner-continue-button');
+    const confirmSecretOwnerModal = document.getElementById('confirm-secret-owner-modal');
+    const confirmSecretOwnerText = document.getElementById('confirm-secret-owner-text');
+    const confirmSecretOwnerUuid = document.getElementById('confirm-secret-owner-uuid');
+    const aclApiUrl = <?= json_encode($secretAclApiUrl) ?>;
+    const organizationMembers = <?= json_encode($organizationMembers, JSON_UNESCAPED_UNICODE | JSON_UNESCAPED_SLASHES) ?>;
+    const organizationApiKeys = <?= json_encode($organizationApiKeys, JSON_UNESCAPED_UNICODE | JSON_UNESCAPED_SLASHES) ?>;
+    const currentUserUuid = <?= json_encode($user->uuid) ?>;
+    const secretOwnerUuid = <?= json_encode($secret->ownerUserId !== null ? \Passway\Models\User::findById($secret->ownerUserId)?->uuid : null) ?>;
+    const aclLabels = {
+        inherit: <?= json_encode((string) __('ui.secret.acl_effect_inherit')) ?>,
+        allow: <?= json_encode((string) __('ui.secret.acl_effect_allow')) ?>,
+        deny: <?= json_encode((string) __('ui.secret.acl_effect_deny')) ?>,
+        user: <?= json_encode((string) __('ui.secret.acl_subject_user')) ?>,
+        group: <?= json_encode((string) __('ui.secret.acl_subject_group')) ?>,
+        api_key: <?= json_encode((string) __('ui.secret.acl_subject_api_key')) ?>,
+        empty: <?= json_encode((string) __('ui.secret.acl_no_rules')) ?>,
+        loading: <?= json_encode((string) __('ui.secret.acl_loading')) ?>,
+        saving: <?= json_encode((string) __('ui.secret.acl_saving')) ?>,
+        saved: <?= json_encode((string) __('ui.secret.acl_saved')) ?>,
+        duplicate: <?= json_encode((string) __('ui.secret.acl_duplicate_subject')) ?>,
+        addUser: <?= json_encode((string) __('ui.secret.acl_add_user_required')) ?>,
+        addKey: <?= json_encode((string) __('ui.secret.acl_add_key_required')) ?>,
+        ownerEmpty: <?= json_encode((string) __('ui.secret.owner_no_candidates')) ?>,
+    };
+    let secretAclState = [];
+    let selectedSecretOwnerUuid = null;
+
+    const setAclTab = (tab) => {
+        aclTabButtons.forEach((button) => {
+            const isActive = button.getAttribute('data-acl-tab') === tab;
+            button.classList.toggle('is-active', isActive);
+        });
+        aclTabPanels.forEach((panel) => {
+            panel.classList.toggle('hidden', panel.getAttribute('data-acl-panel') !== tab);
+        });
+    };
+
+    const renderAclRules = () => {
+        if (!secretAclRules) {
+            return;
+        }
+
+        secretAclRules.innerHTML = '';
+        if (secretAclState.length === 0) {
+            const empty = document.createElement('div');
+            empty.className = 'muted';
+            empty.textContent = aclLabels.empty;
+            secretAclRules.appendChild(empty);
+            return;
+        }
+
+        const createEffectSelect = (permission, index, currentValue) => {
+            const wrapper = document.createElement('div');
+            const label = document.createElement('label');
+            label.textContent = permission === 'read'
+                ? <?= json_encode((string) __('ui.secret.acl_read')) ?>
+                : <?= json_encode((string) __('ui.secret.acl_write')) ?>;
+            const select = document.createElement('select');
+            ['', 'allow', 'deny'].forEach((value) => {
+                const option = document.createElement('option');
+                option.value = value;
+                option.textContent = value === '' ? aclLabels.inherit : aclLabels[value];
+                option.selected = currentValue === value || (currentValue === null && value === '');
+                select.appendChild(option);
+            });
+            select.addEventListener('change', () => {
+                secretAclState[index][permission] = select.value === '' ? null : select.value;
+            });
+            wrapper.appendChild(label);
+            wrapper.appendChild(select);
+            return wrapper;
+        };
+
+        secretAclState.forEach((rule, index) => {
+            const row = document.createElement('div');
+            row.className = 'acl-rule-row';
+
+            const subject = document.createElement('div');
+            subject.className = 'acl-subject-copy';
+            const line = document.createElement('div');
+            line.className = 'acl-subject-line';
+            const title = document.createElement('strong');
+            title.textContent = rule.subject_name || rule.subject_uuid;
+            const pill = document.createElement('span');
+            pill.className = 'pill';
+            pill.textContent = aclLabels[rule.subject_type] || rule.subject_type;
+            line.appendChild(title);
+            line.appendChild(pill);
+            subject.appendChild(line);
+            if (rule.subject_email) {
+                const email = document.createElement('div');
+                email.className = 'muted';
+                email.textContent = rule.subject_email;
+                subject.appendChild(email);
+            }
+            row.appendChild(subject);
+            row.appendChild(createEffectSelect('read', index, rule.read));
+            row.appendChild(createEffectSelect('write', index, rule.write));
+
+            const removeButton = document.createElement('button');
+            removeButton.type = 'button';
+            removeButton.className = 'secondary danger';
+            removeButton.textContent = <?= json_encode((string) __('ui.app.remove')) ?>;
+            removeButton.addEventListener('click', () => {
+                secretAclState.splice(index, 1);
+                renderAclRules();
+            });
+            row.appendChild(removeButton);
+            secretAclRules.appendChild(row);
+        });
+    };
+
+    const loadSecretAcl = async () => {
+        if (!secretAclStatus) {
+            return;
+        }
+
+        secretAclStatus.textContent = aclLabels.loading;
+        if (secretAclSaveButton) {
+            secretAclSaveButton.disabled = true;
+        }
+
+        try {
+            const response = await fetch(aclApiUrl, {
+                headers: {
+                    'Accept': 'application/json',
+                    'X-Requested-With': 'XMLHttpRequest',
+                },
+                credentials: 'same-origin',
+            });
+            const payload = await response.json();
+            if (!response.ok || !payload.success) {
+                throw new Error(payload.error || <?= json_encode((string) __('ui.messages.access_denied')) ?>);
+            }
+
+            const rules = payload.data && Array.isArray(payload.data.rules) ? payload.data.rules : [];
+            secretAclState = rules.map((rule) => ({
+                    subject_type: rule.subject_type,
+                    subject_uuid: rule.subject_uuid,
+                    subject_name: rule.subject_name,
+                    subject_email: rule.subject_email,
+                    read: rule.read,
+                    write: rule.write,
+                })).filter((rule) => !(rule.subject_type === 'user' && rule.subject_uuid === secretOwnerUuid));
+            renderAclRules();
+            secretAclStatus.textContent = <?= json_encode((string) __('ui.secret.acl_modal_hint')) ?>;
+        } catch (error) {
+            secretAclStatus.textContent = error instanceof Error ? error.message : <?= json_encode((string) __('ui.secret.acl_load_failed')) ?>;
+        } finally {
+            if (secretAclSaveButton) {
+                secretAclSaveButton.disabled = false;
+            }
+        }
+    };
+
+    const saveSecretAcl = async () => {
+        if (!secretAclSaveButton || !secretAclStatus) {
+            return;
+        }
+
+        secretAclSaveButton.disabled = true;
+        secretAclStatus.textContent = aclLabels.saving;
+
+        try {
+            const response = await fetch(aclApiUrl, {
+                method: 'PUT',
+                headers: {
+                    'Content-Type': 'application/json',
+                    'Accept': 'application/json',
+                    'X-Requested-With': 'XMLHttpRequest',
+                },
+                credentials: 'same-origin',
+                body: JSON.stringify({
+                    rules: secretAclState.map((rule) => ({
+                        subject_type: rule.subject_type,
+                        subject_uuid: rule.subject_uuid,
+                        read: rule.read,
+                        write: rule.write,
+                    })),
+                }),
+            });
+            const payload = await response.json();
+            if (!response.ok || !payload.success) {
+                throw new Error(payload.error || <?= json_encode((string) __('ui.secret.acl_save_failed')) ?>);
+            }
+
+            const rules = payload.data && Array.isArray(payload.data.rules) ? payload.data.rules : secretAclState;
+            secretAclState = rules.map((rule) => ({
+                subject_type: rule.subject_type,
+                subject_uuid: rule.subject_uuid,
+                subject_name: rule.subject_name,
+                subject_email: rule.subject_email,
+                read: rule.read,
+                write: rule.write,
+            })).filter((rule) => !(rule.subject_type === 'user' && rule.subject_uuid === secretOwnerUuid));
+            renderAclRules();
+            secretAclStatus.textContent = aclLabels.saved;
+        } catch (error) {
+            secretAclStatus.textContent = error instanceof Error ? error.message : <?= json_encode((string) __('ui.secret.acl_save_failed')) ?>;
+        } finally {
+            secretAclSaveButton.disabled = false;
+        }
+    };
+
+    const renderSecretOwnerCandidates = () => {
+        if (!secretOwnerCandidates || !secretOwnerContinueButton) {
+            return;
+        }
+
+        const query = secretOwnerSearch ? secretOwnerSearch.value.trim().toLowerCase() : '';
+        const candidates = organizationMembers.filter((member) => {
+            if (member.uuid === currentUserUuid || member.role === 'owner') {
+                return false;
+            }
+
+            if (query === '') {
+                return true;
+            }
+
+            return `${member.name} ${member.email} ${member.role}`.toLowerCase().includes(query);
+        });
+
+        secretOwnerCandidates.innerHTML = '';
+        if (candidates.length === 0) {
+            const empty = document.createElement('div');
+            empty.className = 'muted';
+            empty.textContent = aclLabels.ownerEmpty;
+            secretOwnerCandidates.appendChild(empty);
+            secretOwnerContinueButton.disabled = true;
+            return;
+        }
+
+        candidates.forEach((member) => {
+            const label = document.createElement('label');
+            label.className = 'owner-candidate';
+            const radio = document.createElement('input');
+            radio.type = 'radio';
+            radio.name = 'secret-owner-user';
+            radio.value = member.uuid;
+            radio.checked = selectedSecretOwnerUuid === member.uuid;
+            radio.addEventListener('change', () => {
+                selectedSecretOwnerUuid = member.uuid;
+                secretOwnerContinueButton.disabled = false;
+            });
+
+            const copy = document.createElement('div');
+            copy.className = 'owner-candidate-copy';
+            const title = document.createElement('strong');
+            title.textContent = member.name;
+            const meta = document.createElement('div');
+            meta.className = 'muted';
+            meta.textContent = `${member.email} · ${member.role}`;
+            copy.appendChild(title);
+            copy.appendChild(meta);
+            label.appendChild(radio);
+            label.appendChild(copy);
+            secretOwnerCandidates.appendChild(label);
+        });
+
+        secretOwnerContinueButton.disabled = selectedSecretOwnerUuid === null;
+    };
+
+    if (openSecretAclButton && secretAclModal) {
+        openSecretAclButton.addEventListener('click', () => {
+            setAclTab('users');
+            void loadSecretAcl();
+        });
+    }
+
+    aclTabButtons.forEach((button) => {
+        button.addEventListener('click', () => setAclTab(button.getAttribute('data-acl-tab') || 'users'));
+    });
+
+    if (secretAclAddUserButton && secretAclUserSelect && secretAclStatus) {
+        secretAclAddUserButton.addEventListener('click', () => {
+            const subjectUuid = secretAclUserSelect.value;
+            if (subjectUuid === '') {
+                secretAclStatus.textContent = aclLabels.addUser;
+                return;
+            }
+
+            if (secretAclState.some((rule) => rule.subject_type === 'user' && rule.subject_uuid === subjectUuid)) {
+                secretAclStatus.textContent = aclLabels.duplicate;
+                return;
+            }
+
+            const member = organizationMembers.find((item) => item.uuid === subjectUuid && item.role !== 'owner');
+            if (!member) {
+                secretAclStatus.textContent = aclLabels.addUser;
+                return;
+            }
+
+            secretAclState.push({
+                subject_type: 'user',
+                subject_uuid: member.uuid,
+                subject_name: member.name,
+                subject_email: member.email,
+                read: null,
+                write: null,
+            });
+            secretAclUserSelect.value = '';
+            secretAclStatus.textContent = <?= json_encode((string) __('ui.secret.acl_modal_hint')) ?>;
+            renderAclRules();
+        });
+    }
+
+    if (secretAclAddKeyButton && secretAclKeySelect && secretAclStatus) {
+        secretAclAddKeyButton.addEventListener('click', () => {
+            const subjectUuid = secretAclKeySelect.value;
+            if (subjectUuid === '') {
+                secretAclStatus.textContent = aclLabels.addKey;
+                return;
+            }
+
+            if (secretAclState.some((rule) => rule.subject_type === 'api_key' && rule.subject_uuid === subjectUuid)) {
+                secretAclStatus.textContent = aclLabels.duplicate;
+                return;
+            }
+
+            const apiKey = organizationApiKeys.find((item) => item.uuid === subjectUuid);
+            if (!apiKey) {
+                secretAclStatus.textContent = aclLabels.addKey;
+                return;
+            }
+
+            secretAclState.push({
+                subject_type: 'api_key',
+                subject_uuid: apiKey.uuid,
+                subject_name: apiKey.name,
+                subject_email: null,
+                read: null,
+                write: null,
+            });
+            secretAclKeySelect.value = '';
+            secretAclStatus.textContent = <?= json_encode((string) __('ui.secret.acl_modal_hint')) ?>;
+            renderAclRules();
+        });
+    }
+
+    if (secretAclSaveButton) {
+        secretAclSaveButton.addEventListener('click', () => {
+            void saveSecretAcl();
+        });
+    }
+
+    if (secretAclModal) {
+        secretAclModal.addEventListener('close', () => {
+            secretAclState = [];
+            if (secretAclStatus) {
+                secretAclStatus.textContent = <?= json_encode((string) __('ui.secret.acl_modal_hint')) ?>;
+            }
+            renderAclRules();
+        });
+    }
+
+    if (transferSecretOwnerModal) {
+        transferSecretOwnerModal.addEventListener('close', () => {
+            selectedSecretOwnerUuid = null;
+            if (secretOwnerSearch) {
+                secretOwnerSearch.value = '';
+            }
+            renderSecretOwnerCandidates();
+        });
+    }
+
+    if (secretOwnerSearch) {
+        secretOwnerSearch.addEventListener('input', renderSecretOwnerCandidates);
+    }
+
+    if (secretOwnerContinueButton && confirmSecretOwnerModal && confirmSecretOwnerText && confirmSecretOwnerUuid) {
+        secretOwnerContinueButton.addEventListener('click', () => {
+            const member = organizationMembers.find((item) => item.uuid === selectedSecretOwnerUuid);
+            if (!member) {
+                return;
+            }
+
+            confirmSecretOwnerUuid.value = member.uuid;
+            confirmSecretOwnerText.textContent = `<?= e(__('ui.secret.transfer_owner_confirm_text', ['user' => ':user'])) ?>`
+                .replace(':user', `${member.name} <${member.email}>`);
+            confirmSecretOwnerModal.showModal();
+        });
+    }
+
+    renderSecretOwnerCandidates();
 
     const templateForm = document.getElementById('template-secret-form');
     if (!templateForm) {
