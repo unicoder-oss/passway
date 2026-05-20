@@ -40,14 +40,15 @@ http://localhost:8000/setup
 Токен начальной настройки можно найти в логах приложения или файле, указанном в переменной `SETUP_TOKEN_PATH`
 
 ## Быстрый запуск через Docker Compose
-1. Соберите и запустите сервисы:
+1. Запустите сервисы:
 ```bash
-docker compose up --build
+docker compose up
 ```
 2. Откройте в браузере:
 ```text
 http://localhost:8000/setup
 ```
+3. Скопируйте из лога Docker Compose токен для первоначальной настройки, нажмите `d` для отвязывания от процесса
 
 > [!NOTE]
 > Плановая ротация секретов и очистка журналов аудита требуют периодического фонового выполнения. Пример `docker-compose.yml` запускает для этого отдельные сервисы: `scheduler-rotate` запускает `php bin/rotate.php` каждые 30 секунд, а `scheduler-maintenance` запускает `php bin/maintenance.php cleanup` один раз в день. Если вы запускаете Passway напрямую в системе, настройте cron или systemd-таймеры вручную.
@@ -174,8 +175,7 @@ composer rotate:run
 composer maintain:cleanup
 ```
 ## Тестирование
-Тесты запускаются на SQLite `:memory:` через `phpunit.xml` и не зависят от локального `.env`
-
+Тесты запускаются на SQLite `:memory:` через `phpunit.xml.dist`. Локальный `phpunit.xml` можно использовать для переопределений; он намеренно игнорируется git.
 ```bash
 vendor/bin/phpunit
 ```

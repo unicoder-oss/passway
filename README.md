@@ -53,18 +53,16 @@ http://localhost:8000/setup
 The initial setup token can be found in the application logs or in the file specified by `SETUP_TOKEN_PATH`.
 
 ## Docker Compose Quick Start
-
-1. Build and start services:
-
+1. Start services:
 ```bash
-docker compose up --build
+docker compose up
 ```
-
 2. Open in your browser:
 
 ```text
 http://localhost:8000/setup
 ```
+3. Copy the initial setup token from the Docker Compose log, then press `d` to detach from the process
 
 > [!NOTE]
 > Scheduled secret rotation and audit log cleanup require periodic background runs. The example `docker-compose.yml` starts separate scheduler services for this: `scheduler-rotate` runs `php bin/rotate.php` every 30 seconds, and `scheduler-maintenance` runs `php bin/maintenance.php cleanup` once per day. If you run Passway directly on a host, configure cron or systemd timers manually.
@@ -213,8 +211,7 @@ composer maintain:cleanup
 
 ## Testing
 
-Tests run against SQLite `:memory:` via `phpunit.xml` and do not depend on your local `.env`.
-
+Tests run against SQLite `:memory:` using `phpunit.xml.dist`. A local `phpunit.xml` may be used for overrides and is intentionally ignored by git.
 ```bash
 vendor/bin/phpunit
 ```

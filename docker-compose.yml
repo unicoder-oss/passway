@@ -3,7 +3,7 @@ x-app-environment: &app-environment
   APP_ENV: development
   APP_URL: http://localhost:8000
   APP_DEBUG: "true"
-  APP_LOCALE: ru
+  APP_LOCALE: en
   APP_TIMEZONE: UTC
   DB_DRIVER: pgsql
   DB_HOST: db
@@ -27,9 +27,7 @@ x-app-environment: &app-environment
 
 services:
   app:
-    build:
-      context: .
-      dockerfile: Dockerfile
+    image: ghcr.io/unicoder-oss/passway:latest
     ports:
       - "8000:8000"
     environment: *app-environment
@@ -47,9 +45,7 @@ services:
       start_period: 15s
 
   scheduler-rotate:
-    build:
-      context: .
-      dockerfile: Dockerfile
+    image: ghcr.io/unicoder-oss/passway:latest
     command: ["sh", "-c", "while true; do php /app/bin/rotate.php; sleep 30; done"]
     restart: unless-stopped
     environment: *app-environment
@@ -60,9 +56,7 @@ services:
       - app-storage:/app/storage
 
   scheduler-maintenance:
-    build:
-      context: .
-      dockerfile: Dockerfile
+    image: ghcr.io/unicoder-oss/passway:latest
     command: ["sh", "-c", "while true; do php /app/bin/maintenance.php cleanup; sleep 86400; done"]
     restart: unless-stopped
     environment: *app-environment
