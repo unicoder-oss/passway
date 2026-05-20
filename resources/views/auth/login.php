@@ -3,8 +3,8 @@
         <div class="brand" style="margin-bottom:1rem;"><?= e(__('ui.app.name')) ?></div>
         <h1 style="margin:.2rem 0 1rem; font-size:2rem;"><?= e(__('ui.auth.login.heading')) ?></h1>
         <p class="muted" style="margin:0 0 1.25rem;"><?= e(__('ui.auth.login.subtitle')) ?></p>
-        <?php if (!empty($success)): ?><div class="success" style="margin-bottom:1rem;"><?= e((string) $success) ?></div><?php endif; ?>
-        <?php if (!empty($error)): ?><div class="error" style="margin-bottom:1rem;"><?= e((string) $error) ?></div><?php endif; ?>
+        <?php if (!empty($success)): ?><div class="success" data-toast="true" style="margin-bottom:1rem;"><?= e((string) $success) ?></div><?php endif; ?>
+        <?php if (!empty($error)): ?><div class="error" data-toast="true" style="margin-bottom:1rem;"><?= e((string) $error) ?></div><?php endif; ?>
         <div style="display:grid; gap:.75rem; margin-bottom:1rem;">
             <button type="button" id="passkey-login-button" class="secondary"><?= e(__('ui.auth.login.passkey_submit')) ?></button>
             <div id="passkey-login-status" class="muted" aria-live="polite" style="display:none; font-size:.92rem;"></div>

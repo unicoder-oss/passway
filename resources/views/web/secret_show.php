@@ -58,7 +58,7 @@ $renderReadonlyRotationField = static function (array $field, array $values): vo
 };
 ?>
 
-<?php if (!empty($error)): ?><div class="error" style="margin-bottom:1rem;"><?= e((string) $error) ?></div><?php endif; ?>
+<?php if (!empty($error)): ?><div class="error" data-toast="true" style="margin-bottom:1rem;"><?= e((string) $error) ?></div><?php endif; ?>
 
 <section style="margin:0 0 1rem;">
     <h1 style="margin:0; font-size:2rem;"><?= e(__('ui.secret.details_for_org', ['organization' => $organization->name])) ?></h1>

@@ -28,6 +28,7 @@ use Passway\Services\OrganizationIntegrationService;
 use Passway\Services\RotationService;
 use Passway\Services\RotationRegistryService;
 use Passway\Services\DirectoryService;
+use Passway\Services\GroupService;
 use Passway\Services\InviteService;
 use Passway\Services\OrganizationService;
 use Passway\Services\PermissionService;
@@ -53,6 +54,7 @@ final class WebController
         private readonly TotpService $totpService,
         private readonly HashingService $hashingService,
         private readonly ApiKeyService $apiKeyService,
+        private readonly GroupService $groupService,
         private readonly RotationRegistryService $rotationRegistryService,
         private readonly OrganizationIntegrationService $organizationIntegrationService,
     ) {}
@@ -384,6 +386,176 @@ final class WebController
         }
 
         return Response::redirect('/organizations/' . \urlencode($org->uuid) . '/manage?success=' . \urlencode(__('ui.organization_manage.settings_saved')));
+    }
+
+    public function showOrganizationGroups(Request $request): Response
+    {
+        $user = AuthContext::requireUser();
+        $org = $this->findOrgOrFail($request);
+
+        try {
+            $groups = $this->groupService->list($org->id, $user->id);
+        } catch (AuthException $e) {
+            return Response::redirect('/?error=' . \urlencode($e->getMessage()));
+        }
+
+        $groupCards = [];
+        foreach ($groups as $group) {
+            $groupCards[] = [
+                'group' => $group,
+                'member_count' => count($this->groupService->listMembers($group->uuid, $org->id, $user->id)),
+            ];
+        }
+
+        return $this->html($this->view->render('web/groups', [
+            'title' => __('ui.titles.organization_groups'),
+            'user' => $user,
+            'organization' => $org,
+            'groups' => $groupCards,
+            'queryError' => $request->query('error'),
+            'querySuccess' => $request->query('success'),
+            'canManageGroups' => $this->organizationService->hasPermission($org->id, $user->id, 'admin'),
+        ]));
+    }
+
+    public function showOrganizationGroup(Request $request): Response
+    {
+        $user = AuthContext::requireUser();
+        $org = $this->findOrgOrFail($request);
+        $grpUuid = (string) $request->routeParam('grpUuid');
+
+        try {
+            $group = $this->groupService->findInOrg($grpUuid, $org->id, $user->id);
+            $members = $this->groupService->listMembers($grpUuid, $org->id, $user->id);
+        } catch (AuthException $e) {
+            return Response::redirect('/?error=' . \urlencode($e->getMessage()));
+        } catch (\RuntimeException $e) {
+            return Response::redirect($this->groupsUrl($org->uuid, error: $e->getMessage()));
+        }
+
+        $memberRows = [];
+        $memberIds = [];
+        foreach ($members as $member) {
+            $memberUser = User::findById($member->userId);
+            if ($memberUser === null) {
+                continue;
+            }
+
+            $memberIds[$memberUser->id] = true;
+            $memberRows[] = [
+                'user_uuid' => $memberUser->uuid,
+                'name' => display_name_for_user($memberUser),
+                'email' => $memberUser->email,
+                'role_label' => ($role = $this->organizationService->getMemberRole($org->id, $memberUser->id)) !== null
+                    ? __('ui.organization_manage.roles.' . $role)
+                    : __('ui.app.unknown'),
+                'added_at' => $member->addedAt,
+            ];
+        }
+
+        $candidateRows = [];
+        foreach ($this->organizationService->listMembers($org->id) as $orgMember) {
+            if (isset($memberIds[$orgMember->userId])) {
+                continue;
+            }
+
+            $candidateUser = User::findById($orgMember->userId);
+            if ($candidateUser === null) {
+                continue;
+            }
+
+            $candidateRows[] = [
+                'uuid' => $candidateUser->uuid,
+                'name' => display_name_for_user($candidateUser),
+                'email' => $candidateUser->email,
+                'role_label' => __('ui.organization_manage.roles.' . $orgMember->role),
+            ];
+        }
+
+        usort($candidateRows, static function (array $left, array $right): int {
+            return strcasecmp($left['email'], $right['email']);
+        });
+
+        return $this->html($this->view->render('web/group_show', [
+            'title' => __('ui.titles.organization_group_details'),
+            'user' => $user,
+            'organization' => $org,
+            'group' => $group,
+            'members' => $memberRows,
+            'candidates' => $candidateRows,
+            'queryError' => $request->query('error'),
+            'querySuccess' => $request->query('success'),
+            'canManageGroups' => $this->organizationService->hasPermission($org->id, $user->id, 'admin'),
+        ]));
+    }
+
+    public function createGroup(Request $request): Response
+    {
+        $user = AuthContext::requireUser();
+        $org = $this->findOrgOrFail($request);
+        $name = \trim((string) ($request->input('name') ?? ''));
+        $description = $request->input('description');
+        $description = \is_string($description) ? \trim($description) : null;
+
+        try {
+            $this->groupService->create($org->id, $name, $description !== '' ? $description : null, $user->id);
+        } catch (\Throwable $e) {
+            return Response::redirect($this->groupsUrl($org->uuid, error: $e->getMessage()));
+        }
+
+        return Response::redirect($this->groupsUrl($org->uuid, success: __('ui.groups.group_created')));
+    }
+
+    public function deleteGroup(Request $request): Response
+    {
+        $user = AuthContext::requireUser();
+        $org = $this->findOrgOrFail($request);
+        $grpUuid = (string) $request->routeParam('grpUuid');
+
+        try {
+            $this->groupService->delete($grpUuid, $org->id, $user->id);
+        } catch (\Throwable $e) {
+            return Response::redirect($this->groupsUrl($org->uuid, error: $e->getMessage()));
+        }
+
+        return Response::redirect($this->groupsUrl($org->uuid, success: __('ui.groups.group_deleted')));
+    }
+
+    public function addGroupMember(Request $request): Response
+    {
+        $user = AuthContext::requireUser();
+        $org = $this->findOrgOrFail($request);
+        $grpUuid = (string) $request->routeParam('grpUuid');
+        $userUuid = \trim((string) ($request->input('user_uuid') ?? ''));
+
+        $targetUser = User::findByUuid($userUuid);
+        if ($targetUser === null) {
+            return Response::redirect($this->groupUrl($org->uuid, $grpUuid, __('ui.backend.common.user_not_found')));
+        }
+
+        try {
+            $this->groupService->addMember($grpUuid, $targetUser->id, $user->id, $org->id);
+        } catch (\Throwable $e) {
+            return Response::redirect($this->groupUrl($org->uuid, $grpUuid, $e->getMessage()));
+        }
+
+        return Response::redirect($this->groupUrl($org->uuid, $grpUuid, success: __('ui.groups.member_added')));
+    }
+
+    public function removeGroupMember(Request $request): Response
+    {
+        $user = AuthContext::requireUser();
+        $org = $this->findOrgOrFail($request);
+        $grpUuid = (string) $request->routeParam('grpUuid');
+
+        try {
+            $targetUser = $this->findMemberUserOrFail($request, $org->id);
+            $this->groupService->removeMember($grpUuid, $targetUser->id, $user->id, $org->id);
+        } catch (\Throwable $e) {
+            return Response::redirect($this->groupUrl($org->uuid, $grpUuid, $e->getMessage()));
+        }
+
+        return Response::redirect($this->groupUrl($org->uuid, $grpUuid, success: __('ui.groups.member_removed')));
     }
 
     public function updateMemberRole(Request $request): Response
@@ -1265,6 +1437,43 @@ final class WebController
         }
 
         return $groups;
+    }
+
+    /** @return string */
+    private function groupsUrl(string $orgUuid, ?string $error = null, ?string $success = null): string
+    {
+        $url = '/organizations/' . \urlencode($orgUuid) . '/groups';
+        $params = [];
+
+        if ($error !== null && $error !== '') {
+            $params['error'] = $error;
+        }
+        if ($success !== null && $success !== '') {
+            $params['success'] = $success;
+        }
+        if ($params !== []) {
+            $url .= '?' . http_build_query($params);
+        }
+
+        return $url;
+    }
+
+    private function groupUrl(string $orgUuid, string $grpUuid, ?string $error = null, ?string $success = null): string
+    {
+        $url = '/organizations/' . \urlencode($orgUuid) . '/groups/' . \urlencode($grpUuid);
+        $params = [];
+
+        if ($error !== null && $error !== '') {
+            $params['error'] = $error;
+        }
+        if ($success !== null && $success !== '') {
+            $params['success'] = $success;
+        }
+        if ($params !== []) {
+            $url .= '?' . http_build_query($params);
+        }
+
+        return $url;
     }
 
     /**

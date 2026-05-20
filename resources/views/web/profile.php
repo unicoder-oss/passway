@@ -5,8 +5,8 @@ $topbarLinks = [
 require base_path('resources/views/partials/auth_topbar.php');
 ?>
 
-<?php if (!empty($queryError)): ?><div class="error" style="margin-bottom:1rem;"><?= e((string) $queryError) ?></div><?php endif; ?>
-<?php if (!empty($querySuccess)): ?><div class="success" style="margin-bottom:1rem;"><?= e((string) $querySuccess) ?></div><?php endif; ?>
+<?php if (!empty($queryError)): ?><div class="error" data-toast="true" style="margin-bottom:1rem;"><?= e((string) $queryError) ?></div><?php endif; ?>
+<?php if (!empty($querySuccess)): ?><div class="success" data-toast="true" style="margin-bottom:1rem;"><?= e((string) $querySuccess) ?></div><?php endif; ?>
 
 <section style="margin:0 0 1rem;">
     <h1 style="margin:0 0 .35rem; font-size:2rem;"><?= e(__('ui.profile.subtitle')) ?></h1>

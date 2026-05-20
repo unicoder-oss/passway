@@ -66,7 +66,7 @@ $renderRotationField = static function (array $field, string $namePrefix, bool $
 require base_path('resources/views/partials/auth_topbar.php');
 ?>
 
-<?php if (!empty($queryError)): ?><div class="error"><?= e((string) $queryError) ?></div><?php endif; ?>
+<?php if (!empty($queryError)): ?><div class="error" data-toast="true"><?= e((string) $queryError) ?></div><?php endif; ?>
 
 <section style="width:min(980px, 100%); margin:0 auto; padding-bottom:2rem; display:grid; gap:1rem;">
     <div class="panel" style="padding:1rem 1.25rem; display:flex; justify-content:space-between; gap:1rem; align-items:flex-start; flex-wrap:wrap;">
@@ -297,11 +297,11 @@ require base_path('resources/views/partials/auth_topbar.php');
             <?php endif; ?>
         </div>
 
-        <form method="GET" class="grid" style="gap:.75rem;">
+        <form method="GET" class="grid" style="gap:.75rem;" data-live-submit-form="true">
             <?php if ($currentDir !== null): ?><input type="hidden" name="dir" value="<?= e($currentDir->uuid) ?>"><?php endif; ?>
             <div>
                 <label for="organization-search"><?= e(__('ui.organization.search')) ?></label>
-                <input id="organization-search" name="q" value="<?= e((string) $search) ?>" placeholder="<?= e(__('ui.organization.search_placeholder')) ?>">
+                <input id="organization-search" name="q" value="<?= e((string) $search) ?>" placeholder="<?= e(__('ui.organization.search_placeholder')) ?>" data-live-submit-input="true">
             </div>
         </form>
 

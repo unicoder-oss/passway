@@ -10,8 +10,8 @@ $createdOrganizationInviteUrl = $createdOrganizationInvite !== null
 require base_path('resources/views/partials/auth_topbar.php');
 ?>
 
-<?php if (!empty($queryError)): ?><div class="error"><?= e((string) $queryError) ?></div><?php endif; ?>
-<?php if (!empty($querySuccess)): ?><div class="success"><?= e((string) $querySuccess) ?></div><?php endif; ?>
+<?php if (!empty($queryError)): ?><div class="error" data-toast="true"><?= e((string) $queryError) ?></div><?php endif; ?>
+<?php if (!empty($querySuccess)): ?><div class="success" data-toast="true"><?= e((string) $querySuccess) ?></div><?php endif; ?>
 
 <section style="width:min(920px, 100%); margin:0 auto; padding-bottom:2rem;">
     <div style="display:grid; gap:1rem; margin-bottom:1rem;">
@@ -19,9 +19,9 @@ require base_path('resources/views/partials/auth_topbar.php');
             <h1 style="margin:0 0 .35rem; font-size:2rem;"><?= e(__('ui.home.organizations')) ?></h1>
             <div class="muted"><?= e(__('ui.home.organizations_subtitle')) ?></div>
         </div>
-        <form method="GET" class="panel" style="padding:1rem;">
+        <form method="GET" class="panel" style="padding:1rem;" data-live-submit-form="true">
             <label for="home-search"><?= e(__('ui.home.search')) ?></label>
-            <input id="home-search" name="q" value="<?= e((string) $search) ?>" placeholder="<?= e(__('ui.home.search_placeholder')) ?>">
+            <input id="home-search" name="q" value="<?= e((string) $search) ?>" placeholder="<?= e(__('ui.home.search_placeholder')) ?>" data-live-submit-input="true">
         </form>
     </div>
 

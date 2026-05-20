@@ -2,6 +2,7 @@
 $topbarLinks = [
     ['href' => '/organizations/' . $organization->uuid, 'label' => __('ui.app.back_to_dashboard')],
     ['href' => '/organizations/' . $organization->uuid . '/audit', 'label' => __('ui.organization_manage.audit_log')],
+    ['href' => '/organizations/' . $organization->uuid . '/groups', 'label' => __('ui.organization_manage.groups')],
     ['href' => '/organizations/' . $organization->uuid . '/api-keys', 'label' => __('ui.organization_manage.api_keys')],
     ['href' => '/organizations/' . $organization->uuid . '/integrations', 'label' => __('ui.organization_manage.integrations')],
     ['href' => '/auth/logout', 'label' => __('ui.app.logout')],
@@ -9,8 +10,8 @@ $topbarLinks = [
 require base_path('resources/views/partials/auth_topbar.php');
 ?>
 
-<?php if (!empty($queryError)): ?><div class="error" style="margin-bottom:1rem;"><?= e((string) $queryError) ?></div><?php endif; ?>
-<?php if (!empty($querySuccess)): ?><div class="success" style="margin-bottom:1rem;"><?= e((string) $querySuccess) ?></div><?php endif; ?>
+<?php if (!empty($queryError)): ?><div class="error" data-toast="true" style="margin-bottom:1rem;"><?= e((string) $queryError) ?></div><?php endif; ?>
+<?php if (!empty($querySuccess)): ?><div class="success" data-toast="true" style="margin-bottom:1rem;"><?= e((string) $querySuccess) ?></div><?php endif; ?>
 
 <section style="margin:0 0 1rem;">
     <h1 style="margin:0; font-size:2rem;"><?= e(__('ui.organization_manage.manage', ['organization' => $organization->name])) ?></h1>
@@ -93,6 +94,14 @@ require base_path('resources/views/partials/auth_topbar.php');
                 </form>
             </div>
         <?php endif; ?>
+
+        <div class="panel" style="padding:1rem;">
+            <h3 style="margin:0 0 .75rem;"><?= e(__('ui.organization_manage.groups')) ?></h3>
+            <div class="grid" style="gap:.75rem;">
+                <div class="muted"><?= e(__('ui.organization_manage.groups_hint')) ?></div>
+                <a class="button secondary" href="/organizations/<?= e($organization->uuid) ?>/groups"><?= e(__('ui.organization_manage.open_groups')) ?></a>
+            </div>
+        </div>
 
         <div class="panel" style="padding:1rem;">
             <h3 style="margin:0 0 .75rem;"><?= e(__('ui.organization_manage.create_invite')) ?></h3>

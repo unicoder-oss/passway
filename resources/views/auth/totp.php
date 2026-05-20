@@ -3,7 +3,7 @@
         <div class="brand" style="margin-bottom:1rem;"><?= e(__('ui.app.name')) ?></div>
         <h1 style="margin:.2rem 0 1rem; font-size:2rem;"><?= e(__('ui.auth.totp.heading')) ?></h1>
         <p class="muted" style="margin:0 0 1.25rem;"><?= e(__('ui.auth.totp.subtitle')) ?></p>
-        <?php if (!empty($error)): ?><div class="error" style="margin-bottom:1rem;"><?= e((string) $error) ?></div><?php endif; ?>
+        <?php if (!empty($error)): ?><div class="error" data-toast="true" style="margin-bottom:1rem;"><?= e((string) $error) ?></div><?php endif; ?>
         <form method="POST" action="/auth/totp/verify" class="grid">
             <?php if (!empty($returnTo)): ?><input type="hidden" name="return_to" value="<?= e((string) $returnTo) ?>"><?php endif; ?>
             <div>

@@ -236,6 +236,70 @@
             padding: .9rem 1rem;
             margin-bottom: 1rem;
         }
+        .toast-region {
+            position: fixed;
+            top: 1rem;
+            right: 1rem;
+            width: min(360px, calc(100vw - 2rem));
+            display: grid;
+            gap: .75rem;
+            z-index: 1000;
+            pointer-events: none;
+        }
+        .toast {
+            border: 1px solid var(--border);
+            background: var(--panel);
+            color: var(--fg);
+            box-shadow: var(--shadow);
+            padding: .9rem 1rem;
+            display: grid;
+            grid-template-columns: minmax(0, 1fr) auto;
+            gap: .75rem;
+            align-items: start;
+            pointer-events: auto;
+            opacity: 0;
+            transform: translateY(-8px);
+            transition: opacity .18s ease, transform .18s ease;
+        }
+        .toast.is-visible {
+            opacity: 1;
+            transform: translateY(0);
+        }
+        .toast.is-closing {
+            opacity: 0;
+            transform: translateY(-8px);
+        }
+        .toast.toast-success {
+            border-color: var(--success-border);
+            background: var(--success-bg);
+            color: var(--success-fg);
+        }
+        .toast.toast-error {
+            border-color: var(--error-border);
+            background: var(--error-bg);
+            color: var(--error-fg);
+        }
+        .toast-copy {
+            min-width: 0;
+            overflow-wrap: anywhere;
+        }
+        .toast-close {
+            border: 0;
+            background: transparent;
+            color: inherit;
+            padding: 0;
+            width: 1.5rem;
+            height: 1.5rem;
+            min-width: 1.5rem;
+            min-height: 1.5rem;
+            font-size: 1.1rem;
+            line-height: 1;
+            opacity: .75;
+        }
+        .toast-close:hover,
+        .toast-close:focus {
+            opacity: 1;
+        }
         dialog.modal {
             width: min(680px, calc(100vw - 2rem));
             margin: auto;
@@ -259,6 +323,12 @@
             .topbar { flex-direction: column; align-items: flex-start; }
             .topnav { justify-content: flex-start; }
             .grid-2, .grid-2-compact, .grid-4, .sidebar-layout, .field-actions-2, .field-actions-3 { grid-template-columns: 1fr; }
+            .toast-region {
+                top: .75rem;
+                right: 1rem;
+                left: 1rem;
+                width: auto;
+            }
         }
     </style>
 </head>
@@ -268,8 +338,113 @@
         <?= $content ?>
     </div>
 </div>
+<div id="toast-region" class="toast-region" aria-live="polite" aria-atomic="false"></div>
 <script>
 (() => {
+    const toastRegion = document.getElementById('toast-region');
+    const closeToastLabel = <?= json_encode((string) __('ui.app.close_notification')) ?>;
+
+    const createToast = (message, type = 'success', options = {}) => {
+        if (!toastRegion || typeof message !== 'string' || message.trim() === '') {
+            return null;
+        }
+
+        const toast = document.createElement('div');
+        toast.className = `toast toast-${type === 'error' ? 'error' : 'success'}`;
+        toast.setAttribute('role', type === 'error' ? 'alert' : 'status');
+
+        const copy = document.createElement('div');
+        copy.className = 'toast-copy';
+        copy.textContent = message;
+
+        const close = document.createElement('button');
+        close.type = 'button';
+        close.className = 'toast-close';
+        close.setAttribute('aria-label', closeToastLabel);
+        close.textContent = 'x';
+
+        const closeToast = () => {
+            if (!toast.isConnected) {
+                return;
+            }
+            toast.classList.add('is-closing');
+            window.setTimeout(() => {
+                toast.remove();
+            }, 180);
+        };
+
+        close.addEventListener('click', closeToast);
+        toast.append(copy, close);
+        toastRegion.appendChild(toast);
+
+        window.requestAnimationFrame(() => {
+            toast.classList.add('is-visible');
+        });
+
+        const duration = typeof options.duration === 'number' ? options.duration : 5000;
+        if (duration > 0) {
+            window.setTimeout(closeToast, duration);
+        }
+
+        return toast;
+    };
+
+    window.passwayToast = {
+        show(message, type = 'success', options = {}) {
+            return createToast(message, type, options);
+        },
+    };
+
+    document.querySelectorAll('[data-toast="true"]').forEach((element) => {
+        const type = element.classList.contains('error') ? 'error' : 'success';
+        const message = element.textContent || '';
+        createToast(message, type);
+        element.remove();
+    });
+
+    document.querySelectorAll('[data-live-submit-form="true"]').forEach((form) => {
+        if (!(form instanceof HTMLFormElement)) {
+            return;
+        }
+
+        const inputs = form.querySelectorAll('[data-live-submit-input="true"]');
+        if (inputs.length === 0) {
+            return;
+        }
+
+        let timer = null;
+        let lastSubmittedValue = Array.from(inputs).map((input) => input.value).join('\u0000');
+
+        const submitForm = () => {
+            const nextValue = Array.from(inputs).map((input) => input.value).join('\u0000');
+            if (nextValue === lastSubmittedValue) {
+                return;
+            }
+
+            lastSubmittedValue = nextValue;
+            form.requestSubmit();
+        };
+
+        inputs.forEach((input) => {
+            input.addEventListener('input', () => {
+                if (timer !== null) {
+                    window.clearTimeout(timer);
+                }
+
+                timer = window.setTimeout(() => {
+                    submitForm();
+                }, 250);
+            });
+
+            input.addEventListener('search', () => {
+                if (timer !== null) {
+                    window.clearTimeout(timer);
+                }
+                submitForm();
+            });
+        });
+    });
+
     const parseUtcDate = (value) => {
         if (typeof value !== 'string' || value.trim() === '') {
             return null;

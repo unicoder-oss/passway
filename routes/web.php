@@ -97,6 +97,12 @@ $router->post('/rotation-services/:svcUuid/delete', [WebController::class, 'dele
 $router->get('/organizations/:uuid', [WebController::class, 'showOrganization'], [AuthMiddleware::class]);
 $router->get('/organizations/:uuid/manage', [WebController::class, 'showOrganizationManage'], [AuthMiddleware::class]);
 $router->post('/organizations/:uuid/manage', [WebController::class, 'updateOrganizationSettings'], [AuthMiddleware::class]);
+$router->get('/organizations/:uuid/groups', [WebController::class, 'showOrganizationGroups'], [AuthMiddleware::class]);
+$router->post('/organizations/:uuid/groups', [WebController::class, 'createGroup'], [AuthMiddleware::class]);
+$router->get('/organizations/:uuid/groups/:grpUuid', [WebController::class, 'showOrganizationGroup'], [AuthMiddleware::class]);
+$router->post('/organizations/:uuid/groups/:grpUuid/delete', [WebController::class, 'deleteGroup'], [AuthMiddleware::class]);
+$router->post('/organizations/:uuid/groups/:grpUuid/members', [WebController::class, 'addGroupMember'], [AuthMiddleware::class]);
+$router->post('/organizations/:uuid/groups/:grpUuid/members/:userUuid/remove', [WebController::class, 'removeGroupMember'], [AuthMiddleware::class]);
 $router->get('/organizations/:uuid/api-keys', [WebController::class, 'showApiKeys'], [AuthMiddleware::class]);
 $router->post('/organizations/:uuid/api-keys', [WebController::class, 'createApiKey'], [AuthMiddleware::class]);
 $router->post('/organizations/:uuid/api-keys/:keyUuid/role', [WebController::class, 'updateApiKeyRole'], [AuthMiddleware::class]);
