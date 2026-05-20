@@ -25,6 +25,7 @@ use Passway\Models\Template;
 use Passway\Models\User;
 use Passway\Services\AuditService;
 use Passway\Services\ApiKeyService;
+use Passway\Services\ApprovalService;
 use Passway\Services\HashingService;
 use Passway\Services\OrganizationIntegrationService;
 use Passway\Services\RotationService;
@@ -59,6 +60,7 @@ final class WebController
         private readonly GroupService $groupService,
         private readonly RotationRegistryService $rotationRegistryService,
         private readonly OrganizationIntegrationService $organizationIntegrationService,
+        private readonly ApprovalService $approvalService,
     ) {}
 
     public function home(Request $request): Response
@@ -176,6 +178,7 @@ final class WebController
         $rotationInput = $request->input('rotation_input');
         $defaultReadAccess = \trim((string) ($request->input('default_read_access') ?? 'inherit'));
         $defaultWriteAccess = \trim((string) ($request->input('default_write_access') ?? 'inherit'));
+        $requiresApproval = $this->parseBooleanRequestInput($request->input('requires_approval'));
 
         try {
             if ($type === 'template' && $templateUuid !== '') {
@@ -190,6 +193,7 @@ final class WebController
                     $value,
                     $defaultReadAccess,
                     $defaultWriteAccess,
+                    $requiresApproval,
                 );
             } elseif ($type === 'dynamic') {
                 $secret = $this->rotationService->provisionDynamicSecret(
@@ -202,6 +206,7 @@ final class WebController
                     $user->id,
                     $defaultReadAccess,
                     $defaultWriteAccess,
+                    $requiresApproval,
                 );
             } else {
                 $secret = $this->secretService->create(
@@ -215,6 +220,7 @@ final class WebController
                     $rotationSchedule !== '' ? $rotationSchedule : null,
                     $defaultReadAccess,
                     $defaultWriteAccess,
+                    $requiresApproval,
                 );
             }
         } catch (\Throwable $e) {
@@ -2186,28 +2192,37 @@ final class WebController
         $secUuid = (string) $request->routeParam('secUuid');
 
         try {
-            ['secret' => $secret, 'value' => $value] = $this->secretService->get($secUuid, $org->id, $user->id);
+            $secret = $this->secretService->getMeta($secUuid, $org->id, $user->id);
             $versions = $this->secretService->listVersions($secUuid, $org->id, $user->id);
             $dir = Directory::findById($secret->directoryId);
             if ($dir === null || $dir->organizationId !== $org->id) {
                 throw new \RuntimeException(__('ui.backend.directory.not_found'));
             }
+
+            $canDirectRead = !$secret->requiresApproval
+                || $secret->ownerUserId === $user->id
+                || $this->organizationService->hasPermission($org->id, $user->id, 'editor');
+            $value = null;
+            if ($canDirectRead) {
+                ['value' => $value] = $this->secretService->get($secUuid, $org->id, $user->id);
+            }
         } catch (AuthException | \RuntimeException | \Passway\Exceptions\DecryptionException $e) {
             return Response::redirect($this->organizationUrl($org->uuid, $dirUuid, $e->getMessage()));
         }
 
-        $displayValue = $value;
+        $displayValue = $value ?? '';
         $templateDetails = null;
         $templateOverrides = [];
         $templateParameterSchema = [];
         $templateExtraFields = [];
         $dynamicRotationView = ['input' => [], 'outputs' => [], 'primary_field' => null, 'service' => null];
+        $pendingApprovalRequest = null;
 
-        if ($secret->type === 'template' && $secret->templateId !== null) {
+        if ($canDirectRead && $secret->type === 'template' && $secret->templateId !== null) {
             $template = Template::findById($secret->templateId);
             if ($template !== null) {
                 $templateOverrides = $this->secretService->getTemplateOverrides($secret->uuid, $org->id, $user->id);
-                $templateView = $this->templateService->describeValue($template->uuid, $value, $org->id, $templateOverrides);
+                $templateView = $this->templateService->describeValue($template->uuid, (string) $value, $org->id, $templateOverrides);
                 $displayValue = $templateView['display_value'];
                 $templateParameterSchema = $templateView['parameter_schema'];
                 $templateExtraFields = $templateView['extra_fields'];
@@ -2218,8 +2233,10 @@ final class WebController
                     'type' => $template->type,
                 ];
             }
-        } elseif ($secret->type === 'dynamic') {
+        } elseif ($canDirectRead && $secret->type === 'dynamic') {
             $dynamicRotationView = $this->secretService->getDynamicSecretView($secret->uuid, $org->id, $user->id);
+        } elseif (!$canDirectRead && $secret->requiresApproval) {
+            $pendingApprovalRequest = $this->approvalService->findPendingReadForUser($secret->id, $user->id);
         }
 
         return $this->html($this->view->render('web/secret_show', [
@@ -2245,6 +2262,8 @@ final class WebController
             'organizationApiKeys' => $secret->ownerUserId === $user->id
                 ? $this->serializeOrganizationApiKeys($org->id)
                 : [],
+            'canDirectReadSecret' => $canDirectRead,
+            'pendingApprovalRequest' => $pendingApprovalRequest,
             'canWriteSecret' => $this->permissionService->can('write', $user->id, 'secret', $secret->id, $org->id),
             'canManageSecretAcl' => $secret->ownerUserId === $user->id,
             'error' => $request->query('error'),
@@ -2896,6 +2915,23 @@ final class WebController
         }
 
         return $this->parseJsonObjectInput((string) $input, true);
+    }
+
+    private function parseBooleanRequestInput(mixed $input): bool
+    {
+        if (\is_bool($input)) {
+            return $input;
+        }
+
+        if (\is_int($input)) {
+            return $input === 1;
+        }
+
+        if (\is_string($input)) {
+            return \in_array(\strtolower(\trim($input)), ['1', 'true', 'on', 'yes'], true);
+        }
+
+        return false;
     }
 
     /** @return array{directories: int, secrets: int} */

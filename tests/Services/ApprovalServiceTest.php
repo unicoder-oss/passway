@@ -8,6 +8,7 @@ use Passway\Core\Database;
 use Passway\Exceptions\AuthException;
 use Passway\Models\ApprovalRequest;
 use Passway\Models\User;
+use Passway\Services\ApiKeyService;
 use Passway\Services\ApprovalService;
 use Passway\Services\DirectoryService;
 use Passway\Services\EncryptionService;
@@ -29,6 +30,7 @@ final class ApprovalServiceTest extends DatabaseTestCase
     private SecretService     $secretSvc;
     private DirectoryService  $dirSvc;
     private OrganizationService $orgSvc;
+    private ApiKeyService $apiKeySvc;
 
     public static function setUpBeforeClass(): void
     {
@@ -46,6 +48,7 @@ final class ApprovalServiceTest extends DatabaseTestCase
         $this->dirSvc   = new DirectoryService($this->orgSvc, $permSvc);
         $this->secretSvc = new SecretService($this->orgSvc, $encSvc, $permSvc);
         $this->svc      = new ApprovalService($this->orgSvc, $encSvc);
+        $this->apiKeySvc = new ApiKeyService($this->orgSvc);
 
         // team-режим
         Database::getInstance()->query(
@@ -170,6 +173,20 @@ final class ApprovalServiceTest extends DatabaseTestCase
         $this->svc->request($secUuid, 'admin', null, $requester->id, $orgId);
     }
 
+    public function test_request_for_api_key_creates_pending_approval(): void
+    {
+        ['owner' => $owner, 'orgId' => $orgId, 'secretUuid' => $secUuid] =
+            $this->setupApprovalScenario();
+
+        ['key' => $apiKey] = $this->apiKeySvc->create('Deploy key', $orgId, $owner->id, 'reader');
+
+        $req = $this->svc->requestForApiKey($secUuid, 'read', 'Need runtime access', $apiKey->id, $orgId);
+
+        $this->assertSame(ApprovalRequest::REQUESTER_TYPE_API_KEY, $req->requesterType);
+        $this->assertSame($apiKey->id, $req->requesterId);
+        $this->assertSame('pending', $req->status);
+    }
+
     // ------------------------------------------------------------------ //
     //  listMy() / listPending()                                           //
     // ------------------------------------------------------------------ //
@@ -212,6 +229,26 @@ final class ApprovalServiceTest extends DatabaseTestCase
         $pending = $this->svc->listPending($owner->id, $orgId);
         $this->assertCount(1, $pending);
         $this->assertSame('pending', $pending[0]->status);
+    }
+
+    public function test_count_pending_across_organizations_counts_requests(): void
+    {
+        ['owner' => $ownerA, 'requester' => $requesterA, 'orgId' => $orgIdA, 'secretUuid' => $secUuidA] =
+            $this->setupApprovalScenario();
+
+        $ownerB = $this->createTestUser('owner-b@test.com');
+        $requesterB = $this->createTestUser('requester-b@test.com');
+        $orgB = $this->orgSvc->create('TestOrgB', $ownerB->id);
+        $this->orgSvc->addMember($orgB->id, $requesterB->id, 'reader', $ownerB->id);
+        $dirB = $this->dirSvc->create($orgB->id, null, 'Secrets', $ownerB->id);
+        $secretB = $this->secretSvc->create($orgB->id, $dirB->uuid, 'DB Password B', 'static', 'supersecret-b', $ownerB->id);
+        Database::getInstance()->update('secrets', ['requires_approval' => 1], ['id' => $secretB->id]);
+
+        $this->svc->request($secUuidA, 'read', null, $requesterA->id, $orgIdA);
+        $this->svc->request($secretB->uuid, 'read', null, $requesterB->id, $orgB->id);
+
+        $this->assertSame(1, $this->svc->countPendingAcrossOrganizations($ownerA->id));
+        $this->assertSame(1, $this->svc->countPendingAcrossOrganizations($ownerB->id));
     }
 
     // ------------------------------------------------------------------ //
@@ -447,6 +484,22 @@ final class ApprovalServiceTest extends DatabaseTestCase
 
         ['secret' => $secret, 'value' => $value] =
             $this->svc->useToken($req->uuid, $token, $requester->id, $orgId);
+
+        $this->assertSame('supersecret', $value);
+        $this->assertSame($secUuid, $secret->uuid);
+    }
+
+    public function test_use_token_for_api_key_returns_decrypted_value_without_explicit_token(): void
+    {
+        ['owner' => $owner, 'orgId' => $orgId, 'secretUuid' => $secUuid] =
+            $this->setupApprovalScenario();
+
+        ['key' => $apiKey] = $this->apiKeySvc->create('Runtime key', $orgId, $owner->id, 'reader');
+        $req = $this->svc->requestForApiKey($secUuid, 'read', null, $apiKey->id, $orgId);
+        ['request' => $approved] = $this->svc->approve($req->uuid, $owner->id, $orgId);
+
+        ['secret' => $secret, 'value' => $value] =
+            $this->svc->useTokenForApiKey($approved->uuid, '', $apiKey->id, $orgId);
 
         $this->assertSame('supersecret', $value);
         $this->assertSame($secUuid, $secret->uuid);

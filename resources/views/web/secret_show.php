@@ -14,10 +14,14 @@ $transferOwnerAction = '/organizations/' . $organization->uuid . '/directories/'
 $templatePreviewUrl = '/api/v1/organizations/' . $organization->uuid . '/directories/' . $directory->uuid . '/secrets/template-preview';
 $secretAclApiUrl = '/api/v1/organizations/' . $organization->uuid . '/secrets/' . $secret->uuid . '/acl';
 $secretAccessPolicyApiUrl = '/api/v1/organizations/' . $organization->uuid . '/secrets/' . $secret->uuid . '/access-policy';
+$secretApprovalSettingsApiUrl = '/api/v1/organizations/' . $organization->uuid . '/secrets/' . $secret->uuid . '/approval-settings';
+$secretApprovalCreateApiUrl = '/api/v1/organizations/' . $organization->uuid . '/secrets/' . $secret->uuid . '/approvals';
 $dynamicRotationOutputs = $dynamicRotationView['outputs'] ?? [];
 $dynamicRotationInputs = $dynamicRotationView['input'] ?? [];
 $dynamicRotationPrimaryField = $dynamicRotationView['primary_field'] ?? null;
 $dynamicRotationService = $dynamicRotationView['service'] ?? null;
+$pendingApprovalRequestUuid = $pendingApprovalRequest?->uuid ?? null;
+$isApprovalPending = $pendingApprovalRequestUuid !== null;
 $dynamicOutputFields = $dynamicRotationService !== null ? $dynamicRotationService->outputFields() : [];
 $renderReadonlyRotationField = static function (array $field, array $values): void {
     $fieldName = isset($field['name']) && is_string($field['name']) ? trim($field['name']) : '';
@@ -215,7 +219,7 @@ $renderReadonlyRotationField = static function (array $field, array $values): vo
 
         <div class="panel panel-muted" style="padding:1rem; display:grid; gap:.75rem;">
             <label><?= e(__('ui.secret.current_value')) ?></label>
-            <button type="button" class="secondary" id="secret-value-mask" style="justify-content:flex-start; min-height:120px; text-align:left;"><?= e(__('ui.secret.click_to_reveal')) ?></button>
+            <button type="button" class="secondary<?= !empty($canDirectReadSecret) ? '' : ($isApprovalPending ? ' is-pending' : '') ?>" id="secret-value-mask" style="justify-content:flex-start; min-height:120px; text-align:left;"<?= empty($canDirectReadSecret) && $isApprovalPending ? ' disabled' : '' ?>><?= e(!empty($canDirectReadSecret) ? __('ui.secret.click_to_reveal') : ($isApprovalPending ? __('ui.secret.approval_waiting') : __('ui.secret.click_to_reveal_requires_approval'))) ?></button>
             <textarea id="secret-value-display" class="mono hidden" rows="8" readonly><?= e($displayValue ?? $value) ?></textarea>
             <div class="actions hidden" id="secret-value-actions">
                 <button type="button" class="secondary" data-copy-target="secret-value-display"><?= e(__('ui.secret.copy_value')) ?></button>
@@ -448,6 +452,10 @@ $renderReadonlyRotationField = static function (array $field, array $values): vo
                             </select>
                         </div>
                     </div>
+                    <label class="inline-check">
+                        <input id="secret-requires-approval" type="checkbox">
+                        <span><?= e(__('ui.secret.requires_approval_toggle')) ?></span>
+                    </label>
                 </section>
                 <div class="acl-tabs">
                     <button type="button" class="secondary acl-tab is-active" data-acl-tab="users"><?= e(__('ui.secret.acl_tab_users')) ?></button>
@@ -553,6 +561,11 @@ $renderReadonlyRotationField = static function (array $field, array $values): vo
     const valueDisplay = document.getElementById('secret-value-display');
     const valueActions = document.getElementById('secret-value-actions');
     const valueHide = document.getElementById('secret-value-hide');
+    const canDirectReadSecret = <?= json_encode(!empty($canDirectReadSecret)) ?>;
+    const secretRequiresApproval = <?= json_encode((bool) $secret->requiresApproval) ?>;
+    const initialPendingApprovalRequestUuid = <?= json_encode($pendingApprovalRequestUuid) ?>;
+    const secretApprovalCreateApiUrl = <?= json_encode($secretApprovalCreateApiUrl) ?>;
+    let canRevealLocally = canDirectReadSecret;
 
     const copyText = async (text) => {
         if (navigator.clipboard && typeof navigator.clipboard.writeText === 'function') {
@@ -613,12 +626,163 @@ $renderReadonlyRotationField = static function (array $field, array $values): vo
         });
     });
 
-    if (valueMask && valueDisplay && valueActions && valueHide) {
-        valueMask.addEventListener('click', () => {
-            valueMask.classList.add('hidden');
-            valueDisplay.classList.remove('hidden');
-            valueActions.classList.remove('hidden');
+    let approvalPollTimer = null;
+    let activeApprovalRequestUuid = initialPendingApprovalRequestUuid;
+
+    const setMaskState = (message, disabled = false) => {
+        if (!valueMask) {
+            return;
+        }
+
+        valueMask.textContent = message;
+        valueMask.disabled = disabled;
+    };
+
+    const revealSecretValue = (value, notifyMessage = null) => {
+        if (!valueMask || !valueDisplay || !valueActions) {
+            return;
+        }
+
+        valueDisplay.value = value;
+        canRevealLocally = true;
+        setMaskState(<?= json_encode((string) __('ui.secret.click_to_reveal')) ?>, false);
+        valueMask.classList.add('hidden');
+        valueDisplay.classList.remove('hidden');
+        valueActions.classList.remove('hidden');
+        if (notifyMessage && window.passwayToast) {
+            window.passwayToast.show(notifyMessage, 'success');
+        }
+    };
+
+    const resetApprovalButton = (message, errorMessage = null) => {
+        activeApprovalRequestUuid = null;
+        if (approvalPollTimer !== null) {
+            window.clearTimeout(approvalPollTimer);
+            approvalPollTimer = null;
+        }
+        setMaskState(message, false);
+        if (errorMessage && window.passwayToast) {
+            window.passwayToast.show(errorMessage, 'error');
+        }
+    };
+
+    const consumeApprovedRequest = async (requestUuid) => {
+        const useResponse = await fetch(`/api/v1/organizations/${encodeURIComponent(<?= json_encode($organization->uuid) ?>)}/approvals/${encodeURIComponent(requestUuid)}/use`, {
+            method: 'POST',
+            headers: {
+                'Content-Type': 'application/json',
+                'Accept': 'application/json',
+                'X-Requested-With': 'XMLHttpRequest',
+            },
+            credentials: 'same-origin',
+            body: JSON.stringify({ token: '' }),
         });
+        const usePayload = await useResponse.json();
+        if (!useResponse.ok || !usePayload.success || !usePayload.data || typeof usePayload.data.value !== 'string') {
+            throw new Error(usePayload.error || <?= json_encode((string) __('ui.secret.approval_consume_failed')) ?>);
+        }
+
+        activeApprovalRequestUuid = null;
+        if (approvalPollTimer !== null) {
+            window.clearTimeout(approvalPollTimer);
+            approvalPollTimer = null;
+        }
+        revealSecretValue(usePayload.data.value, <?= json_encode((string) __('ui.secret.approval_approved_toast')) ?>);
+    };
+
+    const pollApprovalStatus = async () => {
+        if (!activeApprovalRequestUuid) {
+            return;
+        }
+
+        try {
+            const response = await fetch(`/api/v1/organizations/${encodeURIComponent(<?= json_encode($organization->uuid) ?>)}/approvals/${encodeURIComponent(activeApprovalRequestUuid)}`, {
+                headers: {
+                    'Accept': 'application/json',
+                    'X-Requested-With': 'XMLHttpRequest',
+                },
+                credentials: 'same-origin',
+            });
+            const payload = await response.json();
+            if (!response.ok || !payload.success || !payload.data) {
+                throw new Error(payload.error || <?= json_encode((string) __('ui.secret.approval_status_failed')) ?>);
+            }
+
+            const status = payload.data.status;
+            if (status === 'pending') {
+                approvalPollTimer = window.setTimeout(() => {
+                    void pollApprovalStatus();
+                }, 4000);
+                return;
+            }
+            if (status === 'approved') {
+                await consumeApprovedRequest(activeApprovalRequestUuid);
+                return;
+            }
+            if (status === 'rejected') {
+                resetApprovalButton(<?= json_encode((string) __('ui.secret.click_to_reveal_requires_approval')) ?>, <?= json_encode((string) __('ui.secret.approval_rejected_toast')) ?>);
+                return;
+            }
+
+            resetApprovalButton(<?= json_encode((string) __('ui.secret.click_to_reveal_requires_approval')) ?>);
+        } catch (error) {
+            approvalPollTimer = window.setTimeout(() => {
+                void pollApprovalStatus();
+            }, 6000);
+        }
+    };
+
+    if (valueMask && valueDisplay && valueActions && valueHide) {
+        if (canDirectReadSecret) {
+            valueMask.addEventListener('click', () => {
+                valueMask.classList.add('hidden');
+                valueDisplay.classList.remove('hidden');
+                valueActions.classList.remove('hidden');
+            });
+        } else if (secretRequiresApproval) {
+            if (activeApprovalRequestUuid) {
+                setMaskState(<?= json_encode((string) __('ui.secret.approval_waiting')) ?>, true);
+                void pollApprovalStatus();
+            }
+
+            valueMask.addEventListener('click', async () => {
+                if (canRevealLocally) {
+                    valueMask.classList.add('hidden');
+                    valueDisplay.classList.remove('hidden');
+                    valueActions.classList.remove('hidden');
+                    return;
+                }
+
+                try {
+                    setMaskState(<?= json_encode((string) __('ui.secret.approval_waiting')) ?>, true);
+                    const response = await fetch(secretApprovalCreateApiUrl, {
+                        method: 'POST',
+                        headers: {
+                            'Content-Type': 'application/json',
+                            'Accept': 'application/json',
+                            'X-Requested-With': 'XMLHttpRequest',
+                        },
+                        credentials: 'same-origin',
+                        body: JSON.stringify({ request_type: 'read' }),
+                    });
+                    const payload = await response.json();
+                    if (!response.ok || !payload.success || !payload.data || !payload.data.uuid) {
+                        throw new Error(payload.error || <?= json_encode((string) __('ui.secret.approval_request_failed')) ?>);
+                    }
+
+                    activeApprovalRequestUuid = payload.data.uuid;
+                    if (window.passwayToast) {
+                        window.passwayToast.show(<?= json_encode((string) __('ui.secret.approval_requested_toast')) ?>, 'success');
+                    }
+                    void pollApprovalStatus();
+                } catch (error) {
+                    resetApprovalButton(
+                        <?= json_encode((string) __('ui.secret.click_to_reveal_requires_approval')) ?>,
+                        error instanceof Error ? error.message : <?= json_encode((string) __('ui.secret.approval_request_failed')) ?>,
+                    );
+                }
+            });
+        }
 
         valueHide.addEventListener('click', () => {
             valueMask.classList.remove('hidden');
@@ -634,6 +798,7 @@ $renderReadonlyRotationField = static function (array $field, array $values): vo
     const secretAclSaveButton = document.getElementById('secret-acl-save-button');
     const secretDefaultReadAccess = document.getElementById('secret-default-read-access');
     const secretDefaultWriteAccess = document.getElementById('secret-default-write-access');
+    const secretRequiresApprovalInput = document.getElementById('secret-requires-approval');
     const secretAclUserSelect = document.getElementById('secret-acl-user-select');
     const secretAclAddUserButton = document.getElementById('secret-acl-add-user');
     const secretAclGroupSelect = document.getElementById('secret-acl-group-select');
@@ -651,6 +816,7 @@ $renderReadonlyRotationField = static function (array $field, array $values): vo
     const confirmSecretOwnerUuid = document.getElementById('confirm-secret-owner-uuid');
     const aclApiUrl = <?= json_encode($secretAclApiUrl) ?>;
     const accessPolicyApiUrl = <?= json_encode($secretAccessPolicyApiUrl) ?>;
+    const approvalSettingsApiUrl = <?= json_encode($secretApprovalSettingsApiUrl) ?>;
     const organizationMembers = <?= json_encode($organizationMembers, JSON_UNESCAPED_UNICODE | JSON_UNESCAPED_SLASHES) ?>;
     const organizationGroups = <?= json_encode($organizationGroups, JSON_UNESCAPED_UNICODE | JSON_UNESCAPED_SLASHES) ?>;
     const organizationApiKeys = <?= json_encode($organizationApiKeys, JSON_UNESCAPED_UNICODE | JSON_UNESCAPED_SLASHES) ?>;
@@ -680,6 +846,9 @@ $renderReadonlyRotationField = static function (array $field, array $values): vo
     let secretAccessPolicyState = {
         default_read_access: 'inherit',
         default_write_access: 'inherit',
+    };
+    let secretApprovalSettingsState = {
+        requires_approval: secretRequiresApproval,
     };
     let selectedSecretOwnerUuid = null;
 
@@ -818,6 +987,9 @@ $renderReadonlyRotationField = static function (array $field, array $values): vo
         if (secretDefaultWriteAccess) {
             secretDefaultWriteAccess.value = secretAccessPolicyState.default_write_access || 'inherit';
         }
+        if (secretRequiresApprovalInput) {
+            secretRequiresApprovalInput.checked = !!secretApprovalSettingsState.requires_approval;
+        }
     };
 
     const loadSecretAccessPolicy = async () => {
@@ -875,6 +1047,59 @@ $renderReadonlyRotationField = static function (array $field, array $values): vo
         syncSecretAccessPolicyInputs();
     };
 
+    const loadSecretApprovalSettings = async () => {
+        if (!approvalSettingsApiUrl || !secretAclStatus) {
+            return;
+        }
+
+        try {
+            const response = await fetch(approvalSettingsApiUrl, {
+                headers: {
+                    'Accept': 'application/json',
+                    'X-Requested-With': 'XMLHttpRequest',
+                },
+                credentials: 'same-origin',
+            });
+            const payload = await response.json();
+            if (!response.ok || !payload.success) {
+                throw new Error(payload.error || <?= json_encode((string) __('ui.secret.approval_settings_load_failed')) ?>);
+            }
+
+            secretApprovalSettingsState = {
+                requires_approval: !!(payload.data && payload.data.requires_approval),
+            };
+            syncSecretAccessPolicyInputs();
+        } catch (error) {
+            secretAclStatus.textContent = error instanceof Error ? error.message : <?= json_encode((string) __('ui.secret.approval_settings_load_failed')) ?>;
+        }
+    };
+
+    const saveSecretApprovalSettings = async () => {
+        if (!approvalSettingsApiUrl || !secretAclStatus) {
+            return;
+        }
+
+        const response = await fetch(approvalSettingsApiUrl, {
+            method: 'PUT',
+            headers: {
+                'Content-Type': 'application/json',
+                'Accept': 'application/json',
+                'X-Requested-With': 'XMLHttpRequest',
+            },
+            credentials: 'same-origin',
+            body: JSON.stringify(secretApprovalSettingsState),
+        });
+        const payload = await response.json();
+        if (!response.ok || !payload.success) {
+            throw new Error(payload.error || <?= json_encode((string) __('ui.secret.approval_settings_save_failed')) ?>);
+        }
+
+        secretApprovalSettingsState = {
+            requires_approval: !!(payload.data && payload.data.requires_approval),
+        };
+        syncSecretAccessPolicyInputs();
+    };
+
     const saveSecretAcl = async () => {
         if (!secretAclSaveButton || !secretAclStatus) {
             return;
@@ -885,6 +1110,7 @@ $renderReadonlyRotationField = static function (array $field, array $values): vo
 
         try {
             await saveSecretAccessPolicy();
+            await saveSecretApprovalSettings();
             secretAclStatus.textContent = aclLabels.saving;
             const response = await fetch(aclApiUrl, {
                 method: 'PUT',
@@ -989,6 +1215,7 @@ $renderReadonlyRotationField = static function (array $field, array $values): vo
             setAclTab('users');
             secretAclStatus.textContent = aclLabels.accessLoading;
             void loadSecretAccessPolicy();
+            void loadSecretApprovalSettings();
             void loadSecretAcl();
         });
     }
@@ -1113,6 +1340,9 @@ $renderReadonlyRotationField = static function (array $field, array $values): vo
                 default_read_access: 'inherit',
                 default_write_access: 'inherit',
             };
+            secretApprovalSettingsState = {
+                requires_approval: secretRequiresApproval,
+            };
             syncSecretAccessPolicyInputs();
             if (secretAclStatus) {
                 secretAclStatus.textContent = <?= json_encode((string) __('ui.secret.acl_modal_hint')) ?>;
@@ -1130,6 +1360,12 @@ $renderReadonlyRotationField = static function (array $field, array $values): vo
     if (secretDefaultWriteAccess) {
         secretDefaultWriteAccess.addEventListener('change', () => {
             secretAccessPolicyState.default_write_access = secretDefaultWriteAccess.value;
+        });
+    }
+
+    if (secretRequiresApprovalInput) {
+        secretRequiresApprovalInput.addEventListener('change', () => {
+            secretApprovalSettingsState.requires_approval = secretRequiresApprovalInput.checked;
         });
     }
 

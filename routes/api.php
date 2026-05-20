@@ -196,6 +196,10 @@ $router->group('/api/v1', function (\Passway\Core\Router $router) {
             [SecretController::class, 'accessPolicy'], [AuthMiddleware::class]);
         $router->put('/:uuid/secrets/:secUuid/access-policy',
             [SecretController::class, 'updateAccessPolicy'], [AuthMiddleware::class]);
+        $router->get('/:uuid/secrets/:secUuid/approval-settings',
+            [SecretController::class, 'approvalSettings'], [AuthMiddleware::class]);
+        $router->put('/:uuid/secrets/:secUuid/approval-settings',
+            [SecretController::class, 'updateApprovalSettings'], [AuthMiddleware::class]);
         $router->post('/:uuid/secrets/:secUuid/owner',
             [SecretController::class, 'transferOwnership'], [AuthMiddleware::class]);
         $router->post('/:uuid/secrets/:secUuid/approvals',
@@ -218,6 +222,13 @@ $router->group('/api/v1', function (\Passway\Core\Router $router) {
             [ApprovalController::class, 'revoke'], [AuthMiddleware::class]);
         $router->post('/:uuid/approvals/:aprUuid/use',
             [ApprovalController::class, 'use'], [AuthMiddleware::class]);
+    });
+
+    $router->group('/approvals', function (\Passway\Core\Router $router) {
+        $router->get('/pending-summary',
+            [ApprovalController::class, 'pendingSummaryGlobal'], [AuthMiddleware::class]);
+        $router->get('/pending',
+            [ApprovalController::class, 'listPendingGlobal'], [AuthMiddleware::class]);
     });
 
     // ------------------------------------------------------------------ //

@@ -8,6 +8,8 @@ use Passway\Core\Database;
 use Passway\Exceptions\AuthException;
 use Passway\Models\ApprovalRequest;
 use Passway\Models\ApprovalReviewer;
+use Passway\Models\ApiKey;
+use Passway\Models\Organization;
 use Passway\Models\Secret;
 
 /**
@@ -63,15 +65,82 @@ final class ApprovalService
         string  $userId,
         string  $orgId,
     ): ApprovalRequest {
+        return $this->requestForUser($secretUuid, $requestType, $reason, $userId, $orgId);
+    }
+
+    public function requestForUser(
+        string  $secretUuid,
+        string  $requestType,
+        ?string $reason,
+        string  $userId,
+        string  $orgId,
+    ): ApprovalRequest {
+        if ($this->organizationService->getMemberRole($orgId, $userId) === null) {
+            throw new AuthException(__('ui.backend.organization.not_member'), 403);
+        }
+
+        return $this->createRequest(
+            $secretUuid,
+            $requestType,
+            $reason,
+            ApprovalRequest::REQUESTER_TYPE_USER,
+            $userId,
+            $orgId,
+            $userId,
+            null,
+            true,
+        );
+    }
+
+    public function requestForApiKey(
+        string  $secretUuid,
+        string  $requestType,
+        ?string $reason,
+        string  $apiKeyId,
+        string  $orgId,
+    ): ApprovalRequest {
+        $apiKey = ApiKey::findById($apiKeyId);
+        if ($apiKey === null || $apiKey->organizationId !== $orgId || !$apiKey->isValid()) {
+            throw new AuthException(__('ui.messages.access_denied'), 403);
+        }
+        if ($apiKey->userId === null) {
+            throw new AuthException(__('ui.messages.access_denied'), 403);
+        }
+
+        return $this->createRequest(
+            $secretUuid,
+            $requestType,
+            $reason,
+            ApprovalRequest::REQUESTER_TYPE_API_KEY,
+            $apiKeyId,
+            $orgId,
+            null,
+            $apiKeyId,
+            false,
+            $apiKey->userId,
+        );
+    }
+
+    private function createRequest(
+        string $secretUuid,
+        string $requestType,
+        ?string $reason,
+        string $requesterType,
+        string $requesterId,
+        string $orgId,
+        ?string $auditUserId,
+        ?string $auditApiKeyId,
+        bool $enforceDirectUserOwnerBlock,
+        ?string $legacyRequestedByUserId = null,
+    ): ApprovalRequest {
         if (!\in_array($requestType, ApprovalRequest::VALID_REQUEST_TYPES, true)) {
             throw new \InvalidArgumentException(
                 __('ui.backend.approval.invalid_request_type', ['allowed' => \implode(', ', ApprovalRequest::VALID_REQUEST_TYPES)])
             );
         }
 
-        // Пользователь должен быть членом организации
-        if ($this->organizationService->getMemberRole($orgId, $userId) === null) {
-            throw new AuthException(__('ui.backend.organization.not_member'), 403);
+        if (!\in_array($requesterType, ApprovalRequest::VALID_REQUESTER_TYPES, true)) {
+            throw new \InvalidArgumentException(__('ui.backend.common.invalid_requester_type'));
         }
 
         $secret = $this->findSecretInOrg($secretUuid, $orgId);
@@ -86,11 +155,11 @@ final class ApprovalService
             throw new \RuntimeException(__('ui.backend.approval.secret_owner_missing'));
         }
 
-        if ($secret->ownerUserId === $userId) {
+        if ($enforceDirectUserOwnerBlock && $secret->ownerUserId === $requesterId) {
             throw new \InvalidArgumentException(__('ui.backend.approval.secret_direct_access'));
         }
 
-        if (ApprovalRequest::hasPending($secret->id, $userId, $requestType)) {
+        if (ApprovalRequest::hasPendingForActor($secret->id, $requesterType, $requesterId, $requestType)) {
             throw new \RuntimeException(
                 __('ui.backend.approval.pending_exists')
             );
@@ -105,11 +174,15 @@ final class ApprovalService
 
         $db = Database::getInstance();
 
-        $db->transaction(function () use ($db, $uuid, $secret, $userId, $requestType, $reason, $expiresAt, $nowStr, $reviewerIds): void {
+        $db->transaction(function () use ($db, $uuid, $secret, $requesterType, $requesterId, $requestType, $reason, $expiresAt, $nowStr, $reviewerIds, $legacyRequestedByUserId): void {
             $requestId = $db->insert('approval_requests', [
                 'uuid'         => $uuid,
                 'secret_id'    => (int) $secret->id,
-                'requested_by' => (int) $userId,
+                'requested_by' => $requesterType === ApprovalRequest::REQUESTER_TYPE_USER
+                    ? (int) $requesterId
+                    : (int) ($legacyRequestedByUserId ?? 0),
+                'requester_type' => $requesterType,
+                'requester_id' => (int) $requesterId,
                 'request_type' => $requestType,
                 'reason'       => $reason,
                 'status'       => 'pending',
@@ -132,11 +205,12 @@ final class ApprovalService
         $this->getAuditService()->record(
             action: 'approval.request_create',
             organizationId: $orgId,
-            userId: $userId,
+            userId: $auditUserId,
+            apiKeyId: $auditApiKeyId,
             resourceType: 'approval_request',
             resourceId: $request->id,
             resourceUuid: $request->uuid,
-            details: ['request_type' => $requestType],
+            details: ['request_type' => $requestType, 'requester_type' => $requesterType],
         );
 
         return $request;
@@ -168,6 +242,42 @@ final class ApprovalService
         );
 
         return \array_map(fn($r) => ApprovalRequest::fromRow($r), $rows);
+    }
+
+    /** @return ApprovalRequest[] */
+    public function listPendingAcrossOrganizations(string $reviewerId): array
+    {
+        $rows = Database::getInstance()->fetchAll(
+            "SELECT ar.* FROM approval_requests ar
+             JOIN approval_reviewers rv ON rv.approval_request_id = ar.id
+             JOIN secrets s ON s.id = ar.secret_id
+             WHERE rv.reviewer_id = ? AND ar.status = 'pending' AND s.deleted_at IS NULL
+             ORDER BY ar.created_at ASC",
+            [(int) $reviewerId]
+        );
+
+        return \array_map(fn($r) => ApprovalRequest::fromRow($r), $rows);
+    }
+
+    public function countPendingAcrossOrganizations(string $reviewerId): int
+    {
+        return (int) Database::getInstance()->fetchColumn(
+            "SELECT COUNT(*) FROM approval_requests ar
+             JOIN approval_reviewers rv ON rv.approval_request_id = ar.id
+             JOIN secrets s ON s.id = ar.secret_id
+             WHERE rv.reviewer_id = ? AND ar.status = 'pending' AND s.deleted_at IS NULL",
+            [(int) $reviewerId]
+        );
+    }
+
+    public function findPendingReadForUser(string $secretId, string $userId): ?ApprovalRequest
+    {
+        return ApprovalRequest::findPendingForActor($secretId, ApprovalRequest::REQUESTER_TYPE_USER, $userId, 'read');
+    }
+
+    public function findPendingReadForApiKey(string $secretId, string $apiKeyId): ?ApprovalRequest
+    {
+        return ApprovalRequest::findPendingForActor($secretId, ApprovalRequest::REQUESTER_TYPE_API_KEY, $apiKeyId, 'read');
     }
 
     /**
@@ -203,12 +313,29 @@ final class ApprovalService
      */
     public function get(string $requestUuid, string $userId, string $orgId): ApprovalRequest
     {
+        return $this->getForUser($requestUuid, $userId, $orgId);
+    }
+
+    public function getForUser(string $requestUuid, string $userId, string $orgId): ApprovalRequest
+    {
         $approvalReq = $this->findRequestInOrg($requestUuid, $orgId);
 
-        $isRequester = $approvalReq->requestedBy === $userId;
+        $isRequester = $approvalReq->requesterType === ApprovalRequest::REQUESTER_TYPE_USER
+            && $approvalReq->requesterId === $userId;
         $isReviewer  = $this->isReviewer($approvalReq, $userId);
 
         if (!$isRequester && !$isReviewer) {
+            throw new AuthException(__('ui.backend.approval.view_request_denied'), 403);
+        }
+
+        return $approvalReq;
+    }
+
+    public function getForApiKey(string $requestUuid, string $apiKeyId, string $orgId): ApprovalRequest
+    {
+        $approvalReq = $this->findRequestInOrg($requestUuid, $orgId);
+
+        if ($approvalReq->requesterType !== ApprovalRequest::REQUESTER_TYPE_API_KEY || $approvalReq->requesterId !== $apiKeyId) {
             throw new AuthException(__('ui.backend.approval.view_request_denied'), 403);
         }
 
@@ -235,7 +362,7 @@ final class ApprovalService
         $approvalReq = $this->findRequestInOrg($requestUuid, $orgId);
         $this->assertReviewer($approvalReq, $reviewerId);
 
-        if ($approvalReq->requestedBy === $reviewerId) {
+        if ($approvalReq->requesterType === ApprovalRequest::REQUESTER_TYPE_USER && $approvalReq->requesterId === $reviewerId) {
             throw new AuthException(__('ui.backend.approval.cannot_approve_own'), 403);
         }
 
@@ -335,9 +462,15 @@ final class ApprovalService
      */
     public function revoke(string $requestUuid, string $userId, string $orgId): void
     {
+        $this->revokeForUser($requestUuid, $userId, $orgId);
+    }
+
+    public function revokeForUser(string $requestUuid, string $userId, string $orgId): void
+    {
         $approvalReq = $this->findRequestInOrg($requestUuid, $orgId);
         $isAdmin     = $this->organizationService->hasPermission($orgId, $userId, 'admin');
-        $isRequester = $approvalReq->requestedBy === $userId;
+        $isRequester = $approvalReq->requesterType === ApprovalRequest::REQUESTER_TYPE_USER
+            && $approvalReq->requesterId === $userId;
         $isReviewer  = $this->isReviewer($approvalReq, $userId);
 
         if (!$isAdmin && !$isRequester && !$isReviewer) {
@@ -387,11 +520,49 @@ final class ApprovalService
         string $userId,
         string $orgId,
     ): array {
+        return $this->useTokenForUser($requestUuid, $token, $userId, $orgId);
+    }
+
+    public function useTokenForUser(
+        string $requestUuid,
+        string $token,
+        string $userId,
+        string $orgId,
+    ): array {
         $approvalReq = $this->findRequestInOrg($requestUuid, $orgId);
 
-        if ($approvalReq->requestedBy !== $userId) {
+        if ($approvalReq->requesterType !== ApprovalRequest::REQUESTER_TYPE_USER || $approvalReq->requesterId !== $userId) {
             throw new AuthException(__('ui.backend.approval.not_requester'), 403);
         }
+
+        return $this->consumeApprovedToken($approvalReq, $token, $orgId, $userId, null);
+    }
+
+    public function useTokenForApiKey(
+        string $requestUuid,
+        string $token,
+        string $apiKeyId,
+        string $orgId,
+    ): array {
+        $approvalReq = $this->findRequestInOrg($requestUuid, $orgId);
+
+        if ($approvalReq->requesterType !== ApprovalRequest::REQUESTER_TYPE_API_KEY || $approvalReq->requesterId !== $apiKeyId) {
+            throw new AuthException(__('ui.backend.approval.not_requester'), 403);
+        }
+
+        return $this->consumeApprovedToken($approvalReq, $token, $orgId, null, $apiKeyId);
+    }
+
+    /**
+     * @return array{secret: Secret, value: string}
+     */
+    private function consumeApprovedToken(
+        ApprovalRequest $approvalReq,
+        string $token,
+        string $orgId,
+        ?string $auditUserId,
+        ?string $auditApiKeyId,
+    ): array {
 
         if ($approvalReq->status !== 'approved') {
             throw new AuthException(
@@ -412,10 +583,12 @@ final class ApprovalService
             throw new AuthException(__('ui.backend.approval.token_expired'), 403);
         }
 
-        // Проверить хэш токена
-        $providedHash = \hash('sha256', $token);
-        if (!\hash_equals($approvalReq->accessTokenHash, $providedHash)) {
-            throw new AuthException(__('ui.backend.approval.token_invalid'), 403);
+        if ($token !== '') {
+            // Проверить хэш токена, если requester предъявляет его явно.
+            $providedHash = \hash('sha256', $token);
+            if (!\hash_equals($approvalReq->accessTokenHash, $providedHash)) {
+                throw new AuthException(__('ui.backend.approval.token_invalid'), 403);
+            }
         }
 
         // Токен валиден — получить секрет
@@ -438,7 +611,8 @@ final class ApprovalService
         $this->getAuditService()->record(
             action: 'approval.token_use',
             organizationId: $orgId,
-            userId: $userId,
+            userId: $auditUserId,
+            apiKeyId: $auditApiKeyId,
             resourceType: 'approval_request',
             resourceId: $approvalReq->id,
             resourceUuid: $approvalReq->uuid,

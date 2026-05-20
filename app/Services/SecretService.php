@@ -82,6 +82,7 @@ final class SecretService
         ?string $rotationSchedule = null,
         string $defaultReadAccess = 'inherit',
         string $defaultWriteAccess = 'inherit',
+        bool $requiresApproval = false,
     ): Secret {
         $name = \trim($name);
         if ($name === '') {
@@ -128,7 +129,7 @@ final class SecretService
             'type'             => $type,
             'encrypted_value'  => $encrypted->value,
             'nonce'            => $encrypted->nonce,
-            'requires_approval' => 0,
+            'requires_approval' => $requiresApproval ? 1 : 0,
             'rotation_integration_id' => $rotationIntegrationId !== null ? (int) $rotationIntegrationId : null,
             'rotation_schedule' => $rotationSchedule,
             'version'          => 1,
@@ -172,6 +173,7 @@ final class SecretService
         ?string $providedValue = null,
         string $defaultReadAccess = 'inherit',
         string $defaultWriteAccess = 'inherit',
+        bool $requiresApproval = false,
     ): Secret {
         if ($rotationSchedule !== null && \trim($rotationSchedule) !== '') {
             throw new \InvalidArgumentException(__('ui.backend.secret.template_rotation_not_supported'));
@@ -221,7 +223,7 @@ final class SecretService
             'encrypted_value'       => $encrypted->value,
             'nonce'                 => $encrypted->nonce,
             'template_id'           => (int) $template->id,
-            'requires_approval'     => 0,
+            'requires_approval'     => $requiresApproval ? 1 : 0,
             'rotation_schedule'     => $rotationSchedule,
             'rotation_integration_id' => null,
             'version'               => 1,
@@ -268,6 +270,7 @@ final class SecretService
         ?string $secretUuid = null,
         string $defaultReadAccess = 'inherit',
         string $defaultWriteAccess = 'inherit',
+        bool $requiresApproval = false,
     ): Secret {
         $name = \trim($name);
         if ($name === '') {
@@ -309,7 +312,7 @@ final class SecretService
             'type'                    => 'dynamic',
             'encrypted_value'         => $encrypted->value,
             'nonce'                   => $encrypted->nonce,
-            'requires_approval'       => 0,
+            'requires_approval'       => $requiresApproval ? 1 : 0,
             'rotation_integration_id' => (int) $rotationIntegrationId,
             'rotation_schedule'       => $rotationSchedule,
             'version'                 => 1,
@@ -355,6 +358,14 @@ final class SecretService
         $dir = $this->findDirInOrg($dirUuid, $orgId);
         $this->assertCan('read', $userId, 'directory', $dir->id, $orgId);
         return Secret::findByDirId($dir->id);
+    }
+
+    public function getMeta(string $secretUuid, string $orgId, string $userId): Secret
+    {
+        $secret = $this->findSecretInOrg($secretUuid, $orgId);
+        $this->assertCan('read', $userId, 'secret', $secret->id, $orgId);
+
+        return $secret;
     }
 
     /**
@@ -731,6 +742,36 @@ final class SecretService
         return [
             'default_read_access' => $updated->defaultReadAccess,
             'default_write_access' => $updated->defaultWriteAccess,
+        ];
+    }
+
+    /** @return array{requires_approval:bool} */
+    public function getApprovalSettings(string $secretUuid, string $orgId, string $requesterId): array
+    {
+        $secret = $this->findSecretInOrg($secretUuid, $orgId);
+        $this->assertOwnedBy($secret, $requesterId, 'ui.backend.secret.owner_acl_required');
+
+        return [
+            'requires_approval' => $secret->requiresApproval,
+        ];
+    }
+
+    /** @return array{requires_approval:bool} */
+    public function updateApprovalSettings(string $secretUuid, string $orgId, string $requesterId, bool $requiresApproval): array
+    {
+        $secret = $this->findSecretInOrg($secretUuid, $orgId);
+        $this->assertOwnedBy($secret, $requesterId, 'ui.backend.secret.owner_acl_required');
+
+        $secret->update([
+            'requires_approval' => $requiresApproval ? 1 : 0,
+            'updated_at' => now()->format('Y-m-d H:i:s'),
+        ]);
+
+        $updated = Secret::findByUuid($secretUuid)
+            ?? throw new \RuntimeException(__('ui.backend.secret.not_found'));
+
+        return [
+            'requires_approval' => $updated->requiresApproval,
         ];
     }
 

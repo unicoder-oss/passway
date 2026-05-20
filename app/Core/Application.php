@@ -356,6 +356,7 @@ final class Application
                 $c->make(\Passway\Services\GroupService::class),
                 $c->make(\Passway\Services\RotationRegistryService::class),
                 $c->make(\Passway\Services\OrganizationIntegrationService::class),
+                $c->make(\Passway\Services\ApprovalService::class),
             )
         );
         $this->container->singleton(

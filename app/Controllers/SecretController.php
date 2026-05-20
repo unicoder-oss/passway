@@ -88,6 +88,7 @@ final class SecretController
         $rotationInput = $request->input('rotation_input');
         $defaultReadAccess = \trim((string) ($request->input('default_read_access') ?? 'inherit'));
         $defaultWriteAccess = \trim((string) ($request->input('default_write_access') ?? 'inherit'));
+        $requiresApproval = $this->parseBooleanInput($request->input('requires_approval'));
         $templateOverrides = $this->parseTemplateOverridesInput($request->input('template_overrides'));
         $templateValue = $request->input('value');
         $templateValue = \is_string($templateValue) ? $templateValue : null;
@@ -114,6 +115,7 @@ final class SecretController
                     $templateValue,
                     $defaultReadAccess,
                     $defaultWriteAccess,
+                    $requiresApproval,
                 )
                 : ($type === 'dynamic'
                     ? $this->rotationService->provisionDynamicSecret(
@@ -126,6 +128,7 @@ final class SecretController
                         $user->id,
                         $defaultReadAccess,
                         $defaultWriteAccess,
+                        $requiresApproval,
                     )
                 : $this->secretService->create(
                     $org->id,
@@ -138,6 +141,7 @@ final class SecretController
                     $rotationSchedule !== '' ? $rotationSchedule : null,
                     $defaultReadAccess,
                     $defaultWriteAccess,
+                    $requiresApproval,
                 ));
         } catch (AuthException $e) {
             return Response::error($e->getMessage(), $e->getCode() ?: 403);
@@ -489,6 +493,45 @@ final class SecretController
         }
 
         return Response::success($policy);
+    }
+
+    public function approvalSettings(Request $request): Response
+    {
+        $user = AuthContext::requireUser();
+        $org = $this->findOrgOrFail($request);
+        $secUuid = (string) $request->routeParam('secUuid');
+
+        try {
+            $settings = $this->secretService->getApprovalSettings($secUuid, $org->id, $user->id);
+        } catch (AuthException $e) {
+            return Response::error($e->getMessage(), $e->getCode() ?: 403);
+        } catch (\RuntimeException $e) {
+            return Response::notFound($e->getMessage());
+        }
+
+        return Response::success($settings);
+    }
+
+    public function updateApprovalSettings(Request $request): Response
+    {
+        $user = AuthContext::requireUser();
+        $org = $this->findOrgOrFail($request);
+        $secUuid = (string) $request->routeParam('secUuid');
+
+        try {
+            $settings = $this->secretService->updateApprovalSettings(
+                $secUuid,
+                $org->id,
+                $user->id,
+                $this->parseBooleanInput($request->input('requires_approval')),
+            );
+        } catch (AuthException $e) {
+            return Response::error($e->getMessage(), $e->getCode() ?: 403);
+        } catch (\RuntimeException $e) {
+            return Response::error($e->getMessage(), 422);
+        }
+
+        return Response::success($settings);
     }
 
     // ------------------------------------------------------------------ //

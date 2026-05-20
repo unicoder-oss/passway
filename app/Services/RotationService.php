@@ -67,6 +67,7 @@ final class RotationService
         string $userId,
         string $defaultReadAccess = 'inherit',
         string $defaultWriteAccess = 'inherit',
+        bool $requiresApproval = false,
     ): Secret {
         $integration = \Passway\Models\OrganizationIntegration::findByUuid($rotationIntegrationUuid)
             ?? throw new \RuntimeException(__('ui.backend.secret.rotation_integration_not_found'));
@@ -114,7 +115,7 @@ final class RotationService
             encryptedValue: '',
             nonce: '',
             templateId: null,
-            requiresApproval: false,
+            requiresApproval: $requiresApproval,
             rotationIntegrationId: $integration->id,
             rotationSchedule: $rotationSchedule,
             lastRotatedAt: null,
@@ -145,6 +146,7 @@ final class RotationService
             $secretUuid,
             $defaultReadAccess,
             $defaultWriteAccess,
+            $requiresApproval,
         );
 
         return $secret;

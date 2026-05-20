@@ -667,6 +667,10 @@ require base_path('resources/views/partials/auth_topbar.php');
                             </select>
                         </div>
                     </div>
+                    <label class="inline-check">
+                        <input type="checkbox" name="requires_approval" value="1">
+                        <span><?= e(__('ui.secret.requires_approval_toggle')) ?></span>
+                    </label>
                 </section>
 
                 <div class="actions-end">

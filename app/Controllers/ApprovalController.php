@@ -9,8 +9,11 @@ use Passway\Core\Request;
 use Passway\Core\Response;
 use Passway\Exceptions\AuthException;
 use Passway\Models\ApprovalRequest;
+use Passway\Models\ApiKey;
+use Passway\Models\Directory;
 use Passway\Models\Organization;
 use Passway\Models\Secret;
+use Passway\Models\User;
 use Passway\Services\ApprovalService;
 
 /**
@@ -37,7 +40,6 @@ final class ApprovalController
 
     public function create(Request $request): Response
     {
-        $user    = AuthContext::requireUser();
         $org     = $this->findOrgOrFail($request);
         $secUuid = (string) $request->routeParam('secUuid');
 
@@ -53,13 +55,21 @@ final class ApprovalController
         }
 
         try {
-            $approvalReq = $this->approvalService->request(
-                $secUuid,
-                $requestType,
-                $reason !== '' ? $reason : null,
-                $user->id,
-                $org->id
-            );
+            $approvalReq = AuthContext::isApiKeyRequest()
+                ? $this->approvalService->requestForApiKey(
+                    $secUuid,
+                    $requestType,
+                    $reason !== '' ? $reason : null,
+                    AuthContext::getApiKey()?->id ?? '',
+                    $org->id,
+                )
+                : $this->approvalService->requestForUser(
+                    $secUuid,
+                    $requestType,
+                    $reason !== '' ? $reason : null,
+                    AuthContext::requireUser()->id,
+                    $org->id,
+                );
         } catch (AuthException $e) {
             return Response::error($e->getMessage(), $e->getCode() ?: 403);
         } catch (\InvalidArgumentException $e) {
@@ -107,18 +117,41 @@ final class ApprovalController
         return Response::success(\array_map(fn($r) => $this->serializeRequest($r), $requests));
     }
 
+    public function listPendingGlobal(Request $request): Response
+    {
+        $user = AuthContext::requireUser();
+
+        try {
+            $requests = $this->approvalService->listPendingAcrossOrganizations($user->id);
+        } catch (AuthException $e) {
+            return Response::forbidden($e->getMessage());
+        }
+
+        return Response::success(\array_map(fn($r) => $this->serializeRequest($r), $requests));
+    }
+
+    public function pendingSummaryGlobal(Request $request): Response
+    {
+        $user = AuthContext::requireUser();
+
+        return Response::success([
+            'count' => $this->approvalService->countPendingAcrossOrganizations($user->id),
+        ]);
+    }
+
     // ------------------------------------------------------------------ //
     //  GET .../approvals/:aprUuid                                        //
     // ------------------------------------------------------------------ //
 
     public function show(Request $request): Response
     {
-        $user    = AuthContext::requireUser();
         $org     = $this->findOrgOrFail($request);
         $aprUuid = (string) $request->routeParam('aprUuid');
 
         try {
-            $approvalReq = $this->approvalService->get($aprUuid, $user->id, $org->id);
+            $approvalReq = AuthContext::isApiKeyRequest()
+                ? $this->approvalService->getForApiKey($aprUuid, AuthContext::getApiKey()?->id ?? '', $org->id)
+                : $this->approvalService->getForUser($aprUuid, AuthContext::requireUser()->id, $org->id);
         } catch (AuthException $e) {
             return Response::forbidden($e->getMessage());
         } catch (\RuntimeException $e) {
@@ -211,18 +244,16 @@ final class ApprovalController
 
     public function use(Request $request): Response
     {
-        $user    = AuthContext::requireUser();
         $org     = $this->findOrgOrFail($request);
         $aprUuid = (string) $request->routeParam('aprUuid');
 
         $token = \trim((string) ($request->input('token') ?? ''));
-        if ($token === '') {
-            return Response::validationError(['token' => [__('ui.backend.common.token_required')]]);
-        }
 
         try {
             ['secret' => $secret, 'value' => $value] =
-                $this->approvalService->useToken($aprUuid, $token, $user->id, $org->id);
+                (AuthContext::isApiKeyRequest()
+                    ? $this->approvalService->useTokenForApiKey($aprUuid, $token, AuthContext::getApiKey()?->id ?? '', $org->id)
+                    : $this->approvalService->useTokenForUser($aprUuid, $token, AuthContext::requireUser()->id, $org->id));
         } catch (AuthException $e) {
             return Response::error($e->getMessage(), $e->getCode() ?: 403);
         } catch (\RuntimeException $e) {
@@ -249,19 +280,95 @@ final class ApprovalController
     /** @return array<string, mixed> */
     private function serializeRequest(ApprovalRequest $r): array
     {
+        $secret = Secret::findById($r->secretId);
+        $organization = $secret !== null ? Organization::findById($secret->organizationId) : null;
+        $directory = $secret !== null ? Directory::findById($secret->directoryId) : null;
+
         return [
-            'uuid'             => $r->uuid,
-            'secret_id'        => $r->secretId,
-            'requested_by'     => $r->requestedBy,
-            'request_type'     => $r->requestType,
-            'reason'           => $r->reason,
-            'status'           => $r->status,
-            'approved_by'      => $r->approvedBy,
+            'uuid' => $r->uuid,
+            'requested_by' => $r->requestedBy,
+            'requester_type' => $r->requesterType,
+            'requester_id' => $r->requesterId,
+            'request_type' => $r->requestType,
+            'reason' => $r->reason,
+            'status' => $r->status,
+            'approved_by' => $r->approvedBy,
             'rejection_reason' => $r->rejectionReason,
-            'expires_at'       => $r->expiresAt,
-            'created_at'       => $r->createdAt,
-            'resolved_at'      => $r->resolvedAt,
+            'expires_at' => $r->expiresAt,
+            'created_at' => $r->createdAt,
+            'resolved_at' => $r->resolvedAt,
+            'requester' => $this->serializeRequester($r),
+            'organization' => [
+                'uuid' => $organization?->uuid,
+                'name' => $organization?->name,
+            ],
+            'secret' => [
+                'id' => $r->secretId,
+                'uuid' => $secret?->uuid,
+                'name' => $secret?->name,
+                'type' => $secret?->type,
+                'requires_approval' => $secret?->requiresApproval,
+                'link' => ($organization !== null && $directory !== null && $secret !== null)
+                    ? '/organizations/' . rawurlencode($organization->uuid) . '/directories/' . rawurlencode($directory->uuid) . '/secrets/' . rawurlencode($secret->uuid)
+                    : null,
+            ],
+            'directory' => [
+                'uuid' => $directory?->uuid,
+                'path' => $directory !== null ? $this->directoryPath($directory) : null,
+            ],
         ];
+    }
+
+    /** @return array<string, mixed> */
+    private function serializeRequester(ApprovalRequest $request): array
+    {
+        if ($request->requesterType === ApprovalRequest::REQUESTER_TYPE_API_KEY) {
+            $apiKey = ApiKey::findById($request->requesterId);
+
+            return [
+                'type' => ApprovalRequest::REQUESTER_TYPE_API_KEY,
+                'id' => $request->requesterId,
+                'uuid' => $apiKey?->uuid,
+                'name' => $apiKey?->name,
+                'email' => null,
+                'display_name' => $apiKey !== null ? $apiKey->name : __('ui.app.unknown'),
+            ];
+        }
+
+        $user = $request->requestedBy !== null ? User::findById($request->requestedBy) : null;
+
+        return [
+            'type' => ApprovalRequest::REQUESTER_TYPE_USER,
+            'id' => $request->requestedBy,
+            'uuid' => $user?->uuid,
+            'name' => $user !== null ? display_name_for_user($user) : __('ui.app.unknown'),
+            'email' => $user?->email,
+            'display_name' => $user !== null ? display_name_for_user($user) . ' <' . $user->email . '>' : __('ui.app.unknown'),
+        ];
+    }
+
+    private function directoryPath(Directory $directory): string
+    {
+        if ($directory->name === '__passway_root_secrets__') {
+            return __('ui.organization.root_level');
+        }
+
+        $segments = [$directory->name];
+        $parentId = $directory->parentId;
+
+        while ($parentId !== null) {
+            $parent = Directory::findById($parentId);
+            if ($parent === null) {
+                break;
+            }
+            if ($parent->name === '__passway_root_secrets__') {
+                break;
+            }
+            $segments[] = $parent->name;
+            $parentId = $parent->parentId;
+        }
+
+        return implode(' / ', array_reverse($segments));
     }
 
     /** @return array<string, mixed> */

@@ -76,6 +76,17 @@ final class SecretServiceTest extends DatabaseTestCase
         $this->assertFalse($secret->requiresApproval);
     }
 
+    public function test_create_can_enable_requires_approval(): void
+    {
+        $owner = $this->createTestUser();
+        $org = $this->orgSvc->create('Org', $owner->id);
+        $dir = $this->dirSvc->create($org->id, null, 'Secrets', $owner->id);
+
+        $secret = $this->svc->create($org->id, $dir->uuid, 'DB Password', 'static', 's3cr3t', $owner->id, null, null, 'inherit', 'inherit', true);
+
+        $this->assertTrue($secret->requiresApproval);
+    }
+
     public function test_create_template_and_dynamic_types(): void
     {
         $owner = $this->createTestUser();
@@ -508,6 +519,33 @@ final class SecretServiceTest extends DatabaseTestCase
         $stored = $this->svc->getAccessPolicy($secret->uuid, $org->id, $owner->id);
         $this->assertSame('deny', $stored['default_read_access']);
         $this->assertSame('allow', $stored['default_write_access']);
+    }
+
+    public function test_update_approval_settings_requires_secret_owner(): void
+    {
+        $owner = $this->createTestUser();
+        $editor = $this->createTestUser('editor-approval@example.com');
+        $org = $this->orgSvc->create('Org', $owner->id);
+        $this->orgSvc->addMember($org->id, $editor->id, 'editor', null);
+        $dir = $this->dirSvc->create($org->id, null, 'Dir', $owner->id);
+        $secret = $this->svc->create($org->id, $dir->uuid, 'Secret', 'static', 'value', $owner->id);
+
+        $this->expectException(AuthException::class);
+        $this->svc->updateApprovalSettings($secret->uuid, $org->id, $editor->id, true);
+    }
+
+    public function test_update_approval_settings_persists_value(): void
+    {
+        $owner = $this->createTestUser();
+        $org = $this->orgSvc->create('Org', $owner->id);
+        $dir = $this->dirSvc->create($org->id, null, 'Dir', $owner->id);
+        $secret = $this->svc->create($org->id, $dir->uuid, 'Secret', 'static', 'value', $owner->id);
+
+        $settings = $this->svc->updateApprovalSettings($secret->uuid, $org->id, $owner->id, true);
+
+        $this->assertTrue($settings['requires_approval']);
+        $stored = $this->svc->getApprovalSettings($secret->uuid, $org->id, $owner->id);
+        $this->assertTrue($stored['requires_approval']);
     }
 
     // ------------------------------------------------------------------ //

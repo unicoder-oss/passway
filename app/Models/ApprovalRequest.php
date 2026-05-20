@@ -21,6 +21,9 @@ use Passway\Core\Database;
  */
 final class ApprovalRequest
 {
+    public const REQUESTER_TYPE_USER = 'user';
+    public const REQUESTER_TYPE_API_KEY = 'api_key';
+    public const VALID_REQUESTER_TYPES = [self::REQUESTER_TYPE_USER, self::REQUESTER_TYPE_API_KEY];
     public const VALID_REQUEST_TYPES = ['read', 'write', 'delete'];
     public const VALID_STATUSES      = ['pending', 'approved', 'rejected', 'expired', 'revoked'];
 
@@ -28,7 +31,9 @@ final class ApprovalRequest
         public readonly string  $id,
         public readonly string  $uuid,
         public readonly string  $secretId,
-        public readonly string  $requestedBy,
+        public readonly ?string $requestedBy,
+        public readonly string  $requesterType,
+        public readonly string  $requesterId,
         public readonly string  $requestType,
         public readonly ?string $reason,
         public readonly string  $status,
@@ -51,7 +56,13 @@ final class ApprovalRequest
             id:              (string) $row['id'],
             uuid:            (string) $row['uuid'],
             secretId:        (string) $row['secret_id'],
-            requestedBy:     (string) $row['requested_by'],
+            requestedBy:     isset($row['requested_by']) && $row['requested_by'] !== null
+                ? (string) $row['requested_by'] : null,
+            requesterType:   isset($row['requester_type']) && $row['requester_type'] !== null && (string) $row['requester_type'] !== ''
+                ? (string) $row['requester_type'] : self::REQUESTER_TYPE_USER,
+            requesterId:     isset($row['requester_id']) && $row['requester_id'] !== null
+                ? (string) $row['requester_id']
+                : (string) $row['requested_by'],
             requestType:     (string) $row['request_type'],
             reason:          isset($row['reason']) && $row['reason'] !== null
                 ? (string) $row['reason'] : null,
@@ -98,9 +109,17 @@ final class ApprovalRequest
      */
     public static function findByRequesterId(string $userId): array
     {
+        return self::findByActor(self::REQUESTER_TYPE_USER, $userId);
+    }
+
+    /**
+     * @return self[]
+     */
+    public static function findByActor(string $requesterType, string $requesterId): array
+    {
         $rows = Database::getInstance()->fetchAll(
-            'SELECT * FROM approval_requests WHERE requested_by = ? ORDER BY created_at DESC',
-            [(int) $userId]
+            'SELECT * FROM approval_requests WHERE requester_type = ? AND requester_id = ? ORDER BY created_at DESC',
+            [$requesterType, (int) $requesterId]
         );
         return \array_map(fn($r) => self::fromRow($r), $rows);
     }
@@ -127,12 +146,39 @@ final class ApprovalRequest
      */
     public static function hasPending(string $secretId, string $userId, string $requestType): bool
     {
+        return self::hasPendingForActor($secretId, self::REQUESTER_TYPE_USER, $userId, $requestType);
+    }
+
+    public static function hasPendingForActor(string $secretId, string $requesterType, string $requesterId, string $requestType): bool
+    {
         $count = (int) Database::getInstance()->fetchColumn(
             "SELECT COUNT(*) FROM approval_requests
-             WHERE secret_id = ? AND requested_by = ? AND request_type = ? AND status = 'pending'",
-            [(int) $secretId, (int) $userId, $requestType]
+             WHERE secret_id = ? AND requester_type = ? AND requester_id = ? AND request_type = ? AND status = 'pending'",
+            [(int) $secretId, $requesterType, (int) $requesterId, $requestType]
         );
         return $count > 0;
+    }
+
+    public static function findPendingForActor(string $secretId, string $requesterType, string $requesterId, string $requestType = 'read'): ?self
+    {
+        $row = Database::getInstance()->fetchOne(
+            "SELECT * FROM approval_requests
+             WHERE secret_id = ? AND requester_type = ? AND requester_id = ? AND request_type = ? AND status = 'pending'
+             ORDER BY created_at DESC LIMIT 1",
+            [(int) $secretId, $requesterType, (int) $requesterId, $requestType]
+        );
+
+        return $row ? self::fromRow($row) : null;
+    }
+
+    public function isUserRequester(): bool
+    {
+        return $this->requesterType === self::REQUESTER_TYPE_USER;
+    }
+
+    public function isApiKeyRequester(): bool
+    {
+        return $this->requesterType === self::REQUESTER_TYPE_API_KEY;
     }
 
     // ------------------------------------------------------------------ //
