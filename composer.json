@@ -2,7 +2,7 @@
     "name": "passway/passway",
     "description": "Passway — self-hosted secrets management service",
     "type": "project",
-    "license": "MIT",
+    "license": "AGPL-3.0-only",
     "require": {
         "php": ">=8.1",
         "ext-json": "*",
