@@ -1,3 +1,30 @@
+x-app-environment: &app-environment
+  APP_NAME: Passway
+  APP_ENV: development
+  APP_URL: http://localhost:8000
+  APP_DEBUG: "true"
+  APP_LOCALE: ru
+  APP_TIMEZONE: UTC
+  DB_DRIVER: pgsql
+  DB_HOST: db
+  DB_PORT: 5432
+  DB_NAME: passway
+  DB_USER: passway
+  DB_PASS: passway
+  DB_SSLMODE: disable
+  MASTER_KEY: 0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef
+  SESSION_COOKIE_NAME: passway_session
+  SESSION_COOKIE_SECURE: "false"
+  SESSION_COOKIE_SAMESITE: Strict
+  WEBAUTHN_RP_ID: localhost
+  WEBAUTHN_RP_NAME: Passway
+  WEBAUTHN_ORIGIN: http://localhost:8000
+  LOG_CHANNEL: stderr
+  LOG_LEVEL: debug
+  LOG_PATH: /app/storage/logs/passway.log
+  LOG_RETENTION_DAYS: 90
+  SETUP_TOKEN_PATH: /app/storage/setup_token.txt
+
 services:
   app:
     build:
@@ -5,32 +32,7 @@ services:
       dockerfile: Dockerfile
     ports:
       - "8000:8000"
-    environment:
-      APP_NAME: Passway
-      APP_ENV: development
-      APP_URL: http://localhost:8000
-      APP_DEBUG: "true"
-      APP_LOCALE: ru
-      APP_TIMEZONE: UTC
-      DB_DRIVER: pgsql
-      DB_HOST: db
-      DB_PORT: 5432
-      DB_NAME: passway
-      DB_USER: passway
-      DB_PASS: passway
-      DB_SSLMODE: disable
-      MASTER_KEY: 0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef
-      SESSION_COOKIE_NAME: passway_session
-      SESSION_COOKIE_SECURE: "false"
-      SESSION_COOKIE_SAMESITE: Strict
-      WEBAUTHN_RP_ID: localhost
-      WEBAUTHN_RP_NAME: Passway
-      WEBAUTHN_ORIGIN: http://localhost:8000
-      LOG_CHANNEL: stderr
-      LOG_LEVEL: debug
-      LOG_PATH: /app/storage/logs/passway.log
-      LOG_RETENTION_DAYS: 90
-      SETUP_TOKEN_PATH: /app/storage/setup_token.txt
+    environment: *app-environment
     depends_on:
       db:
         condition: service_healthy
@@ -42,6 +44,32 @@ services:
       timeout: 3s
       retries: 10
       start_period: 15s
+
+  scheduler-rotate:
+    build:
+      context: .
+      dockerfile: Dockerfile
+    command: ["sh", "-c", "while true; do php /app/bin/rotate.php; sleep 30; done"]
+    restart: unless-stopped
+    environment: *app-environment
+    depends_on:
+      db:
+        condition: service_healthy
+    volumes:
+      - app-storage:/app/storage
+
+  scheduler-maintenance:
+    build:
+      context: .
+      dockerfile: Dockerfile
+    command: ["sh", "-c", "while true; do php /app/bin/maintenance.php cleanup; sleep 86400; done"]
+    restart: unless-stopped
+    environment: *app-environment
+    depends_on:
+      db:
+        condition: service_healthy
+    volumes:
+      - app-storage:/app/storage
 
   db:
     image: postgres:16-alpine

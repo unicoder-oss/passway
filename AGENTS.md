@@ -29,6 +29,3 @@
 - `Config` requires `APP_ENV`, `APP_URL`, and `DB_DRIVER`. `.env` can be absent only if those are supplied by the OS environment.
 - WebAuthn/passkey work depends on `WEBAUTHN_RP_ID` and `WEBAUTHN_ORIGIN` matching the real host/origin.
 - Session cookie security is env-driven in `SessionService`; local HTTP work may need `SESSION_COOKIE_SECURE=false`.
-
-## Known Stale References
-- `composer.json`, `.env.example`, and some comments still mention `install.php`, but that file is not in the repo. Do not assume an installer exists; use `.env`, `composer install`, and migration commands directly.

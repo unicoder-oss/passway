@@ -1,4 +1,4 @@
-# Passway
+# Passway [WIP]
 
 Languages: English | [Русский](README.ru.md)
 
@@ -65,6 +65,9 @@ docker compose up --build
 ```text
 http://localhost:8000/setup
 ```
+
+> [!NOTE]
+> Scheduled secret rotation and audit log cleanup require periodic background runs. The example `docker-compose.yml` starts separate scheduler services for this: `scheduler-rotate` runs `php bin/rotate.php` every 30 seconds, and `scheduler-maintenance` runs `php bin/maintenance.php cleanup` once per day. If you run Passway directly on a host, configure cron or systemd timers manually.
 
 ## Configuration
 
