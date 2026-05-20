@@ -41,3 +41,4 @@ phpunit.xml
 /docker/data/
 
 .temp/
+REDESIGN_STATUS.md

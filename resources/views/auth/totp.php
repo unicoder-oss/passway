@@ -5,6 +5,7 @@
         <p class="muted" style="margin:0 0 1.25rem;"><?= e(__('ui.auth.totp.subtitle')) ?></p>
         <?php if (!empty($error)): ?><div class="error" style="margin-bottom:1rem;"><?= e((string) $error) ?></div><?php endif; ?>
         <form method="POST" action="/auth/totp/verify" class="grid">
+            <?php if (!empty($returnTo)): ?><input type="hidden" name="return_to" value="<?= e((string) $returnTo) ?>"><?php endif; ?>
             <div>
                 <label for="code"><?= e(__('ui.auth.totp.code')) ?></label>
                 <input id="code" type="text" name="code" inputmode="numeric" autocomplete="one-time-code" required>

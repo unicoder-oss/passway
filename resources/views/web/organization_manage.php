@@ -1,16 +1,14 @@
-<div class="topbar">
-    <div>
-        <div class="brand"><?= e(__('ui.app.name')) ?></div>
-        <div class="muted" style="margin-top:.35rem;"><?= e(__('ui.organization_manage.manage', ['organization' => $organization->name])) ?></div>
-    </div>
-    <div class="topnav">
-        <a class="button secondary" href="/?org=<?= e($organization->uuid) ?>"><?= e(__('ui.app.back_to_dashboard')) ?></a>
-        <a class="button secondary" href="/organizations/<?= e($organization->uuid) ?>/audit"><?= e(__('ui.organization_manage.audit_log')) ?></a>
-        <a class="button secondary" href="/organizations/<?= e($organization->uuid) ?>/api-keys"><?= e(__('ui.organization_manage.api_keys')) ?></a>
-        <a class="button secondary" href="/organizations/<?= e($organization->uuid) ?>/integrations"><?= e(__('ui.organization_manage.integrations')) ?></a>
-        <a class="button secondary" href="/auth/logout"><?= e(__('ui.app.logout')) ?></a>
-    </div>
-</div>
+<?php
+$topbarTitle = __('ui.organization_manage.manage', ['organization' => $organization->name]);
+$topbarLinks = [
+    ['href' => '/organizations/' . $organization->uuid, 'label' => __('ui.app.back_to_dashboard')],
+    ['href' => '/organizations/' . $organization->uuid . '/audit', 'label' => __('ui.organization_manage.audit_log')],
+    ['href' => '/organizations/' . $organization->uuid . '/api-keys', 'label' => __('ui.organization_manage.api_keys')],
+    ['href' => '/organizations/' . $organization->uuid . '/integrations', 'label' => __('ui.organization_manage.integrations')],
+    ['href' => '/auth/logout', 'label' => __('ui.app.logout')],
+];
+require base_path('resources/views/partials/auth_topbar.php');
+?>
 
 <?php if (!empty($queryError)): ?><div class="error" style="margin-bottom:1rem;"><?= e((string) $queryError) ?></div><?php endif; ?>
 
@@ -19,7 +17,7 @@
         <h2 style="margin:0 0 1rem;"><?= e(__('ui.organization_manage.members')) ?></h2>
         <div class="grid" style="gap:.8rem;">
             <?php foreach ($members as $member): $memberUser = \Passway\Models\User::findById($member->userId); ?>
-                <div class="panel" style="padding:1rem; background:rgba(15,23,42,.55); display:grid; gap:.75rem;">
+                <div class="panel panel-muted" style="padding:1rem; display:grid; gap:.75rem;">
                     <div>
                         <div style="font-weight:700;"><?= e($memberUser?->email ?? __('ui.organization_manage.unknown_user')) ?></div>
                         <div class="muted" style="font-size:.92rem;"><?= e(__('ui.organization_manage.joined', ['date' => $member->joinedAt])) ?></div>
@@ -68,7 +66,7 @@
             <h3 style="margin:0 0 .75rem;"><?= e(__('ui.organization_manage.active_invites')) ?></h3>
             <div class="grid" style="gap:.75rem;">
                 <?php foreach ($invites as $invite): ?>
-                    <div class="panel" style="padding:1rem; background:rgba(15,23,42,.55);">
+                    <div class="panel panel-muted" style="padding:1rem;">
                         <div style="font-weight:700;"><?= e(__('ui.organization_manage.role')) ?>: <?= e($invite->role) ?></div>
                         <div class="muted" style="font-size:.92rem;"><?= e(__('ui.organization_manage.expires', ['date' => $invite->expiresAt])) ?></div>
                         <div class="muted" style="font-size:.92rem; margin:.35rem 0;"><?= e(__('ui.organization_manage.link', ['link' => '/invite/' . $invite->token])) ?></div>

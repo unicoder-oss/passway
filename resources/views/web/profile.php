@@ -1,13 +1,11 @@
-<div class="topbar">
-    <div>
-        <div class="brand"><?= e(__('ui.app.name')) ?></div>
-        <div class="muted" style="margin-top:.35rem;"><?= e(__('ui.profile.subtitle')) ?></div>
-    </div>
-    <div class="topnav">
-        <a class="button secondary" href="/"><?= e(__('ui.profile.dashboard')) ?></a>
-        <a class="button secondary" href="/auth/logout"><?= e(__('ui.app.logout')) ?></a>
-    </div>
-</div>
+<?php
+$topbarTitle = __('ui.profile.subtitle');
+$topbarLinks = [
+    ['href' => '/', 'label' => __('ui.profile.dashboard')],
+    ['href' => '/auth/logout', 'label' => __('ui.app.logout')],
+];
+require base_path('resources/views/partials/auth_topbar.php');
+?>
 
 <?php if (!empty($queryError)): ?><div class="error" style="margin-bottom:1rem;"><?= e((string) $queryError) ?></div><?php endif; ?>
 <?php if (!empty($querySuccess)): ?><div class="success" style="margin-bottom:1rem;"><?= e((string) $querySuccess) ?></div><?php endif; ?>
@@ -19,7 +17,7 @@
             <p class="muted" style="margin:.4rem 0 0;"><?= e(__('ui.profile.created_last_login', ['created_at' => $user->createdAt, 'last_login_at' => (string) ($user->lastLoginAt ?? __('ui.app.never'))])) ?></p>
         </div>
 
-        <div class="panel" style="padding:1rem; background:rgba(15,23,42,.55);">
+        <div class="panel panel-muted" style="padding:1rem;">
             <h3 style="margin:0 0 .75rem;"><?= e(__('ui.profile.two_factor')) ?></h3>
             <?php if ($user->totpEnabled): ?>
                 <p class="muted"><?= e(__('ui.profile.totp_enabled')) ?></p>

@@ -170,6 +170,7 @@ final class SetupService
                 'uuid'           => generate_uuid(),
                 'email'          => $email,
                 'password_hash'  => $passwordHash,
+                'avatar_color'   => generate_avatar_color(),
                 'totp_enabled'   => 0,
                 'is_active'      => 1,
                 'email_verified' => 1,

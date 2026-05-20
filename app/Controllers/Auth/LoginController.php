@@ -40,6 +40,7 @@ final class LoginController
                 'error' => $request->query('error'),
                 'success' => $request->query('success'),
                 'email' => $request->query('email', ''),
+                'returnTo' => $request->query('return_to', ''),
             ]));
     }
 
@@ -58,6 +59,7 @@ final class LoginController
 
         $email    = \trim((string) ($request->input('email') ?? ''));
         $password = (string) ($request->input('password') ?? '');
+        $returnTo = $this->normalizeReturnTo((string) ($request->input('return_to') ?? ''));
 
         if ($email === '' || $password === '') {
             return Response::validationError([
@@ -89,6 +91,7 @@ final class LoginController
 
         // TOTP требуется — клиент перенаправит на /auth/totp/verify
         if ($result['status'] === 'totp_required') {
+            $this->storeReturnTo($returnTo);
             if (!$request->expectsJson() && !$request->isApi()) {
                 return Response::redirect('/auth/totp/verify');
             }
@@ -105,7 +108,7 @@ final class LoginController
         $user = $result['user'];
 
         if (!$request->expectsJson() && !$request->isApi()) {
-            return Response::redirect('/');
+            return Response::redirect($returnTo !== null ? $returnTo : '/');
         }
 
         return Response::success([
@@ -117,6 +120,30 @@ final class LoginController
                 'email_verified'=> $user->emailVerified,
             ],
         ]);
+    }
+
+    private function normalizeReturnTo(string $returnTo): ?string
+    {
+        $returnTo = trim($returnTo);
+        if ($returnTo === '' || !str_starts_with($returnTo, '/')) {
+            return null;
+        }
+
+        return $returnTo;
+    }
+
+    private function storeReturnTo(?string $returnTo): void
+    {
+        if (session_status() === PHP_SESSION_NONE) {
+            session_start();
+        }
+
+        if ($returnTo === null) {
+            unset($_SESSION['auth_return_to']);
+            return;
+        }
+
+        $_SESSION['auth_return_to'] = $returnTo;
     }
 
     // ------------------------------------------------------------------ //

@@ -58,53 +58,39 @@ final class WebController
         }
 
         $user = AuthContext::requireUser();
-        $orgs = $this->organizationService->getForUser($user->id);
-        $currentOrg = $this->resolveCurrentOrganization($request, $orgs);
-        $directories = [];
-        $currentDir = null;
-        $secrets = [];
-        $error = null;
-
-        if ($currentOrg !== null) {
-            try {
-                $directories = $this->directoryService->listAll($currentOrg->id, $user->id);
-                $dirUuid = $request->query('dir');
-                if (\is_string($dirUuid) && $dirUuid !== '') {
-                    $currentDir = $this->directoryService->findInOrg($dirUuid, $currentOrg->id, $user->id);
-                    $secrets = $this->secretService->listInDirectory($currentDir->uuid, $currentOrg->id, $user->id);
-                }
-            } catch (AuthException | \RuntimeException $e) {
-                $error = $e->getMessage();
-            }
-        }
-
-        return $this->html($this->view->render('web/home', [
-            'title' => __('ui.titles.home'),
-            'user' => $user,
-            'organizations' => $orgs,
-            'currentOrg' => $currentOrg,
-            'directories' => $directories,
-            'currentDir' => $currentDir,
-            'secrets' => $secrets,
-            'templates' => $currentOrg !== null ? $this->templateService->listAvailable($currentOrg->id) : [],
-            'integrations' => $currentOrg !== null ? $this->listActiveIntegrationsForOrg($currentOrg->id) : [],
-            'error' => $error,
-            'queryError' => $request->query('error'),
-        ]));
+        return $this->renderHome($request, $user);
     }
 
     public function createOrganization(Request $request): Response
     {
+        return Response::redirect('/?error=' . \urlencode(__('ui.home.use_create_org_invite')));
+    }
+
+    public function createOrganizationInvite(Request $request): Response
+    {
         $user = AuthContext::requireUser();
-        $name = \trim((string) ($request->input('name') ?? ''));
+
+        if (!$this->isSetupAdministrator($user)) {
+            return Response::redirect('/?error=' . \urlencode(__('ui.messages.access_denied')));
+        }
+
+        $ttlSeconds = (int) ($request->input('ttl') ?? OrganizationService::DEFAULT_INVITE_TTL);
+        if ($ttlSeconds < 60 || $ttlSeconds > 7 * 86400) {
+            $ttlSeconds = OrganizationService::DEFAULT_INVITE_TTL;
+        }
 
         try {
-            $org = $this->organizationService->create($name, $user->id);
+            $invite = $this->inviteService->createOrgInvite($user->id, $ttlSeconds);
         } catch (\Throwable $e) {
             return Response::redirect('/?error=' . \urlencode($e->getMessage()));
         }
 
-        return Response::redirect('/?org=' . \urlencode($org->uuid));
+        return $this->renderHome(
+            $request,
+            $user,
+            success: __('ui.home.organization_invite_created'),
+            createdOrganizationInvite: $invite,
+        );
     }
 
     public function createDirectory(Request $request): Response
@@ -118,10 +104,10 @@ final class WebController
         try {
             $dir = $this->directoryService->create($org->id, $parentUuid, $name, $user->id);
         } catch (\Throwable $e) {
-            return Response::redirect('/?org=' . \urlencode($org->uuid) . '&error=' . \urlencode($e->getMessage()));
+            return Response::redirect($this->organizationUrl($org->uuid, error: $e->getMessage()));
         }
 
-        return Response::redirect('/?org=' . \urlencode($org->uuid) . '&dir=' . \urlencode($dir->uuid));
+        return Response::redirect($this->organizationUrl($org->uuid, $dir->uuid));
     }
 
     public function createSecret(Request $request): Response
@@ -160,13 +146,71 @@ final class WebController
                 );
             }
         } catch (\Throwable $e) {
-            return Response::redirect('/?org=' . \urlencode($org->uuid) . '&dir=' . \urlencode($dirUuid) . '&error=' . \urlencode($e->getMessage()));
+            return Response::redirect($this->organizationUrl($org->uuid, $dirUuid, $e->getMessage()));
         }
 
-        return Response::redirect('/?org=' . \urlencode($org->uuid) . '&dir=' . \urlencode($dirUuid));
+        return Response::redirect($this->organizationUrl($org->uuid, $dirUuid));
     }
 
     public function showOrganization(Request $request): Response
+    {
+        $user = AuthContext::requireUser();
+        $org = $this->findOrgOrFail($request);
+
+        if (!$this->organizationService->hasPermission($org->id, $user->id, 'observer')) {
+            return Response::redirect('/?error=' . \urlencode(__('ui.messages.access_denied')));
+        }
+
+        $currentDir = null;
+        $directories = [];
+        $secrets = [];
+        $searchDirectories = [];
+        $searchSecrets = [];
+        $search = \trim((string) ($request->query('q') ?? ''));
+
+        try {
+            $dirUuid = $request->query('dir');
+            $dirUuid = \is_string($dirUuid) && $dirUuid !== '' ? $dirUuid : null;
+
+            if ($dirUuid !== null) {
+                $currentDir = $this->directoryService->findInOrg($dirUuid, $org->id, $user->id);
+                $directories = $this->directoryService->listChildren($org->id, $currentDir->uuid, $user->id);
+                $secrets = $this->secretService->listInDirectory($currentDir->uuid, $org->id, $user->id);
+            } else {
+                $directories = $this->directoryService->listChildren($org->id, null, $user->id);
+            }
+        } catch (AuthException | \RuntimeException $e) {
+            return Response::redirect($this->organizationUrl($org->uuid, error: $e->getMessage()));
+        }
+
+        if ($search !== '') {
+            ['directories' => $searchDirectories, 'secrets' => $searchSecrets] = $this->searchOrganizationSubtree(
+                $org,
+                $currentDir,
+                $search,
+            );
+        }
+
+        return $this->html($this->view->render('web/organization', [
+            'title' => $org->name,
+            'user' => $user,
+            'organization' => $org,
+            'currentDir' => $currentDir,
+            'directories' => $directories,
+            'secrets' => $secrets,
+            'searchDirectories' => $searchDirectories,
+            'searchSecrets' => $searchSecrets,
+            'templates' => $this->templateService->listAvailable($org->id),
+            'integrations' => $this->listActiveIntegrationsForOrg($org->id),
+            'canManageOrganization' => $this->organizationService->hasPermission($org->id, $user->id, 'admin'),
+            'canViewAudit' => $this->organizationService->hasPermission($org->id, $user->id, 'admin'),
+            'canEditContent' => $this->organizationService->hasPermission($org->id, $user->id, 'moderator'),
+            'queryError' => $request->query('error'),
+            'search' => $search,
+        ]));
+    }
+
+    public function showOrganizationManage(Request $request): Response
     {
         $user = AuthContext::requireUser();
         $org = $this->findOrgOrFail($request);
@@ -266,7 +310,7 @@ final class WebController
                 'offset' => $request->query('offset', 0),
             ]);
         } catch (\Throwable $e) {
-            return Response::redirect('/?org=' . \urlencode($org->uuid) . '&error=' . \urlencode($e->getMessage()));
+            return Response::redirect($this->organizationUrl($org->uuid, error: $e->getMessage()));
         }
 
         return $this->html($this->view->render('web/audit', [
@@ -741,7 +785,7 @@ final class WebController
             ['secret' => $secret, 'value' => $value] = $this->secretService->get($secUuid, $org->id, $user->id);
             $versions = $this->secretService->listVersions($secUuid, $org->id, $user->id);
         } catch (AuthException | \RuntimeException | \Passway\Exceptions\DecryptionException $e) {
-            return Response::redirect('/?org=' . \urlencode($org->uuid) . '&dir=' . \urlencode($dirUuid) . '&error=' . \urlencode($e->getMessage()));
+            return Response::redirect($this->organizationUrl($org->uuid, $dirUuid, $e->getMessage()));
         }
 
         return $this->html($this->view->render('web/secret_show', [
@@ -822,7 +866,7 @@ final class WebController
             return Response::redirect($this->secretUrl($org->uuid, $dirUuid, $secUuid, $e->getMessage()));
         }
 
-        return Response::redirect('/?org=' . \urlencode($org->uuid) . '&dir=' . \urlencode($dirUuid));
+        return Response::redirect($this->organizationUrl($org->uuid, $dirUuid));
     }
 
     public function renameDirectory(Request $request): Response
@@ -835,7 +879,7 @@ final class WebController
         try {
             $this->directoryService->rename($dirUuid, $org->id, $name, $user->id);
         } catch (\Throwable $e) {
-            return Response::redirect('/?org=' . \urlencode($org->uuid) . '&dir=' . \urlencode($dirUuid) . '&error=' . \urlencode($e->getMessage()));
+            return Response::redirect($this->organizationUrl($org->uuid, $dirUuid, $e->getMessage()));
         }
 
         return Response::redirect('/?org=' . \urlencode($org->uuid) . '&dir=' . \urlencode($dirUuid));
@@ -850,10 +894,10 @@ final class WebController
         try {
             $this->directoryService->delete($dirUuid, $org->id, $user->id);
         } catch (\Throwable $e) {
-            return Response::redirect('/?org=' . \urlencode($org->uuid) . '&dir=' . \urlencode($dirUuid) . '&error=' . \urlencode($e->getMessage()));
+            return Response::redirect($this->organizationUrl($org->uuid, $dirUuid, $e->getMessage()));
         }
 
-        return Response::redirect('/?org=' . \urlencode($org->uuid));
+        return Response::redirect($this->organizationUrl($org->uuid));
     }
 
     private function resolveCurrentOrganization(Request $request, array $orgs): ?Organization
@@ -868,6 +912,162 @@ final class WebController
         }
 
         return $orgs[0] ?? null;
+    }
+
+    private function renderHome(
+        Request $request,
+        User $user,
+        ?string $success = null,
+        ?InviteLink $createdOrganizationInvite = null,
+    ): Response {
+        $orgs = $this->organizationService->getForUser($user->id);
+        $search = \trim((string) ($request->query('q') ?? ''));
+        if ($search !== '') {
+            $orgs = \array_values(\array_filter(
+                $orgs,
+                static fn(Organization $org): bool => mb_stripos($org->name, $search, 0, 'UTF-8') !== false,
+            ));
+        }
+
+        $currentOrg = $this->resolveCurrentOrganization($request, $orgs);
+
+        return $this->html($this->view->render('web/home', [
+            'title' => __('ui.titles.home'),
+            'user' => $user,
+            'organizations' => $orgs,
+            'organizationCards' => $this->buildHomeOrganizationCards($orgs),
+            'currentOrg' => $currentOrg,
+            'queryError' => $request->query('error'),
+            'querySuccess' => $success,
+            'isSetupAdmin' => $this->isSetupAdministrator($user),
+            'createdOrganizationInvite' => $createdOrganizationInvite,
+            'search' => $search,
+        ]));
+    }
+
+    /**
+     * @param Organization[] $organizations
+     * @return array<int, array{organization: Organization, directories: int, secrets: int, members: int}>
+     */
+    private function buildHomeOrganizationCards(array $organizations): array
+    {
+        $cards = [];
+        if ($organizations === []) {
+            return $cards;
+        }
+
+        $orgIds = array_map(static fn(Organization $organization): int => (int) $organization->id, $organizations);
+        $placeholders = implode(', ', array_fill(0, count($orgIds), '?'));
+        $db = Database::getInstance();
+
+        $directoryCounts = [];
+        foreach ($db->fetchAll(
+            'SELECT organization_id, COUNT(*) AS total FROM directories WHERE deleted_at IS NULL AND organization_id IN (' . $placeholders . ') GROUP BY organization_id',
+            $orgIds,
+        ) as $row) {
+            $directoryCounts[(string) $row['organization_id']] = (int) $row['total'];
+        }
+
+        $secretCounts = [];
+        foreach ($db->fetchAll(
+            'SELECT organization_id, COUNT(*) AS total FROM secrets WHERE deleted_at IS NULL AND organization_id IN (' . $placeholders . ') GROUP BY organization_id',
+            $orgIds,
+        ) as $row) {
+            $secretCounts[(string) $row['organization_id']] = (int) $row['total'];
+        }
+
+        $memberCounts = [];
+        foreach ($db->fetchAll(
+            'SELECT organization_id, COUNT(*) AS total FROM organization_members WHERE organization_id IN (' . $placeholders . ') GROUP BY organization_id',
+            $orgIds,
+        ) as $row) {
+            $memberCounts[(string) $row['organization_id']] = (int) $row['total'];
+        }
+
+        foreach ($organizations as $organization) {
+            $cards[] = [
+                'organization' => $organization,
+                'directories' => $directoryCounts[$organization->id] ?? 0,
+                'secrets' => $secretCounts[$organization->id] ?? 0,
+                'members' => $memberCounts[$organization->id] ?? 0,
+            ];
+        }
+
+        return $cards;
+    }
+
+    /**
+     * @return array{directories: array<int, array{directory: Directory, path: string}>, secrets: array<int, array{secret: Secret, directory: Directory, path: string}>}
+     */
+    private function searchOrganizationSubtree(Organization $organization, ?Directory $currentDir, string $search): array
+    {
+        $search = mb_strtolower($search, 'UTF-8');
+        $allDirectories = Directory::findByOrgId($organization->id);
+        $directoryMap = [];
+        foreach ($allDirectories as $directory) {
+            $directoryMap[$directory->id] = $directory;
+        }
+
+        $basePath = $currentDir?->path;
+        $searchDirectories = [];
+        $searchSecrets = [];
+
+        foreach ($allDirectories as $directory) {
+            if ($basePath !== null && $directory->path !== $basePath && !str_starts_with($directory->path, $basePath . '/')) {
+                continue;
+            }
+            if (mb_stripos($directory->name, $search, 0, 'UTF-8') !== false) {
+                $searchDirectories[] = [
+                    'directory' => $directory,
+                    'path' => $this->humanDirectoryPath($directory, $directoryMap),
+                ];
+            }
+        }
+
+        $secretRows = Database::getInstance()->fetchAll(
+            'SELECT s.* FROM secrets s JOIN directories d ON d.id = s.directory_id WHERE s.organization_id = ? AND s.deleted_at IS NULL AND d.deleted_at IS NULL ORDER BY s.name',
+            [(int) $organization->id],
+        );
+
+        foreach ($secretRows as $row) {
+            $secret = Secret::fromRow($row);
+            $directory = $directoryMap[$secret->directoryId] ?? null;
+            if ($directory === null) {
+                continue;
+            }
+            if ($basePath !== null && $directory->path !== $basePath && !str_starts_with($directory->path, $basePath . '/')) {
+                continue;
+            }
+            if (mb_stripos($secret->name, $search, 0, 'UTF-8') !== false) {
+                $searchSecrets[] = [
+                    'secret' => $secret,
+                    'directory' => $directory,
+                    'path' => $this->humanDirectoryPath($directory, $directoryMap),
+                ];
+            }
+        }
+
+        return [
+            'directories' => $searchDirectories,
+            'secrets' => $searchSecrets,
+        ];
+    }
+
+    /**
+     * @param array<string, Directory> $directoryMap
+     */
+    private function humanDirectoryPath(Directory $directory, array $directoryMap): string
+    {
+        $segments = [$directory->name];
+        $parentId = $directory->parentId;
+
+        while ($parentId !== null && isset($directoryMap[$parentId])) {
+            $parent = $directoryMap[$parentId];
+            array_unshift($segments, $parent->name);
+            $parentId = $parent->parentId;
+        }
+
+        return implode(' / ', $segments);
     }
 
     /** @return array<int, array{value: string, label: string}> */
@@ -1069,6 +1269,24 @@ final class WebController
 
         if ($error !== null) {
             $url .= '?error=' . \urlencode($error);
+        }
+
+        return $url;
+    }
+
+    private function organizationUrl(string $orgUuid, ?string $dirUuid = null, ?string $error = null): string
+    {
+        $url = '/organizations/' . \urlencode($orgUuid);
+        $params = [];
+
+        if ($dirUuid !== null && $dirUuid !== '') {
+            $params['dir'] = $dirUuid;
+        }
+        if ($error !== null && $error !== '') {
+            $params['error'] = $error;
+        }
+        if ($params !== []) {
+            $url .= '?' . http_build_query($params);
         }
 
         return $url;

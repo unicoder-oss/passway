@@ -81,6 +81,7 @@ $router->group('/auth', function (\Passway\Core\Router $router) {
 });
 
 $router->post('/organizations', [WebController::class, 'createOrganization'], [AuthMiddleware::class]);
+$router->post('/organization-invites', [WebController::class, 'createOrganizationInvite'], [AuthMiddleware::class]);
 $router->get('/profile', [WebController::class, 'showProfile'], [AuthMiddleware::class]);
 $router->post('/profile/totp/start', [WebController::class, 'startTotpSetup'], [AuthMiddleware::class]);
 $router->post('/profile/totp/enable', [WebController::class, 'enableTotp'], [AuthMiddleware::class]);
@@ -91,7 +92,8 @@ $router->post('/rotation-services', [WebController::class, 'createRotationServic
 $router->post('/rotation-services/:svcUuid/update', [WebController::class, 'updateRotationService'], [AuthMiddleware::class]);
 $router->post('/rotation-services/:svcUuid/verify', [WebController::class, 'verifyRotationService'], [AuthMiddleware::class]);
 $router->post('/rotation-services/:svcUuid/delete', [WebController::class, 'deleteRotationService'], [AuthMiddleware::class]);
-$router->get('/organizations/:uuid/manage', [WebController::class, 'showOrganization'], [AuthMiddleware::class]);
+$router->get('/organizations/:uuid', [WebController::class, 'showOrganization'], [AuthMiddleware::class]);
+$router->get('/organizations/:uuid/manage', [WebController::class, 'showOrganizationManage'], [AuthMiddleware::class]);
 $router->get('/organizations/:uuid/api-keys', [WebController::class, 'showApiKeys'], [AuthMiddleware::class]);
 $router->post('/organizations/:uuid/api-keys', [WebController::class, 'createApiKey'], [AuthMiddleware::class]);
 $router->get('/organizations/:uuid/api-keys/:keyUuid/permissions', [WebController::class, 'showApiKeyPermissions'], [AuthMiddleware::class]);
@@ -122,3 +124,7 @@ $router->post('/organizations/:uuid/directories/:dirUuid/secrets/:secUuid/delete
 
 $router->get('/invite/:token',  [InviteController::class, 'showAccept']);
 $router->post('/invite/:token', [InviteController::class, 'accept']);
+$router->get('/invite/:token/register', [InviteController::class, 'showRegister']);
+$router->post('/invite/:token/register', [InviteController::class, 'register']);
+$router->get('/invite/:token/create-organization', [InviteController::class, 'showCreateOrganization']);
+$router->post('/invite/:token/create-organization', [InviteController::class, 'createOrganizationFromInvite']);

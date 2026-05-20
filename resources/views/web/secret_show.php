@@ -1,13 +1,11 @@
-<div class="topbar">
-    <div>
-        <div class="brand"><?= e(__('ui.app.name')) ?></div>
-        <div class="muted" style="margin-top:.35rem;"><?= e(__('ui.secret.details_for_org', ['organization' => $organization->name])) ?></div>
-    </div>
-    <div class="topnav">
-        <a class="button secondary" href="/?org=<?= e($organization->uuid) ?>&dir=<?= e($directory->uuid) ?>"><?= e(__('ui.secret.back_to_directory')) ?></a>
-        <a class="button secondary" href="/auth/logout"><?= e(__('ui.app.logout')) ?></a>
-    </div>
-</div>
+<?php
+$topbarTitle = __('ui.secret.details_for_org', ['organization' => $organization->name]);
+$topbarLinks = [
+    ['href' => '/organizations/' . $organization->uuid . '?dir=' . $directory->uuid, 'label' => __('ui.secret.back_to_directory')],
+    ['href' => '/auth/logout', 'label' => __('ui.app.logout')],
+];
+require base_path('resources/views/partials/auth_topbar.php');
+?>
 
 <?php if (!empty($error)): ?><div class="error" style="margin-bottom:1rem;"><?= e((string) $error) ?></div><?php endif; ?>
 
@@ -23,7 +21,7 @@
                 <?php if ($selectedIntegration !== null): ?><span class="pill"><?= e(__('ui.secret.integration', ['name' => $selectedIntegration->name])) ?></span><?php endif; ?>
             </div>
         </div>
-        <div class="panel" style="padding:1rem; background:rgba(15,23,42,.55);">
+        <div class="panel panel-muted" style="padding:1rem;">
             <label><?= e(__('ui.secret.current_value')) ?></label>
             <textarea class="mono" rows="8" readonly><?= e($value) ?></textarea>
         </div>

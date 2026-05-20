@@ -33,11 +33,20 @@ final class TotpController
 
     public function showVerify(Request $request): Response
     {
+        $returnTo = null;
+        if (\session_status() === PHP_SESSION_NONE) {
+            \session_start();
+        }
+        if (isset($_SESSION['auth_return_to']) && \is_string($_SESSION['auth_return_to'])) {
+            $returnTo = $_SESSION['auth_return_to'];
+        }
+
         return Response::make(200)
             ->withContentType('text/html; charset=utf-8')
             ->withBody($this->viewService->render('auth/totp', [
                 'title' => __('ui.titles.totp_verify'),
                 'error' => $request->query('error'),
+                'returnTo' => $returnTo,
             ]));
     }
 
@@ -114,8 +123,17 @@ final class TotpController
 
         $this->sessionService->setCookie($result['raw_token']);
 
+        if (\session_status() === PHP_SESSION_NONE) {
+            \session_start();
+        }
+        $returnTo = null;
+        if (isset($_SESSION['auth_return_to']) && \is_string($_SESSION['auth_return_to'])) {
+            $returnTo = $_SESSION['auth_return_to'];
+        }
+        unset($_SESSION['auth_return_to']);
+
         if (!$request->expectsJson() && !$request->isApi()) {
-            return Response::redirect('/');
+            return Response::redirect($returnTo !== null && str_starts_with($returnTo, '/') ? $returnTo : '/');
         }
 
         return Response::success([

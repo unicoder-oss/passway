@@ -15,6 +15,8 @@ final class Organization
         public readonly string  $id,
         public readonly string  $uuid,
         public readonly string  $name,
+        public readonly ?string $description,
+        public readonly ?string $avatarPath,
         public readonly string  $slug,
         public readonly string  $ownerId,
         public readonly bool    $isActive,
@@ -34,6 +36,10 @@ final class Organization
             id:        (string) $row['id'],
             uuid:      (string) $row['uuid'],
             name:      (string) $row['name'],
+            description: isset($row['description']) && $row['description'] !== null
+                ? (string) $row['description'] : null,
+            avatarPath: isset($row['avatar_path']) && $row['avatar_path'] !== null
+                ? (string) $row['avatar_path'] : null,
             slug:      (string) $row['slug'],
             ownerId:   (string) $row['owner_id'],
             isActive:  (bool) ($row['is_active'] ?? true),

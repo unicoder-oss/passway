@@ -411,6 +411,9 @@ final class Application
             fn($c) => new \Passway\Controllers\InviteController(
                 $c->make(\Passway\Services\InviteService::class),
                 $c->make(\Passway\Services\OrganizationService::class),
+                $c->make(\Passway\Services\HashingService::class),
+                $c->make(\Passway\Services\SessionService::class),
+                $c->make(\Passway\Services\SetupService::class),
             )
         );
     }

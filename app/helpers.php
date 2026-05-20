@@ -56,6 +56,13 @@ if (!function_exists('storage_path')) {
     }
 }
 
+if (!function_exists('public_path')) {
+    function public_path(string $path = ''): string
+    {
+        return base_path('public' . ($path ? DIRECTORY_SEPARATOR . ltrim($path, DIRECTORY_SEPARATOR) : ''));
+    }
+}
+
 if (!function_exists('generate_uuid')) {
     /**
      * Генерировать UUID v4.
@@ -76,6 +83,64 @@ if (!function_exists('now')) {
     function now(): \DateTimeImmutable
     {
         return new \DateTimeImmutable('now', new \DateTimeZone('UTC'));
+    }
+}
+
+if (!function_exists('avatar_fallback_color')) {
+    function avatar_fallback_color(): string
+    {
+        return '#6b7280';
+    }
+}
+
+if (!function_exists('generate_avatar_color')) {
+    function generate_avatar_color(): string
+    {
+        $palette = [
+            '#475569',
+            '#0f766e',
+            '#1d4ed8',
+            '#7c3aed',
+            '#b45309',
+            '#be123c',
+            '#166534',
+            '#374151',
+        ];
+
+        return $palette[random_int(0, count($palette) - 1)] ?? avatar_fallback_color();
+    }
+}
+
+if (!function_exists('display_name_for_user')) {
+    function display_name_for_user(object $user): string
+    {
+        $nickname = isset($user->nickname) ? trim((string) $user->nickname) : '';
+        if ($nickname !== '') {
+            return $nickname;
+        }
+
+        return (string) ($user->email ?? 'user');
+    }
+}
+
+if (!function_exists('avatar_initial')) {
+    function avatar_initial(?string $value): string
+    {
+        $value = trim((string) $value);
+        if ($value === '') {
+            return '?';
+        }
+
+        $initial = mb_substr($value, 0, 1, 'UTF-8');
+        return mb_strtoupper($initial, 'UTF-8');
+    }
+}
+
+if (!function_exists('avatar_color_for_user')) {
+    function avatar_color_for_user(object $user): string
+    {
+        $color = isset($user->avatarColor) ? trim((string) $user->avatarColor) : '';
+        return $color !== '' ? $color : avatar_fallback_color();
     }
 }
 

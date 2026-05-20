@@ -179,6 +179,37 @@ final class InviteService
         return $org;
     }
 
+    public function acceptCreateOrg(string $token, string $acceptorUserId, string $name): Organization
+    {
+        $invite = $this->findValid($token);
+
+        if ($invite->type !== InviteLink::TYPE_CREATE_ORG) {
+            throw new AuthException(__('ui.backend.invite.wrong_type_create_org'));
+        }
+
+        $org = null;
+        Database::getInstance()->transaction(function () use ($invite, $acceptorUserId, $name, &$org): void {
+            $org = $this->organizationService->create($name, $acceptorUserId);
+            $this->markUsed($invite->id, $acceptorUserId);
+        });
+
+        if (!$org instanceof Organization) {
+            throw new \RuntimeException(__('ui.backend.organization.failed_load_created'));
+        }
+
+        $this->getAuditService()->record(
+            action: 'invite.accept',
+            organizationId: $org->id,
+            userId: $acceptorUserId,
+            resourceType: 'invite',
+            resourceId: $invite->id,
+            resourceUuid: $invite->uuid,
+            details: ['type' => InviteLink::TYPE_CREATE_ORG],
+        );
+
+        return $org;
+    }
+
     // ------------------------------------------------------------------ //
     //  Отзыв инвайта                                                      //
     // ------------------------------------------------------------------ //

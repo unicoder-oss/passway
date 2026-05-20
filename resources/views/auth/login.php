@@ -6,6 +6,7 @@
         <?php if (!empty($success)): ?><div class="success" style="margin-bottom:1rem;"><?= e((string) $success) ?></div><?php endif; ?>
         <?php if (!empty($error)): ?><div class="error" style="margin-bottom:1rem;"><?= e((string) $error) ?></div><?php endif; ?>
         <form method="POST" action="/auth/login" class="grid">
+            <?php if (!empty($returnTo)): ?><input type="hidden" name="return_to" value="<?= e((string) $returnTo) ?>"><?php endif; ?>
             <div>
                 <label for="email"><?= e(__('ui.auth.login.email')) ?></label>
                 <input id="email" type="email" name="email" value="<?= e((string) ($email ?? '')) ?>" autocomplete="email" required>
