@@ -35,6 +35,8 @@ use Passway\Services\ViewService;
 
 final class WebController
 {
+    private const ROOT_SECRET_DIRECTORY_NAME = '__passway_root_secrets__';
+
     public function __construct(
         private readonly ViewService $view,
         private readonly OrganizationService $organizationService,
@@ -116,6 +118,25 @@ final class WebController
         $user = AuthContext::requireUser();
         $org = $this->findOrgOrFail($request);
         $dirUuid = (string) $request->routeParam('dirUuid');
+        return $this->handleSecretCreate($request, $org, $user, $dirUuid, $this->organizationUrl($org->uuid, $dirUuid));
+    }
+
+    public function createRootSecret(Request $request): Response
+    {
+        $user = AuthContext::requireUser();
+        $org = $this->findOrgOrFail($request);
+
+        try {
+            $rootDirectory = $this->getOrCreateRootSecretDirectory($org, $user);
+        } catch (\Throwable $e) {
+            return Response::redirect($this->organizationUrl($org->uuid, error: $e->getMessage()));
+        }
+
+        return $this->handleSecretCreate($request, $org, $user, $rootDirectory->uuid, $this->organizationUrl($org->uuid));
+    }
+
+    private function handleSecretCreate(Request $request, Organization $org, User $user, string $dirUuid, string $successRedirect): Response
+    {
         $name = \trim((string) ($request->input('name') ?? ''));
         $type = \trim((string) ($request->input('type') ?? 'static'));
         $value = (string) ($request->input('value') ?? '');
@@ -147,10 +168,10 @@ final class WebController
                 );
             }
         } catch (\Throwable $e) {
-            return Response::redirect($this->organizationUrl($org->uuid, $dirUuid, $e->getMessage()));
+            return Response::redirect($this->organizationUrl($org->uuid, $this->isRootSecretDirectoryUuid($org, $dirUuid) ? null : $dirUuid, $e->getMessage()));
         }
 
-        return Response::redirect($this->organizationUrl($org->uuid, $dirUuid));
+        return Response::redirect($successRedirect);
     }
 
     public function showOrganization(Request $request): Response
@@ -175,10 +196,14 @@ final class WebController
 
             if ($dirUuid !== null) {
                 $currentDir = $this->directoryService->findInOrg($dirUuid, $org->id, $user->id);
-                $directories = $this->directoryService->listChildren($org->id, $currentDir->uuid, $user->id);
+                $directories = $this->filterVisibleDirectories($this->directoryService->listChildren($org->id, $currentDir->uuid, $user->id));
                 $secrets = $this->secretService->listInDirectory($currentDir->uuid, $org->id, $user->id);
             } else {
-                $directories = $this->directoryService->listChildren($org->id, null, $user->id);
+                $directories = $this->filterVisibleDirectories($this->directoryService->listChildren($org->id, null, $user->id));
+                $rootSecretDirectory = $this->findRootSecretDirectory($org->id);
+                if ($rootSecretDirectory !== null) {
+                    $secrets = $this->secretService->listInDirectory($rootSecretDirectory->uuid, $org->id, $user->id);
+                }
             }
         } catch (AuthException | \RuntimeException $e) {
             return Response::redirect($this->organizationUrl($org->uuid, error: $e->getMessage()));
@@ -197,6 +222,8 @@ final class WebController
             'user' => $user,
             'organization' => $org,
             'currentDir' => $currentDir,
+            'currentDirStats' => $currentDir !== null ? $this->buildCurrentDirectoryStats($currentDir) : null,
+            'rootSecretDirectory' => $this->findRootSecretDirectory($org->id),
             'directories' => $directories,
             'secrets' => $secrets,
             'searchDirectories' => $searchDirectories,
@@ -231,7 +258,51 @@ final class WebController
             'invites' => $invites,
             'currentRole' => $this->organizationService->getMemberRole($org->id, $user->id),
             'queryError' => $request->query('error'),
+            'querySuccess' => $request->query('success'),
+            'canManageSettings' => $this->organizationService->hasPermission($org->id, $user->id, 'admin'),
         ]));
+    }
+
+    public function updateOrganizationSettings(Request $request): Response
+    {
+        $user = AuthContext::requireUser();
+        $org = $this->findOrgOrFail($request);
+
+        if (!$this->organizationService->hasPermission($org->id, $user->id, 'admin')) {
+            return Response::redirect('/organizations/' . \urlencode($org->uuid) . '/manage?error=' . \urlencode(__('ui.messages.access_denied')));
+        }
+
+        $description = $request->input('description');
+        $description = \is_string($description) ? \trim($description) : '';
+        $avatarData = \trim((string) ($request->input('avatar_data') ?? ''));
+        $avatarPath = null;
+
+        try {
+            $avatarPath = $this->storeCroppedAvatar($avatarData, 'organizations/avatars', __('ui.organization_manage.avatar_invalid'));
+
+            $update = [
+                'description' => $description !== '' ? $description : null,
+                'updated_at' => now()->format('Y-m-d H:i:s'),
+            ];
+
+            if ($avatarPath !== null) {
+                $update['avatar_path'] = $avatarPath;
+            }
+
+            $org->update($update);
+
+            if ($avatarPath !== null) {
+                $this->deleteUploadedFile($org->avatarPath);
+            }
+        } catch (\Throwable $e) {
+            if ($avatarPath !== null) {
+                $this->deleteUploadedFile($avatarPath);
+            }
+
+            return Response::redirect('/organizations/' . \urlencode($org->uuid) . '/manage?error=' . \urlencode($e->getMessage()));
+        }
+
+        return Response::redirect('/organizations/' . \urlencode($org->uuid) . '/manage?success=' . \urlencode(__('ui.organization_manage.settings_saved')));
     }
 
     public function updateMemberRole(Request $request): Response
@@ -351,6 +422,35 @@ final class WebController
             'queryError' => $request->query('error'),
             'querySuccess' => $request->query('success'),
         ], layout: 'layout'));
+    }
+
+    public function updateProfile(Request $request): Response
+    {
+        $user = AuthContext::requireUser();
+        $avatarData = \trim((string) ($request->input('avatar_data') ?? ''));
+        $avatarPath = null;
+
+        try {
+            $avatarPath = $this->storeCroppedAvatar($avatarData, 'users/avatars', __('ui.profile.avatar_invalid'));
+            if ($avatarPath === null) {
+                throw new \InvalidArgumentException(__('ui.profile.avatar_required'));
+            }
+
+            $user->update([
+                'avatar_path' => $avatarPath,
+                'updated_at' => now()->format('Y-m-d H:i:s'),
+            ]);
+
+            $this->deleteUploadedFile($user->avatarPath);
+        } catch (\Throwable $e) {
+            if ($avatarPath !== null) {
+                $this->deleteUploadedFile($avatarPath);
+            }
+
+            return Response::redirect('/profile?error=' . \urlencode($e->getMessage()));
+        }
+
+        return Response::redirect('/profile?success=' . \urlencode(__('ui.profile.avatar_saved')));
     }
 
     public function startTotpSetup(Request $request): Response
@@ -887,7 +987,7 @@ final class WebController
             return Response::redirect($this->organizationUrl($org->uuid, $dirUuid, $e->getMessage()));
         }
 
-        return Response::redirect('/?org=' . \urlencode($org->uuid) . '&dir=' . \urlencode($dirUuid));
+        return Response::redirect($this->organizationUrl($org->uuid, $dirUuid));
     }
 
     public function deleteDirectory(Request $request): Response
@@ -992,7 +1092,7 @@ final class WebController
         foreach ($organizations as $organization) {
             $cards[] = [
                 'organization' => $organization,
-                'directories' => $directoryCounts[$organization->id] ?? 0,
+                'directories' => max(0, ($directoryCounts[$organization->id] ?? 0) - ($this->findRootSecretDirectory($organization->id) !== null ? 1 : 0)),
                 'secrets' => $secretCounts[$organization->id] ?? 0,
                 'members' => $memberCounts[$organization->id] ?? 0,
             ];
@@ -1021,6 +1121,9 @@ final class WebController
             if ($basePath !== null && $directory->path !== $basePath && !str_starts_with($directory->path, $basePath . '/')) {
                 continue;
             }
+            if ($this->isHiddenDirectory($directory)) {
+                continue;
+            }
             if (mb_stripos($directory->name, $search, 0, 'UTF-8') !== false) {
                 $searchDirectories[] = [
                     'directory' => $directory,
@@ -1040,6 +1143,7 @@ final class WebController
             if ($directory === null) {
                 continue;
             }
+            $isRootSecret = $this->isHiddenDirectory($directory);
             if ($basePath !== null && $directory->path !== $basePath && !str_starts_with($directory->path, $basePath . '/')) {
                 continue;
             }
@@ -1047,7 +1151,7 @@ final class WebController
                 $searchSecrets[] = [
                     'secret' => $secret,
                     'directory' => $directory,
-                    'path' => $this->humanDirectoryPath($directory, $directoryMap),
+                    'path' => $isRootSecret ? __('ui.organization.root_level') : $this->humanDirectoryPath($directory, $directoryMap),
                 ];
             }
         }
@@ -1223,6 +1327,126 @@ final class WebController
         }
 
         return $decoded;
+    }
+
+    /** @return array{directories: int, secrets: int} */
+    private function buildCurrentDirectoryStats(Directory $directory): array
+    {
+        $descendants = array_values(array_filter(
+            Directory::findDescendants($directory->path),
+            fn(Directory $item): bool => !$this->isHiddenDirectory($item)
+        ));
+
+        $directories = count($descendants);
+        $secrets = count(Secret::findByDirId($directory->id));
+
+        foreach ($descendants as $descendant) {
+            $secrets += count(Secret::findByDirId($descendant->id));
+        }
+
+        return [
+            'directories' => $directories,
+            'secrets' => $secrets,
+        ];
+    }
+
+    /** @param Directory[] $directories
+     *  @return Directory[]
+     */
+    private function filterVisibleDirectories(array $directories): array
+    {
+        return array_values(array_filter(
+            $directories,
+            fn(Directory $directory): bool => !$this->isHiddenDirectory($directory)
+        ));
+    }
+
+    private function isHiddenDirectory(Directory $directory): bool
+    {
+        return $directory->name === self::ROOT_SECRET_DIRECTORY_NAME;
+    }
+
+    private function findRootSecretDirectory(string $orgId): ?Directory
+    {
+        foreach (Directory::findByOrgId($orgId) as $directory) {
+            if ($this->isHiddenDirectory($directory)) {
+                return $directory;
+            }
+        }
+
+        return null;
+    }
+
+    private function getOrCreateRootSecretDirectory(Organization $organization, User $user): Directory
+    {
+        $directory = $this->findRootSecretDirectory($organization->id);
+        if ($directory !== null) {
+            return $directory;
+        }
+
+        return $this->directoryService->create($organization->id, null, self::ROOT_SECRET_DIRECTORY_NAME, $user->id);
+    }
+
+    private function isRootSecretDirectoryUuid(Organization $organization, string $dirUuid): bool
+    {
+        $directory = $this->findRootSecretDirectory($organization->id);
+        return $directory !== null && $directory->uuid === $dirUuid;
+    }
+
+    private function storeCroppedAvatar(string $avatarData, string $subdirectory, string $invalidMessage): ?string
+    {
+        if ($avatarData === '') {
+            return null;
+        }
+
+        if (!preg_match('#^data:(image/(png|webp));base64,(.+)$#', $avatarData, $matches)) {
+            throw new \InvalidArgumentException($invalidMessage);
+        }
+
+        $mimeType = (string) $matches[1];
+        $encoded = (string) $matches[3];
+        $binary = base64_decode(str_replace(' ', '+', $encoded), true);
+
+        if ($binary === false || $binary === '') {
+            throw new \InvalidArgumentException($invalidMessage);
+        }
+
+        $size = @getimagesizefromstring($binary);
+        if (!is_array($size) || ($size[0] ?? 0) !== 256 || ($size[1] ?? 0) !== 256) {
+            throw new \InvalidArgumentException(__('ui.invite.organization_avatar_size_invalid'));
+        }
+
+        $detectedMime = (new \finfo(FILEINFO_MIME_TYPE))->buffer($binary) ?: '';
+        if (!in_array($detectedMime, ['image/png', 'image/webp'], true) || $detectedMime !== $mimeType) {
+            throw new \InvalidArgumentException($invalidMessage);
+        }
+
+        $extension = $mimeType === 'image/webp' ? 'webp' : 'png';
+        $directory = public_path('uploads/' . trim($subdirectory, '/'));
+        if (!is_dir($directory) && !@mkdir($directory, 0755, true) && !is_dir($directory)) {
+            throw new \RuntimeException(__('ui.invite.organization_avatar_store_failed'));
+        }
+
+        $filename = generate_uuid() . '-' . bin2hex(random_bytes(6)) . '.' . $extension;
+        $absolutePath = $directory . DIRECTORY_SEPARATOR . $filename;
+        if (@file_put_contents($absolutePath, $binary, LOCK_EX) === false) {
+            throw new \RuntimeException(__('ui.invite.organization_avatar_store_failed'));
+        }
+
+        return '/uploads/' . trim($subdirectory, '/') . '/' . $filename;
+    }
+
+    private function deleteUploadedFile(?string $path): void
+    {
+        $path = \is_string($path) ? \trim($path) : '';
+        if ($path === '' || !str_starts_with($path, '/uploads/')) {
+            return;
+        }
+
+        $absolutePath = public_path(ltrim($path, '/'));
+        if (is_file($absolutePath)) {
+            @unlink($absolutePath);
+        }
     }
 
     private function isSetupAdministrator(User $user): bool

@@ -83,6 +83,7 @@ $router->group('/auth', function (\Passway\Core\Router $router) {
 $router->post('/organizations', [WebController::class, 'createOrganization'], [AuthMiddleware::class]);
 $router->post('/organization-invites', [WebController::class, 'createOrganizationInvite'], [AuthMiddleware::class]);
 $router->get('/profile', [WebController::class, 'showProfile'], [AuthMiddleware::class]);
+$router->post('/profile', [WebController::class, 'updateProfile'], [AuthMiddleware::class]);
 $router->post('/profile/totp/start', [WebController::class, 'startTotpSetup'], [AuthMiddleware::class]);
 $router->post('/profile/totp/enable', [WebController::class, 'enableTotp'], [AuthMiddleware::class]);
 $router->post('/profile/totp/disable', [WebController::class, 'disableTotp'], [AuthMiddleware::class]);
@@ -94,6 +95,7 @@ $router->post('/rotation-services/:svcUuid/verify', [WebController::class, 'veri
 $router->post('/rotation-services/:svcUuid/delete', [WebController::class, 'deleteRotationService'], [AuthMiddleware::class]);
 $router->get('/organizations/:uuid', [WebController::class, 'showOrganization'], [AuthMiddleware::class]);
 $router->get('/organizations/:uuid/manage', [WebController::class, 'showOrganizationManage'], [AuthMiddleware::class]);
+$router->post('/organizations/:uuid/manage', [WebController::class, 'updateOrganizationSettings'], [AuthMiddleware::class]);
 $router->get('/organizations/:uuid/api-keys', [WebController::class, 'showApiKeys'], [AuthMiddleware::class]);
 $router->post('/organizations/:uuid/api-keys', [WebController::class, 'createApiKey'], [AuthMiddleware::class]);
 $router->get('/organizations/:uuid/api-keys/:keyUuid/permissions', [WebController::class, 'showApiKeyPermissions'], [AuthMiddleware::class]);
@@ -110,6 +112,7 @@ $router->post('/organizations/:uuid/invites', [WebController::class, 'createInvi
 $router->post('/organizations/:uuid/invites/:invUuid/revoke', [WebController::class, 'revokeInvite'], [AuthMiddleware::class]);
 $router->get('/organizations/:uuid/audit', [WebController::class, 'showAudit'], [AuthMiddleware::class]);
 $router->post('/organizations/:uuid/directories', [WebController::class, 'createDirectory'], [AuthMiddleware::class]);
+$router->post('/organizations/:uuid/secrets', [WebController::class, 'createRootSecret'], [AuthMiddleware::class]);
 $router->post('/organizations/:uuid/directories/:dirUuid/rename', [WebController::class, 'renameDirectory'], [AuthMiddleware::class]);
 $router->post('/organizations/:uuid/directories/:dirUuid/delete', [WebController::class, 'deleteDirectory'], [AuthMiddleware::class]);
 $router->post('/organizations/:uuid/directories/:dirUuid/secrets', [WebController::class, 'createSecret'], [AuthMiddleware::class]);

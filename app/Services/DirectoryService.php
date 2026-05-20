@@ -306,9 +306,17 @@ final class DirectoryService
         $db->transaction(function () use ($db, $dir, $now): void {
             // Сначала удалить потомков (по materialized path)
             foreach (Directory::findDescendants($dir->path) as $desc) {
+                $db->query(
+                    'UPDATE secrets SET deleted_at = ? WHERE directory_id = ? AND deleted_at IS NULL',
+                    [$now, (int) $desc->id]
+                );
                 $db->update('directories', ['deleted_at' => $now], ['id' => $desc->id]);
             }
             // Удалить сам каталог
+            $db->query(
+                'UPDATE secrets SET deleted_at = ? WHERE directory_id = ? AND deleted_at IS NULL',
+                [$now, (int) $dir->id]
+            );
             $db->update('directories', ['deleted_at' => $now], ['id' => $dir->id]);
         });
     }

@@ -42,3 +42,5 @@ phpunit.xml
 
 .temp/
 REDESIGN_STATUS.md
+
+/public/uploads/

@@ -88,7 +88,7 @@
             gap: .5rem;
             z-index: 20;
         }
-        .profile-menu:hover .profile-menu-panel,
+        .profile-menu.is-open .profile-menu-panel,
         .profile-menu:focus-within .profile-menu-panel { display: grid; }
         .avatar-square {
             display: inline-flex;
@@ -152,6 +152,9 @@
         .panel-muted { background: var(--panel-subtle); }
         .mono { font-family: inherit; }
         .hidden { display: none !important; }
+        .preview-wrap { max-width: 100%; border: 1px solid var(--border); background: var(--panel-subtle); }
+        canvas { display: block; width: 100%; height: auto; }
+        .range { width: 100%; margin: 0; }
         .pill {
             display: inline-flex;
             align-items: center;

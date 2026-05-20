@@ -59,7 +59,9 @@ require base_path('resources/views/partials/auth_topbar.php');
                     <?php endif; ?>
                     <div>
                         <div style="font-weight:700; font-size:1.1rem;"><?= e($organization->name) ?></div>
-                        <div class="muted" style="margin-top:.35rem; font-size:.92rem;"><?= e($organization->description ?? __('ui.home.organization_summary_empty')) ?></div>
+                        <?php if (!empty($organization->description)): ?>
+                            <div class="muted" style="margin-top:.35rem; font-size:.92rem;"><?= e($organization->description) ?></div>
+                        <?php endif; ?>
                     </div>
                 </div>
                 <div class="grid" style="gap:.5rem; font-size:.92rem;">
