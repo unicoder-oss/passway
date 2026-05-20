@@ -51,10 +51,41 @@ require base_path('resources/views/partials/auth_topbar.php');
             }
             .org-menu.is-open .org-menu-panel,
             .org-menu:focus-within .org-menu-panel { display: grid; }
+            .org-entry {
+                display: grid;
+                grid-template-columns: auto minmax(0, 1fr);
+                gap: .85rem;
+                align-items: start;
+            }
+            .org-entry-icon {
+                width: 1.25rem;
+                height: 1.25rem;
+                color: var(--muted);
+                flex: 0 0 1.25rem;
+                margin-top: .1rem;
+            }
+            .org-entry-copy {
+                min-width: 0;
+                display: grid;
+                gap: .15rem;
+            }
+            .org-entry-title {
+                font-weight: 700;
+                overflow-wrap: anywhere;
+            }
+            .org-entry-path {
+                font-size: .92rem;
+                overflow-wrap: anywhere;
+            }
         </style>
 
         <div style="display:flex; justify-content:space-between; gap:1rem; align-items:flex-end; flex-wrap:wrap;">
-            <h2 style="margin:0;"><?= e($sectionTitle) ?></h2>
+            <div>
+                <h2 style="margin:0;"><?= e($sectionTitle) ?></h2>
+                <?php if ($currentDir !== null && $currentDirPath !== null): ?>
+                    <div class="org-entry-path" style="margin-top:.25rem;"><?= e($currentDirPath) ?></div>
+                <?php endif; ?>
+            </div>
             <?php if ($canEditContent): ?>
                 <div class="actions">
                     <?php if ($currentDir !== null): ?>
@@ -91,8 +122,15 @@ require base_path('resources/views/partials/auth_topbar.php');
                     <h3 style="margin:0;"><?= e(__('ui.organization.search_directories')) ?></h3>
                     <?php foreach ($searchDirectories as $result): ?>
                         <a href="/organizations/<?= e($organization->uuid) ?>?dir=<?= e($result['directory']->uuid) ?>" class="panel" style="padding:1rem; display:block;">
-                            <div style="font-weight:700;"><?= e($result['directory']->name) ?></div>
-                            <div class="muted" style="font-size:.92rem;"><?= e($result['path']) ?></div>
+                            <div class="org-entry">
+                                <svg class="org-entry-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" aria-hidden="true">
+                                    <path d="M3 7.5A2.5 2.5 0 0 1 5.5 5h4l2 2h7A2.5 2.5 0 0 1 21 9.5v7A2.5 2.5 0 0 1 18.5 19h-13A2.5 2.5 0 0 1 3 16.5z" stroke-linecap="round" stroke-linejoin="round"/>
+                                </svg>
+                                <div class="org-entry-copy">
+                                    <div class="org-entry-title"><?= e($result['directory']->name) ?></div>
+                                    <div class="org-entry-path"><?= e($result['path']) ?></div>
+                                </div>
+                            </div>
                         </a>
                     <?php endforeach; ?>
                     <?php if ($searchDirectories === []): ?><div class="muted"><?= e(__('ui.organization.search_no_directories')) ?></div><?php endif; ?>
@@ -101,8 +139,17 @@ require base_path('resources/views/partials/auth_topbar.php');
                     <h3 style="margin:0;"><?= e(__('ui.organization.search_secrets')) ?></h3>
                     <?php foreach ($searchSecrets as $result): ?>
                         <a href="/organizations/<?= e($organization->uuid) ?>/directories/<?= e($result['directory']->uuid) ?>/secrets/<?= e($result['secret']->uuid) ?>" class="panel" style="padding:1rem; display:block;">
-                            <div style="font-weight:700;"><?= e($result['secret']->name) ?></div>
-                            <div class="muted" style="font-size:.92rem;"><?= e($result['path']) ?></div>
+                            <div class="org-entry">
+                                <svg class="org-entry-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" aria-hidden="true">
+                                    <path d="M8 10V8a4 4 0 1 1 8 0v2" stroke-linecap="round" stroke-linejoin="round"/>
+                                    <rect x="5" y="10" width="14" height="10" rx="2" stroke-linecap="round" stroke-linejoin="round"/>
+                                    <path d="M12 14v2.5" stroke-linecap="round" stroke-linejoin="round"/>
+                                </svg>
+                                <div class="org-entry-copy">
+                                    <div class="org-entry-title"><?= e($result['secret']->name) ?></div>
+                                    <div class="muted" style="font-size:.92rem;"><?= e($result['path']) ?></div>
+                                </div>
+                            </div>
                         </a>
                     <?php endforeach; ?>
                     <?php if ($searchSecrets === []): ?><div class="muted"><?= e(__('ui.organization.search_no_secrets')) ?></div><?php endif; ?>
@@ -111,16 +158,43 @@ require base_path('resources/views/partials/auth_topbar.php');
         <?php endif; ?>
 
         <div class="grid" style="gap:.75rem;">
+            <?php if ($currentDir !== null): ?>
+                <a href="<?= e($parentDirectory !== null ? '/organizations/' . $organization->uuid . '?dir=' . $parentDirectory->uuid : '/organizations/' . $organization->uuid) ?>" class="panel panel-muted" style="padding:1rem; display:block;">
+                    <div class="org-entry">
+                        <svg class="org-entry-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" aria-hidden="true">
+                            <path d="M3 7.5A2.5 2.5 0 0 1 5.5 5h4l2 2h7A2.5 2.5 0 0 1 21 9.5v7A2.5 2.5 0 0 1 18.5 19h-13A2.5 2.5 0 0 1 3 16.5z" stroke-linecap="round" stroke-linejoin="round"/>
+                        </svg>
+                        <div class="org-entry-copy">
+                            <div class="org-entry-title">...</div>
+                        </div>
+                    </div>
+                </a>
+            <?php endif; ?>
             <?php foreach ($directories as $directory): ?>
                 <a href="/organizations/<?= e($organization->uuid) ?>?dir=<?= e($directory->uuid) ?>" class="panel panel-muted" style="padding:1rem; display:block;">
-                    <div style="font-weight:700;"><?= e($directory->name) ?></div>
-                    <div class="muted" style="font-size:.92rem;"><?= e(__('ui.organization.directory_item')) ?></div>
+                    <div class="org-entry">
+                        <svg class="org-entry-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" aria-hidden="true">
+                            <path d="M3 7.5A2.5 2.5 0 0 1 5.5 5h4l2 2h7A2.5 2.5 0 0 1 21 9.5v7A2.5 2.5 0 0 1 18.5 19h-13A2.5 2.5 0 0 1 3 16.5z" stroke-linecap="round" stroke-linejoin="round"/>
+                        </svg>
+                        <div class="org-entry-copy">
+                            <div class="org-entry-title"><?= e($directory->name) ?></div>
+                        </div>
+                    </div>
                 </a>
             <?php endforeach; ?>
             <?php foreach ($secrets as $secret): ?>
                 <a href="/organizations/<?= e($organization->uuid) ?>/directories/<?= e($secretDirUuid) ?>/secrets/<?= e($secret->uuid) ?>" class="panel panel-muted" style="padding:1rem; display:block;">
-                    <div style="font-weight:700;"><?= e($secret->name) ?></div>
-                    <div class="muted" style="font-size:.92rem;"><?= e(__('ui.secret.meta', ['type' => __('ui.home.types.' . $secret->type), 'version' => (string) $secret->version, 'directory' => $secretContextName])) ?></div>
+                    <div class="org-entry">
+                        <svg class="org-entry-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" aria-hidden="true">
+                            <path d="M8 10V8a4 4 0 1 1 8 0v2" stroke-linecap="round" stroke-linejoin="round"/>
+                            <rect x="5" y="10" width="14" height="10" rx="2" stroke-linecap="round" stroke-linejoin="round"/>
+                            <path d="M12 14v2.5" stroke-linecap="round" stroke-linejoin="round"/>
+                        </svg>
+                        <div class="org-entry-copy">
+                            <div class="org-entry-title"><?= e($secret->name) ?></div>
+                            <div class="muted" style="font-size:.92rem;"><?= e(__('ui.secret.meta', ['type' => __('ui.home.types.' . $secret->type), 'version' => (string) $secret->version, 'directory' => $secretContextName])) ?></div>
+                        </div>
+                    </div>
                 </a>
             <?php endforeach; ?>
             <?php if ($directories === [] && $secrets === []): ?><div class="muted"><?= e(__('ui.organization.empty_level')) ?></div><?php endif; ?>

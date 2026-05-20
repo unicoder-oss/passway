@@ -217,6 +217,22 @@ final class WebController
             );
         }
 
+        $allDirectories = Directory::findByOrgId($org->id);
+        $directoryMap = [];
+        foreach ($allDirectories as $directory) {
+            $directoryMap[$directory->id] = $directory;
+        }
+
+        $directoryPaths = [];
+        foreach ($directories as $directory) {
+            $directoryPaths[$directory->uuid] = $this->humanDirectoryPath($directory, $directoryMap);
+        }
+
+        $currentDirPath = $currentDir !== null ? $this->humanDirectoryPath($currentDir, $directoryMap) : null;
+        $parentDirectory = $currentDir !== null && $currentDir->parentId !== null
+            ? ($directoryMap[$currentDir->parentId] ?? null)
+            : null;
+
         return $this->html($this->view->render('web/organization', [
             'title' => $org->name,
             'user' => $user,
@@ -225,9 +241,12 @@ final class WebController
             'currentDirStats' => $currentDir !== null ? $this->buildCurrentDirectoryStats($currentDir) : null,
             'rootSecretDirectory' => $this->findRootSecretDirectory($org->id),
             'directories' => $directories,
+            'directoryPaths' => $directoryPaths,
             'secrets' => $secrets,
             'searchDirectories' => $searchDirectories,
             'searchSecrets' => $searchSecrets,
+            'parentDirectory' => $parentDirectory,
+            'currentDirPath' => $currentDirPath,
             'templates' => $this->templateService->listAvailable($org->id),
             'integrations' => $this->listActiveIntegrationsForOrg($org->id),
             'canManageOrganization' => $this->organizationService->hasPermission($org->id, $user->id, 'admin'),
