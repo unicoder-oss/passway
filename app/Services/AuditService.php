@@ -90,6 +90,20 @@ final class AuditService
             $sql .= ' AND success = ?';
             $params[] = (bool) $filters['success'] ? 1 : 0;
         }
+        if (($filters['api_key_id'] ?? null) !== null && \trim((string) $filters['api_key_id']) !== '') {
+            $sql .= ' AND api_key_id = ?';
+            $params[] = (int) $filters['api_key_id'];
+        }
+        if (($filters['actor_kind'] ?? null) !== null && \trim((string) $filters['actor_kind']) !== '') {
+            $actorKind = \trim((string) $filters['actor_kind']);
+            if ($actorKind === 'user') {
+                $sql .= ' AND user_id IS NOT NULL';
+            } elseif ($actorKind === 'api_key') {
+                $sql .= ' AND api_key_id IS NOT NULL';
+            } elseif ($actorKind === 'system') {
+                $sql .= ' AND user_id IS NULL AND api_key_id IS NULL';
+            }
+        }
         if (($filters['ip_address'] ?? null) !== null && \trim((string) $filters['ip_address']) !== '') {
             $sql .= ' AND ip_address = ?';
             $params[] = \trim((string) $filters['ip_address']);
@@ -110,6 +124,48 @@ final class AuditService
             $search = '%' . \trim((string) $filters['search']) . '%';
             $sql .= ' AND (action LIKE ? OR resource_uuid LIKE ? OR ip_address LIKE ? OR user_agent LIKE ? OR details_json LIKE ?)';
             \array_push($params, $search, $search, $search, $search, $search);
+        }
+        if (($filters['target_user_id'] ?? null) !== null && \trim((string) $filters['target_user_id']) !== '') {
+            $targetUserId = (string) (int) $filters['target_user_id'];
+            $sql .= ' AND ((resource_type = ? AND resource_id = ?) OR details_json LIKE ? OR details_json LIKE ?)';
+            \array_push(
+                $params,
+                'user',
+                (int) $targetUserId,
+                '%"target_user_id":"' . $targetUserId . '"%',
+                '%"new_owner_id":"' . $targetUserId . '"%'
+            );
+        }
+        if (($filters['role'] ?? null) !== null && \trim((string) $filters['role']) !== '') {
+            $role = \trim((string) $filters['role']);
+            $sql .= ' AND details_json LIKE ?';
+            $params[] = '%"role":"' . $role . '"%';
+        }
+        if (($filters['invite_type'] ?? null) !== null && \trim((string) $filters['invite_type']) !== '') {
+            $inviteType = \trim((string) $filters['invite_type']);
+            $sql .= ' AND details_json LIKE ?';
+            $params[] = '%"type":"' . $inviteType . '"%';
+        }
+        if (($filters['group_uuid'] ?? null) !== null && \trim((string) $filters['group_uuid']) !== '') {
+            $sql .= ' AND resource_type = ? AND resource_uuid = ?';
+            \array_push($params, 'group', \trim((string) $filters['group_uuid']));
+        }
+        if (($filters['secret_uuid'] ?? null) !== null && \trim((string) $filters['secret_uuid']) !== '') {
+            $secretUuid = \trim((string) $filters['secret_uuid']);
+            $sql .= ' AND ((resource_type = ? AND resource_uuid = ?) OR details_json LIKE ?)';
+            \array_push($params, 'secret', $secretUuid, '%"secret_uuid":"' . $secretUuid . '"%');
+        }
+        if (($filters['api_key_uuid'] ?? null) !== null && \trim((string) $filters['api_key_uuid']) !== '') {
+            $sql .= ' AND resource_type = ? AND resource_uuid = ?';
+            \array_push($params, 'api_key', \trim((string) $filters['api_key_uuid']));
+        }
+        if (($filters['integration_uuid'] ?? null) !== null && \trim((string) $filters['integration_uuid']) !== '') {
+            $sql .= ' AND resource_type = ? AND resource_uuid = ?';
+            \array_push($params, 'integration', \trim((string) $filters['integration_uuid']));
+        }
+        if (($filters['rotation_service_uuid'] ?? null) !== null && \trim((string) $filters['rotation_service_uuid']) !== '') {
+            $sql .= ' AND resource_type = ? AND resource_uuid = ?';
+            \array_push($params, 'rotation_service', \trim((string) $filters['rotation_service_uuid']));
         }
 
         $limit = max(1, min(500, (int) ($filters['limit'] ?? 100)));

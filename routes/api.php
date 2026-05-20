@@ -104,6 +104,8 @@ $router->group('/api/v1', function (\Passway\Core\Router $router) {
             [InviteController::class, 'list'], [AuthMiddleware::class]);
         $router->delete('/:uuid/invites/:invUuid',
             [InviteController::class, 'revoke'], [AuthMiddleware::class]);
+        $router->get('/:uuid/audit/secrets',
+            [AuditController::class, 'searchSecrets'], [AuthMiddleware::class]);
         $router->get('/:uuid/audit',
             [AuditController::class, 'list'], [AuthMiddleware::class]);
 

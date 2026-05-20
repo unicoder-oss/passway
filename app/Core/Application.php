@@ -332,6 +332,7 @@ final class Application
                     $c->make(\Passway\Services\LoggerService::class),
                     $c->make(\Passway\Services\OrganizationService::class),
                 ),
+                $c->make(\Passway\Services\OrganizationService::class),
             )
         );
         $this->container->singleton(

@@ -5,17 +5,20 @@ declare(strict_types=1);
 namespace Passway\Controllers;
 
 use Passway\Core\AuthContext;
+use Passway\Core\Database;
 use Passway\Core\Request;
 use Passway\Core\Response;
 use Passway\Exceptions\AuthException;
 use Passway\Models\AuditLog;
 use Passway\Models\Organization;
 use Passway\Services\AuditService;
+use Passway\Services\OrganizationService;
 
 final class AuditController
 {
     public function __construct(
         private readonly AuditService $auditService,
+        private readonly OrganizationService $organizationService,
     ) {}
 
     public function list(Request $request): Response
@@ -49,6 +52,33 @@ final class AuditController
                 'offset'   => $result['offset'],
                 'has_more' => $result['has_more'],
             ],
+        ]);
+    }
+
+    public function searchSecrets(Request $request): Response
+    {
+        $user = AuthContext::requireUser();
+        $org = $this->findOrgOrFail($request);
+
+        if (!$this->organizationService->hasPermission($org->id, $user->id, 'admin')) {
+            return Response::forbidden(__('ui.backend.audit.requires_admin_view'));
+        }
+
+        $query = \trim((string) ($request->query('q') ?? ''));
+        if ($query === '') {
+            return Response::success(['items' => []]);
+        }
+
+        $rows = Database::getInstance()->fetchAll(
+            'SELECT uuid, name FROM secrets WHERE organization_id = ? AND deleted_at IS NULL AND name LIKE ? ORDER BY name ASC LIMIT 20',
+            [(int) $org->id, '%' . $query . '%']
+        );
+
+        return Response::success([
+            'items' => \array_map(static fn(array $row): array => [
+                'uuid' => (string) $row['uuid'],
+                'name' => (string) $row['name'],
+            ], $rows),
         ]);
     }
 

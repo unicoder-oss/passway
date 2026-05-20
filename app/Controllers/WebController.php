@@ -685,16 +685,11 @@ final class WebController
     {
         $user = AuthContext::requireUser();
         $org = $this->findOrgOrFail($request);
+        $filters = $this->buildAuditFilters($request, $org);
+        $filterState = $this->buildAuditFilterState($request);
 
         try {
-            $result = $this->auditService->paginateForOrganization($org->id, $user->id, [
-                'action' => $request->query('action'),
-                'resource_type' => $request->query('resource_type'),
-                'success' => $request->query('success'),
-                'search' => $request->query('search'),
-                'limit' => $request->query('limit', 50),
-                'offset' => $request->query('offset', 0),
-            ]);
+            $result = $this->auditService->paginateForOrganization($org->id, $user->id, $filters);
         } catch (\Throwable $e) {
             return Response::redirect($this->organizationUrl($org->uuid, error: $e->getMessage()));
         }
@@ -710,13 +705,206 @@ final class WebController
                 'offset' => $result['offset'],
                 'has_more' => $result['has_more'],
             ],
-            'filters' => [
-                'action' => (string) ($request->query('action') ?? ''),
-                'resource_type' => (string) ($request->query('resource_type') ?? ''),
-                'success' => (string) ($request->query('success') ?? ''),
-                'search' => (string) ($request->query('search') ?? ''),
-            ],
+            'filters' => $filterState,
+            'filterOptions' => $this->buildAuditFilterOptions($org, $filterState),
         ]));
+    }
+
+    /** @return array<string, mixed> */
+    private function buildAuditFilters(Request $request, Organization $organization): array
+    {
+        $filters = [
+            'action' => $request->query('action'),
+            'success' => $request->query('success'),
+            'actor_kind' => $request->query('actor_kind'),
+            'ip_address' => $request->query('ip_address'),
+            'limit' => $request->query('limit', 50),
+            'offset' => $request->query('offset', 0),
+        ];
+
+        $actorUserEmail = \trim((string) ($request->query('actor_user_email') ?? ''));
+        if ($actorUserEmail !== '') {
+            $actorUser = $this->findOrganizationUserByEmail($organization->id, $actorUserEmail);
+            if ($actorUser !== null) {
+                $filters['user_id'] = $actorUser->id;
+            }
+        }
+
+        $actorApiKeyUuid = \trim((string) ($request->query('actor_api_key_uuid') ?? ''));
+        if ($actorApiKeyUuid !== '') {
+            $apiKey = ApiKey::findByUuid($actorApiKeyUuid);
+            if ($apiKey !== null && $apiKey->organizationId === $organization->id) {
+                $filters['api_key_id'] = $apiKey->id;
+            }
+        }
+
+        $targetUserEmail = \trim((string) ($request->query('target_user_email') ?? ''));
+        if ($targetUserEmail !== '') {
+            $targetUser = $this->findOrganizationUserByEmail($organization->id, $targetUserEmail);
+            if ($targetUser !== null) {
+                $filters['target_user_id'] = $targetUser->id;
+            }
+        }
+
+        foreach (['group_uuid', 'secret_uuid', 'api_key_uuid', 'integration_uuid', 'rotation_service_uuid', 'role', 'invite_type'] as $filterKey) {
+            $value = \trim((string) ($request->query($filterKey) ?? ''));
+            if ($value !== '') {
+                $filters[$filterKey] = $value;
+            }
+        }
+
+        $fromDate = \trim((string) ($request->query('from_date') ?? ''));
+        if ($fromDate !== '') {
+            $filters['from'] = $fromDate . ' 00:00:00';
+        }
+
+        $toDate = \trim((string) ($request->query('to_date') ?? ''));
+        if ($toDate !== '') {
+            $filters['to'] = $toDate . ' 23:59:59';
+        }
+
+        return $filters;
+    }
+
+    /** @return array<string, string> */
+    private function buildAuditFilterState(Request $request): array
+    {
+        return [
+            'action' => (string) ($request->query('action') ?? ''),
+            'actor_kind' => (string) ($request->query('actor_kind') ?? ''),
+            'actor_user_email' => (string) ($request->query('actor_user_email') ?? ''),
+            'actor_api_key_uuid' => (string) ($request->query('actor_api_key_uuid') ?? ''),
+            'target_user_email' => (string) ($request->query('target_user_email') ?? ''),
+            'group_uuid' => (string) ($request->query('group_uuid') ?? ''),
+            'secret_uuid' => (string) ($request->query('secret_uuid') ?? ''),
+            'api_key_uuid' => (string) ($request->query('api_key_uuid') ?? ''),
+            'integration_uuid' => (string) ($request->query('integration_uuid') ?? ''),
+            'rotation_service_uuid' => (string) ($request->query('rotation_service_uuid') ?? ''),
+            'role' => (string) ($request->query('role') ?? ''),
+            'invite_type' => (string) ($request->query('invite_type') ?? ''),
+            'success' => (string) ($request->query('success') ?? ''),
+            'from_date' => (string) ($request->query('from_date') ?? ''),
+            'to_date' => (string) ($request->query('to_date') ?? ''),
+            'ip_address' => (string) ($request->query('ip_address') ?? ''),
+        ];
+    }
+
+    /** @return array<string, mixed> */
+    private function buildAuditFilterOptions(Organization $organization, array $filterState): array
+    {
+        $definitions = $this->auditActionDefinitions();
+        $groups = [];
+
+        foreach ($definitions as $code => $definition) {
+            $groupKey = $definition['group'];
+            if (!isset($groups[$groupKey])) {
+                $groups[$groupKey] = [
+                    'label' => __('ui.audit.filter_groups.' . $groupKey),
+                    'actions' => [],
+                ];
+            }
+
+            $groups[$groupKey]['actions'][] = [
+                'value' => $code,
+                'label' => $this->translateAuditAction($code),
+            ];
+        }
+
+        return [
+            'actionGroups' => \array_values($groups),
+            'actionMeta' => \array_map(
+                static fn(array $definition): array => ['fields' => $definition['fields']],
+                $definitions,
+            ),
+            'members' => $this->serializeOrganizationMembers($organization->id),
+            'groups' => $this->serializeOrganizationGroups($organization->id),
+            'apiKeys' => $this->serializeOrganizationApiKeys($organization->id),
+            'integrations' => $this->serializeOrganizationIntegrations($organization->id),
+            'rotationServices' => $this->serializeAuditRotationServices(),
+            'roles' => $this->auditRoleOptions(),
+            'inviteTypes' => $this->auditInviteTypeOptions(),
+            'actorKinds' => $this->auditActorKindOptions(),
+            'secretSearchUrl' => '/api/v1/organizations/' . \urlencode($organization->uuid) . '/audit/secrets',
+            'selectedSecret' => $this->resolveAuditSelectedSecret($organization->id, $filterState['secret_uuid'] ?? ''),
+        ];
+    }
+
+    /** @return array<string, array{group:string, fields:string[]}> */
+    private function auditActionDefinitions(): array
+    {
+        return [
+            'org.create' => ['group' => 'users_access', 'fields' => []],
+            'org.member_add' => ['group' => 'users_access', 'fields' => ['target_user_email', 'role']],
+            'org.member_remove' => ['group' => 'users_access', 'fields' => ['target_user_email']],
+            'org.member_role_update' => ['group' => 'users_access', 'fields' => ['target_user_email', 'role']],
+            'org.transfer_ownership' => ['group' => 'users_access', 'fields' => ['target_user_email']],
+            'permission.grant' => ['group' => 'users_access', 'fields' => ['role']],
+            'permission.revoke' => ['group' => 'users_access', 'fields' => []],
+            'group.create' => ['group' => 'groups', 'fields' => ['group_uuid']],
+            'group.delete' => ['group' => 'groups', 'fields' => ['group_uuid']],
+            'group.member_add' => ['group' => 'groups', 'fields' => ['target_user_email', 'group_uuid']],
+            'group.member_remove' => ['group' => 'groups', 'fields' => ['target_user_email', 'group_uuid']],
+            'secret.create' => ['group' => 'secrets', 'fields' => ['secret_uuid']],
+            'secret.read' => ['group' => 'secrets', 'fields' => ['secret_uuid']],
+            'secret.update' => ['group' => 'secrets', 'fields' => ['secret_uuid']],
+            'secret.delete' => ['group' => 'secrets', 'fields' => ['secret_uuid']],
+            'secret.transfer_ownership' => ['group' => 'secrets', 'fields' => ['secret_uuid']],
+            'rotation.secret_rotated' => ['group' => 'secrets', 'fields' => ['secret_uuid']],
+            'rotation.secret_rotate_failed' => ['group' => 'secrets', 'fields' => ['secret_uuid']],
+            'invite.create' => ['group' => 'invites', 'fields' => ['invite_type', 'role']],
+            'invite.revoke' => ['group' => 'invites', 'fields' => ['invite_type']],
+            'invite.accept' => ['group' => 'invites', 'fields' => ['invite_type']],
+            'apikey.create' => ['group' => 'api_keys', 'fields' => ['api_key_uuid']],
+            'apikey.role_update' => ['group' => 'api_keys', 'fields' => ['api_key_uuid', 'role']],
+            'apikey.revoke' => ['group' => 'api_keys', 'fields' => ['api_key_uuid']],
+            'auth.api_key_success' => ['group' => 'api_keys', 'fields' => ['actor_api_key_uuid', 'api_key_uuid']],
+            'auth.api_key_fail' => ['group' => 'api_keys', 'fields' => ['ip_address']],
+            'approval.request_create' => ['group' => 'approvals', 'fields' => ['secret_uuid']],
+            'approval.request_approve' => ['group' => 'approvals', 'fields' => ['secret_uuid']],
+            'approval.request_reject' => ['group' => 'approvals', 'fields' => ['secret_uuid']],
+            'approval.request_revoke' => ['group' => 'approvals', 'fields' => ['secret_uuid']],
+            'approval.token_use' => ['group' => 'approvals', 'fields' => ['secret_uuid']],
+            'rotation.integration_create' => ['group' => 'integrations', 'fields' => ['integration_uuid']],
+            'rotation.integration_update' => ['group' => 'integrations', 'fields' => ['integration_uuid']],
+            'rotation.integration_delete' => ['group' => 'integrations', 'fields' => ['integration_uuid']],
+            'rotation.service_create' => ['group' => 'integrations', 'fields' => ['rotation_service_uuid']],
+            'rotation.service_update' => ['group' => 'integrations', 'fields' => ['rotation_service_uuid']],
+            'rotation.service_delete' => ['group' => 'integrations', 'fields' => ['rotation_service_uuid']],
+            'rotation.service_verify' => ['group' => 'integrations', 'fields' => ['rotation_service_uuid']],
+            'auth.session_fail' => ['group' => 'system_security', 'fields' => ['ip_address']],
+            'auth.unauthorized' => ['group' => 'system_security', 'fields' => ['ip_address']],
+            'auth.rate_limit_denied' => ['group' => 'system_security', 'fields' => ['ip_address']],
+            'api.rate_limit_denied' => ['group' => 'system_security', 'fields' => ['ip_address']],
+        ];
+    }
+
+    /** @return array<int, array{value:string,label:string}> */
+    private function auditRoleOptions(): array
+    {
+        return \array_map(fn(string $role): array => [
+            'value' => $role,
+            'label' => $this->translateAuditRole($role),
+        ], ['owner', 'admin', 'editor', 'reader']);
+    }
+
+    /** @return array<int, array{value:string,label:string}> */
+    private function auditInviteTypeOptions(): array
+    {
+        return \array_map(fn(string $type): array => [
+            'value' => $type,
+            'label' => $this->translateAuditType($type),
+        ], [InviteLink::TYPE_JOIN_ORG, InviteLink::TYPE_CREATE_ORG]);
+    }
+
+    /** @return array<int, array{value:string,label:string}> */
+    private function auditActorKindOptions(): array
+    {
+        return [
+            ['value' => '', 'label' => __('ui.audit.any')],
+            ['value' => 'user', 'label' => __('ui.audit.actor_kinds.user')],
+            ['value' => 'api_key', 'label' => __('ui.audit.actor_kinds.api_key')],
+            ['value' => 'system', 'label' => __('ui.audit.actor_kinds.system')],
+        ];
     }
 
     /**
@@ -2331,6 +2519,23 @@ final class WebController
         ];
     }
 
+    private function findOrganizationUserByEmail(string $orgId, string $email): ?User
+    {
+        $email = \strtolower(\trim($email));
+        if ($email === '') {
+            return null;
+        }
+
+        foreach ($this->organizationService->listMembers($orgId) as $member) {
+            $memberUser = User::findById($member->userId);
+            if ($memberUser !== null && \strtolower($memberUser->email) === $email) {
+                return $memberUser;
+            }
+        }
+
+        return null;
+    }
+
     /** @return array<int, array{uuid:string,name:string,email:string,role:string}> */
     private function serializeOrganizationMembers(string $orgId): array
     {
@@ -2384,6 +2589,63 @@ final class WebController
         }
 
         return $groups;
+    }
+
+    /** @return array<int, array{uuid:string,name:string}> */
+    private function serializeOrganizationSecrets(string $orgId): array
+    {
+        $rows = Database::getInstance()->fetchAll(
+            'SELECT uuid, name FROM secrets WHERE organization_id = ? AND deleted_at IS NULL ORDER BY name ASC',
+            [(int) $orgId]
+        );
+
+        return \array_map(static fn(array $row): array => [
+            'uuid' => (string) $row['uuid'],
+            'name' => (string) $row['name'],
+        ], $rows);
+    }
+
+    /** @return array{uuid:string,name:string}|null */
+    private function resolveAuditSelectedSecret(string $orgId, string $secretUuid): ?array
+    {
+        $secretUuid = \trim($secretUuid);
+        if ($secretUuid === '') {
+            return null;
+        }
+
+        $row = Database::getInstance()->fetchOne(
+            'SELECT uuid, name FROM secrets WHERE organization_id = ? AND uuid = ? AND deleted_at IS NULL',
+            [(int) $orgId, $secretUuid]
+        );
+
+        if (!\is_array($row)) {
+            return null;
+        }
+
+        return [
+            'uuid' => (string) $row['uuid'],
+            'name' => (string) $row['name'],
+        ];
+    }
+
+    /** @return array<int, array{uuid:string,name:string}> */
+    private function serializeOrganizationIntegrations(string $orgId): array
+    {
+        return \array_map(static fn(OrganizationIntegration $integration): array => [
+            'uuid' => $integration->uuid,
+            'name' => $integration->name,
+        ], OrganizationIntegration::findByOrgId($orgId));
+    }
+
+    /** @return array<int, array{uuid:string,name:string}> */
+    private function serializeAuditRotationServices(): array
+    {
+        $rows = Database::getInstance()->fetchAll('SELECT uuid, name FROM rotation_services ORDER BY name ASC');
+
+        return \array_map(static fn(array $row): array => [
+            'uuid' => (string) $row['uuid'],
+            'name' => (string) $row['name'],
+        ], $rows);
     }
 
     /** @return string */
