@@ -970,6 +970,13 @@ final class SecretServiceTest extends DatabaseTestCase
         $this->assertSame(24, $overrides['max_length']);
         $this->assertFalse($overrides['use_special']);
         $this->assertSame(2, $result['secret']->version);
+
+        $audit = Database::getInstance()->fetchOne(
+            "SELECT * FROM audit_log WHERE action = 'secret.update' AND resource_uuid = ? ORDER BY id DESC LIMIT 1",
+            [$secret->uuid]
+        );
+
+        $this->assertNotNull($audit);
     }
 
     public function test_regenerate_from_template_accepts_manual_password_value(): void

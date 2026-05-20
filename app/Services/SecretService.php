@@ -516,7 +516,9 @@ final class SecretService
             $orgId,
             $targetValue,
             $userId,
-            'manual'
+            'manual',
+            'secret.update',
+            ['renamed' => false, 'rotated' => true, 'type' => 'template']
         );
 
         return \array_merge(
@@ -741,6 +743,8 @@ final class SecretService
         string $newValue,
         ?string $rotatedBy = null,
         string $rotationType = 'scheduled',
+        string $auditAction = 'rotation.secret_rotated',
+        array $auditDetails = [],
     ): Secret {
         if (!\in_array($rotationType, ['scheduled', 'api', 'manual'], true)) {
             throw new \InvalidArgumentException(__('ui.backend.secret.invalid_rotation_type'));
@@ -764,13 +768,13 @@ final class SecretService
             ?? throw new \RuntimeException(__('ui.backend.secret.failed_reload_rotated'));
 
         $this->getAuditService()->record(
-            action: 'rotation.secret_rotated',
+            action: $auditAction,
             organizationId: $orgId,
             userId: $rotatedBy,
             resourceType: 'secret',
             resourceId: $updated->id,
             resourceUuid: $updated->uuid,
-            details: ['rotation_type' => $rotationType],
+            details: $auditDetails !== [] ? $auditDetails : ['rotation_type' => $rotationType],
         );
 
         return $updated;
