@@ -29,10 +29,15 @@ jobs:
           coverage: none
 
       - name: Install dependencies
+        working-directory: ${{ github.workspace }}
         run: composer install --no-interaction --prefer-dist --no-progress
 
       - name: Run tests
-        run: vendor/bin/phpunit --configuration phpunit.xml tests
+        working-directory: ${{ github.workspace }}
+        run: |
+          test -f phpunit.xml
+          test -d tests
+          vendor/bin/phpunit --configuration "${{ github.workspace }}/phpunit.xml" "${{ github.workspace }}/tests"
 
   build-and-push:
     name: Build and Push Image
@@ -67,7 +72,7 @@ jobs:
       - name: Build and push
         uses: docker/build-push-action@v6
         with:
-          context: .
+          context: ${{ github.workspace }}
           push: true
           tags: ${{ steps.meta.outputs.tags }}
           labels: |
