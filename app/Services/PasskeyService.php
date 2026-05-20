@@ -382,7 +382,7 @@ final class PasskeyService
             ],
             'challenge'              => Base64UrlSafe::encodeUnpadded($options->challenge),
             'pubKeyCredParams'       => \array_map(
-                fn($p) => ['type' => $p->type, 'alg' => $p->algorithm],
+                fn($p) => ['type' => $p->type, 'alg' => $p->alg],
                 $options->pubKeyCredParams
             ),
             'timeout'                => 60000,
