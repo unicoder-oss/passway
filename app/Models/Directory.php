@@ -7,11 +7,11 @@ namespace Passway\Models;
 use Passway\Core\Database;
 
 /**
- * Тонкая модель каталога (директории).
+ * Thin model directory (directory).
  *
- * Структура таблицы directories:
+ * Table structure directories:
  *   - id, uuid, organization_id, parent_id (nullable)
- *   - name, depth (0 = корень), path (materialized path: /uuid/.../uuid)
+ *   - name, depth (0 = root), path (materialized path: /uuid/.../uuid)
  *   - created_by, owner_user_id, created_at, updated_at, deleted_at (soft delete)
  */
 final class Directory
@@ -34,7 +34,7 @@ final class Directory
     ) {}
 
     // ------------------------------------------------------------------ //
-    //  Фабрика                                                            //
+    //  Factory                                                            //
     // ------------------------------------------------------------------ //
 
     /** @param array<string, mixed> $row */
@@ -65,7 +65,7 @@ final class Directory
     }
 
     // ------------------------------------------------------------------ //
-    //  Запросы                                                            //
+    //  Queries                                                            //
     // ------------------------------------------------------------------ //
 
     public static function findById(string $id): ?self
@@ -87,7 +87,7 @@ final class Directory
     }
 
     /**
-     * Все не удалённые каталоги организации (порядок: глубина, путь).
+     * All non-deleted organization directories (order: depth, path).
      *
      * @return self[]
      */
@@ -101,8 +101,8 @@ final class Directory
     }
 
     /**
-     * Прямые дочерние каталоги в рамках организации.
-     * Если parentId = null — возвращает корневые каталоги.
+     * Direct child directories within the organization.
+     * If parentId = null - returns root directories.
      *
      * @return self[]
      */
@@ -127,7 +127,7 @@ final class Directory
     }
 
     /**
-     * Все не удалённые потомки по materialized path (path LIKE '{$path}/%').
+     * All non-deleted descendants by materialized path (path LIKE '{$path}/%').
      *
      * @return self[]
      */
@@ -141,7 +141,7 @@ final class Directory
     }
 
     // ------------------------------------------------------------------ //
-    //  Запись                                                             //
+    //  Writes                                                             //
     // ------------------------------------------------------------------ //
 
     /** @param array<string, mixed> $data */

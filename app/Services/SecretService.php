@@ -16,28 +16,28 @@ use Passway\Models\SecretVersion;
 use Passway\Models\Template;
 
 /**
- * Сервис управления секретами.
+ * Service secret management.
  *
- * Авторизация (через PermissionService, включает org-level и fine-grained):
- *   read   — list, get, listVersions  (reader+ или явное право)
- *   write  — create, update           (editor+ или явное право)
- *   delete — delete                   (editor+ или явное право)
+ * Authorization (through PermissionService, includes org-level and fine-grained):
+ *   read   - list, get, listVersions  (reader+ or explicit permission)
+ *   write  - create, update           (editor+ or explicit permission)
+ *   delete - delete                   (editor+ or explicit permission)
  *
- * Права проверяются на каталоге, которому принадлежит секрет.
- * Шифрование: XChaCha20-Poly1305, AAD = uuid секрета.
+ * Permissions are checked on the directory containing the secret.
+ * Encryption: XChaCha20-Poly1305, AAD = uuid secret.
  *
  * requires_approval:
- *   Если у секрета флаг requires_approval=true, пользователи ниже editor
- *   обязаны пройти workflow одобрения (ApprovalService) и получить одноразовый
- *   токен. Вместо get() используется ApprovalService::useToken().
- *   Editor+ обходят проверку и читают секрет напрямую.
+ *   If the secret has requires_approval=true, users below editor
+ *   must pass the approval workflow (ApprovalService) and get a one-time
+ *   token. Use instead of get() ApprovalService::useToken().
+ *   Editor+ bypasses the check and reads the secret directly.
  */
 final class SecretService
 {
-    /** Допустимые типы секретов */
+    /** Allowed secret types */
     public const VALID_TYPES = ['static', 'template', 'dynamic'];
 
-    /** Максимальное число хранимых версий на секрет */
+    /** Maximum number of stored versions per secret */
     private const MAX_VERSIONS = 10;
 
     private const TEMPLATE_OVERRIDES_METADATA_KEY = 'template_overrides';
@@ -54,22 +54,22 @@ final class SecretService
     ) {}
 
     // ------------------------------------------------------------------ //
-    //  Создание                                                           //
+    //  Creation                                                           //
     // ------------------------------------------------------------------ //
 
     /**
-     * Создать секрет в каталоге организации.
+     * Create a secret in an organization directory.
      *
-     * @param string $orgId    ID организации
-     * @param string $dirUuid  UUID каталога
-     * @param string $name     Имя секрета
-     * @param string $type     Тип: static|template|dynamic
-     * @param string $value    Открытое значение (будет зашифровано)
-     * @param string $userId   ID создателя
+     * @param string $orgId    Organization ID
+     * @param string $dirUuid  Directory UUID
+     * @param string $name     Secret name
+     * @param string $type     Type: static|template|dynamic
+     * @param string $value    Plaintext value (will be encrypted)
+     * @param string $userId   Creator ID
      *
-     * @throws AuthException             если нет прав (требуется editor+)
-     * @throws \InvalidArgumentException при невалидном имени или типе
-     * @throws \RuntimeException         если каталог не найден или имя занято
+     * @throws AuthException             if permission is missing (requires editor+)
+     * @throws \InvalidArgumentException on invalid name or type
+     * @throws \RuntimeException         if the directory is not found or the name is taken
      */
     public function create(
         string $orgId,
@@ -158,7 +158,7 @@ final class SecretService
     }
 
     /**
-     * Создать секрет типа `template` и сразу сгенерировать значение по шаблону.
+     * Create a secret of type `template` and immediately generate a value from the template.
      *
      * @param array<string, mixed> $overrides
      */
@@ -343,15 +343,15 @@ final class SecretService
     }
 
     // ------------------------------------------------------------------ //
-    //  Чтение                                                             //
+    //  Reading                                                             //
     // ------------------------------------------------------------------ //
 
     /**
-     * Список секретов в каталоге (без расшифровки значений).
+     * List secrets in a directory (without decrypting values).
      *
      * @return Secret[]
-     * @throws AuthException     если нет прав (требуется reader+)
-     * @throws \RuntimeException если каталог не найден
+     * @throws AuthException     if permission is missing (requires reader+)
+     * @throws \RuntimeException if the directory is not found
      */
     public function listInDirectory(string $dirUuid, string $orgId, string $userId): array
     {
@@ -369,21 +369,21 @@ final class SecretService
     }
 
     /**
-     * Получить секрет с расшифрованным значением.
+     * Get a secret with decrypted value.
      *
-     * Если у секрета requires_approval=true и пользователь ниже editor,
-     * бросается AuthException с кодом 403 и инструкцией использовать approval workflow.
+     * If the secret has requires_approval=true and the user is below editor,
+     * AuthException with code 403 is thrown with instruction to use approval workflow.
      *
      * @return array{secret: Secret, value: string}
-     * @throws AuthException     если нет прав (требуется reader+) или требуется одобрение
-     * @throws \RuntimeException если не найден
+     * @throws AuthException     if permission is missing (reader+ required) or approval is required
+     * @throws \RuntimeException if not found
      */
     public function get(string $secretUuid, string $orgId, string $userId): array
     {
         $secret = $this->findSecretInOrg($secretUuid, $orgId);
         $this->assertCan('read', $userId, 'secret', $secret->id, $orgId);
 
-        // requires_approval: пользователи ниже editor должны использовать ApprovalService::useToken()
+        // requires_approval: users below editor must use ApprovalService::useToken()
         if ($secret->requiresApproval
             && !AuthContext::isApiKeyRequest()
             && $secret->ownerUserId !== $userId
@@ -539,11 +539,11 @@ final class SecretService
     }
 
     /**
-     * История версий секрета (зашифрованные записи, без расшифровки).
+     * Secret version history (encrypted records, without decryption).
      *
      * @return SecretVersion[]
-     * @throws AuthException     если нет прав (требуется reader+)
-     * @throws \RuntimeException если не найден
+     * @throws AuthException     if permission is missing (requires reader+)
+     * @throws \RuntimeException if not found
      */
     public function listVersions(string $secretUuid, string $orgId, string $userId): array
     {
@@ -553,16 +553,16 @@ final class SecretService
     }
 
     // ------------------------------------------------------------------ //
-    //  Обновление                                                         //
+    //  Update                                                         //
     // ------------------------------------------------------------------ //
 
     /**
-     * Обновить имя и/или значение секрета.
-     * При смене значения предыдущая версия сохраняется в историю, version++.
+     * Update secret name and/or value.
+     * When the value changes, the previous version is saved to history, version++.
      *
-     * @throws AuthException             если нет прав (требуется editor+)
-     * @throws \InvalidArgumentException при пустом имени
-     * @throws \RuntimeException         если не найден или новое имя занято
+     * @throws AuthException             if permission is missing (requires editor+)
+     * @throws \InvalidArgumentException on empty name
+     * @throws \RuntimeException         if not found or the new name is taken
      */
     public function update(
         string  $secretUuid,
@@ -584,7 +584,7 @@ final class SecretService
             if (\strlen($newName) > 255) {
                 throw new \InvalidArgumentException(__('ui.backend.secret.name_too_long'));
             }
-            // Проверить уникальность, исключая текущий секрет
+            // Check uniqueness, excluding the current secret
             $this->assertNameUnique($secret->directoryId, $newName, $secret->id);
             $data['name'] = $newName;
         }
@@ -597,7 +597,7 @@ final class SecretService
                 throw new \InvalidArgumentException(__('ui.backend.secret.dynamic_manual_value_not_supported'));
             }
 
-            // Сохранить текущую версию в историю перед перезаписью
+            // Save the current version to history before overwriting
             $this->saveVersionHistory($secret, $userId);
 
             $encrypted       = $this->encryptionService->encrypt($newValue, $secret->uuid);
@@ -625,14 +625,14 @@ final class SecretService
     }
 
     // ------------------------------------------------------------------ //
-    //  Удаление                                                           //
+    //  Deletion                                                           //
     // ------------------------------------------------------------------ //
 
     /**
-     * Мягкое удаление секрета (устанавливает deleted_at).
+     * Soft-delete a secret (sets deleted_at).
      *
-     * @throws AuthException     если нет прав (требуется editor+)
-     * @throws \RuntimeException если не найден
+     * @throws AuthException     if permission is missing (requires editor+)
+     * @throws \RuntimeException if not found
      */
     public function delete(string $secretUuid, string $orgId, string $userId): void
     {
@@ -776,7 +776,7 @@ final class SecretService
     }
 
     /**
-     * Внутреннее обновление значения секрета для автоматической или внешней ротации.
+     * Internal secret value update for automatic or external rotation.
      */
     public function rotateValue(
         string $secretUuid,
@@ -822,7 +822,7 @@ final class SecretService
     }
 
     /**
-     * Обновить параметры ротации уже существующего секрета.
+     * Update rotation settings for an existing secret.
      */
     public function configureRotation(
         string $secretUuid,
@@ -920,11 +920,11 @@ final class SecretService
     }
 
     // ------------------------------------------------------------------ //
-    //  Вспомогательные                                                    //
+    //  Helpers                                                    //
     // ------------------------------------------------------------------ //
 
     /**
-     * @throws \RuntimeException если каталог не найден или принадлежит другой организации
+     * @throws \RuntimeException if the directory is not found or belongs to another organization
      */
     private function findDirInOrg(string $dirUuid, string $orgId): Directory
     {
@@ -936,7 +936,7 @@ final class SecretService
     }
 
     /**
-     * @throws \RuntimeException если секрет не найден или принадлежит другой организации
+     * @throws \RuntimeException if the secret is not found or belongs to another organization
      */
     private function findSecretInOrg(string $secretUuid, string $orgId): Secret
     {
@@ -948,8 +948,8 @@ final class SecretService
     }
 
     /**
-     * @param string|null $excludeId ID секрета, который нужно исключить из проверки (при обновлении).
-     * @throws \RuntimeException если имя уже занято в каталоге
+     * @param string|null $excludeId Secret ID to exclude from the check (when updating).
+     * @throws \RuntimeException if the name is already taken in the directory
      */
     private function assertNameUnique(string $dirId, string $name, ?string $excludeId = null): void
     {
@@ -968,8 +968,8 @@ final class SecretService
     }
 
     /**
-     * Сохранить текущую версию секрета в secret_rotation_history.
-     * Автоматически удаляет записи сверх лимита MAX_VERSIONS (самые старые).
+     * Save the current secret version in secret_rotation_history.
+     * Automatically deletes records over the limit MAX_VERSIONS (oldest).
      */
     private function saveVersionHistory(
         Secret $secret,
@@ -994,7 +994,7 @@ final class SecretService
             'created_at'      => $now,
         ]);
 
-        // Удалить самые старые версии, оставив не более MAX_VERSIONS
+        // Delete the oldest versions, leaving no more than MAX_VERSIONS
         $count = (int) $db->fetchColumn(
             'SELECT COUNT(*) FROM secret_rotation_history WHERE secret_id = ?',
             [(int) $secret->id]

@@ -13,32 +13,32 @@ use Passway\Models\Organization;
 use Passway\Models\Secret;
 
 /**
- * Сервис системы одобрений.
+ * Approval system service.
  *
- * Жизненный цикл запроса:
- *   1. request()  — создаёт approval_request со статусом pending; назначает ревьювера (owner секрета)
- *   2. approve()  — ревьювер одобряет; генерируется одноразовый токен (TTL 1 ч.)
- *   3. useToken() — запрашивающий предъявляет токен и получает расшифрованное значение секрета
+ * Request lifecycle:
+ *   1. request()  - creates approval_request with pending status; assigns a reviewer (secret owner)
+ *   2. approve()  - reviewer approves; a one-time token is generated (TTL 1 h)
+ *   3. useToken() - requester presents the token and gets the decrypted secret value
  *
- * Правила:
- *   - requires_approval=true обязателен для создания запроса
- *   - Дублирующий pending-запрос (same user + secret + type) запрещён
- *   - Ревьювер = текущий owner секрета
- *   - Одобрить/отклонить запрос может только owner секрета
- *   - Токен действителен 1 час; одноразовый — после использования статус → expired
- *   - Отозвать (revoke) может: сам запрашивающий (pending), owner секрета или admin+
+ * Rules:
+ *   - requires_approval=true required to create a request
+ *   - Duplicate pending-request (same user + secret + type) is forbidden
+ *   - Reviewer = current secret owner
+ *   - Only the secret owner can approve/reject a request
+ *   - Token is valid for 1 hour; single-use - after use status -> expired
+ *   - Revoke (revoke) can: the requester (pending), secret owner or admin+
  *
- * Авторизация доступа к секрету (requires_approval):
- *   - owner секрета — обходит проверку requires_approval (прямой доступ)
- *   - editor+  — обходит проверку requires_approval (прямой доступ)
- *   - reader — обязан пройти workflow одобрения
+ * Secret access authorization (requires_approval):
+ *   - secret owner - bypasses the check requires_approval (direct access)
+ *   - editor+  - bypasses the check requires_approval (direct access)
+ *   - reader - must pass the approval workflow
  */
 final class ApprovalService
 {
-    /** TTL pending-запроса (24 ч) */
+    /** Pending request TTL (24 h) */
     private const REQUEST_TTL_SECONDS = 86_400;
 
-    /** TTL одноразового токена после одобрения (1 ч) */
+    /** One-time token TTL after approval (1 h) */
     private const TOKEN_TTL_SECONDS = 3_600;
 
     public function __construct(
@@ -48,15 +48,15 @@ final class ApprovalService
     ) {}
 
     // ------------------------------------------------------------------ //
-    //  Создание запроса                                                   //
+    //  Request creation
     // ------------------------------------------------------------------ //
 
     /**
-     * Создать запрос на доступ к секрету с requires_approval=true.
+     * Create a secret access request with requires_approval=true.
      *
-     * @throws AuthException             если нет членства в организации
-     * @throws \InvalidArgumentException если тип запроса недопустим или секрет не требует одобрения
-     * @throws \RuntimeException         если секрет не найден или уже есть pending-запрос
+     * @throws AuthException             if membership is missing in the organization
+     * @throws \InvalidArgumentException if the request type is invalid or the secret does not require approval
+     * @throws \RuntimeException         if the secret is not found or a pending request already exists
      */
     public function request(
         string  $secretUuid,
@@ -217,14 +217,14 @@ final class ApprovalService
     }
 
     // ------------------------------------------------------------------ //
-    //  Чтение                                                             //
+    //  Reading                                                             //
     // ------------------------------------------------------------------ //
 
     /**
-     * Список собственных запросов пользователя в организации.
+     * List the user own requests in the organization.
      *
      * @return ApprovalRequest[]
-     * @throws AuthException если нет членства
+     * @throws AuthException if membership is missing
      */
     public function listMy(string $userId, string $orgId): array
     {
@@ -232,7 +232,7 @@ final class ApprovalService
             throw new AuthException(__('ui.backend.organization.not_member'), 403);
         }
 
-        // Фильтруем по секретам, принадлежащим организации
+        // Filter by secrets belonging to the organization
         $rows = Database::getInstance()->fetchAll(
             'SELECT ar.* FROM approval_requests ar
              JOIN secrets s ON s.id = ar.secret_id
@@ -281,10 +281,10 @@ final class ApprovalService
     }
 
     /**
-     * Список pending-запросов, где пользователь является ревьювером.
+     * List pending requests, where the user is a reviewer.
      *
      * @return ApprovalRequest[]
-     * @throws AuthException если нет членства
+     * @throws AuthException if membership is missing
      */
     public function listPending(string $reviewerId, string $orgId): array
     {
@@ -305,11 +305,11 @@ final class ApprovalService
     }
 
     /**
-     * Просмотр конкретного запроса.
-     * Может смотреть: сам запрашивающий или owner секрета.
+     * View a specific request.
+     * Can view: the requester or secret owner.
      *
-     * @throws AuthException     если нет прав на просмотр
-     * @throws \RuntimeException если не найден
+     * @throws AuthException     if view permission is missing
+     * @throws \RuntimeException if not found
      */
     public function get(string $requestUuid, string $userId, string $orgId): ApprovalRequest
     {
@@ -343,19 +343,19 @@ final class ApprovalService
     }
 
     // ------------------------------------------------------------------ //
-    //  Одобрение / Отклонение                                             //
+    //  Approval / Rejection                                             //
     // ------------------------------------------------------------------ //
 
     /**
-     * Одобрить запрос.
-     * Генерирует одноразовый токен (TTL 1 ч.); токен возвращается открытым ОДИН РАЗ.
-     * В БД хранится только SHA-256 хэш.
+     * Approve a request.
+     * Generates a one-time token (TTL 1 h); the token is returned in plaintext ONCE.
+     * Only the SHA-256 hash is stored in the DB.
      *
-     * Требуется owner секрета.
+     * Secret owner is required.
      *
      * @return array{request: ApprovalRequest, token: string}
-     * @throws AuthException     если нет прав или пытается одобрить свой запрос
-     * @throws \RuntimeException если запрос не найден или не в статусе pending
+     * @throws AuthException     if permission is missing or trying to approve own request
+     * @throws \RuntimeException if the request is not found or not pending
      */
     public function approve(string $requestUuid, string $reviewerId, string $orgId): array
     {
@@ -372,7 +372,7 @@ final class ApprovalService
             );
         }
 
-        // Генерация одноразового токена (32 байта → 64-символьная hex-строка)
+        // Generate a one-time token (32 bytes -> 64-character hex string)
         $rawToken  = \bin2hex(\random_bytes(32));
         $tokenHash = \hash('sha256', $rawToken);
 
@@ -404,11 +404,11 @@ final class ApprovalService
     }
 
     /**
-     * Отклонить запрос.
-     * Требуется owner секрета.
+     * Reject a request.
+     * Secret owner is required.
      *
-     * @throws AuthException     если нет прав
-     * @throws \RuntimeException если запрос не в статусе pending
+     * @throws AuthException     if permission is missing
+     * @throws \RuntimeException if the request is not pending
      */
     public function reject(
         string  $requestUuid,
@@ -449,16 +449,16 @@ final class ApprovalService
     }
 
     // ------------------------------------------------------------------ //
-    //  Отзыв                                                              //
+    //  Revocation                                                              //
     // ------------------------------------------------------------------ //
 
     /**
-     * Отозвать запрос.
-     *   - Сам запрашивающий может отозвать только pending-запрос.
-     *   - owner секрета и admin+ могут отозвать pending или approved.
+     * Revoke request.
+     *   - The requester can revoke only a pending request.
+     *   - Secret owner and admin+ can revoke pending or approved requests.
      *
-     * @throws AuthException     если нет прав
-     * @throws \RuntimeException если запрос не найден или уже finalized
+     * @throws AuthException     if permission is missing
+     * @throws \RuntimeException if the request is not found or already finalized
      */
     public function revoke(string $requestUuid, string $userId, string $orgId): void
     {
@@ -501,18 +501,18 @@ final class ApprovalService
     }
 
     // ------------------------------------------------------------------ //
-    //  Использование токена                                               //
+    //  Token use
     // ------------------------------------------------------------------ //
 
     /**
-     * Использовать одноразовый токен для получения значения секрета.
+     * Use a one-time token to get the secret value.
      *
-     * Только запрашивающий может использовать свой токен.
-     * Токен потребляется: после успешного использования статус становится 'expired'.
+     * Only the requester can use their token.
+     * Token is consumed: after successful use, status becomes 'expired'.
      *
      * @return array{secret: Secret, value: string}
-     * @throws AuthException     если нет прав или токен недействителен
-     * @throws \RuntimeException если запрос не найден
+     * @throws AuthException     if permission is missing or the token is invalid
+     * @throws \RuntimeException if the request is not found
      */
     public function useToken(
         string $requestUuid,
@@ -575,23 +575,23 @@ final class ApprovalService
             throw new AuthException(__('ui.backend.approval.token_already_used'), 403);
         }
 
-        // Проверить срок действия токена
+        // Check token expiration
         $expiresAt = new \DateTimeImmutable($approvalReq->expiresAt, new \DateTimeZone('UTC'));
         if ($expiresAt <= now()) {
-            // Автоматически перевести в expired
+            // Automatically move to expired
             $approvalReq->update(['status' => 'expired']);
             throw new AuthException(__('ui.backend.approval.token_expired'), 403);
         }
 
         if ($token !== '') {
-            // Проверить хэш токена, если requester предъявляет его явно.
+            // Check the token hash if requester provides it explicitly.
             $providedHash = \hash('sha256', $token);
             if (!\hash_equals($approvalReq->accessTokenHash, $providedHash)) {
                 throw new AuthException(__('ui.backend.approval.token_invalid'), 403);
             }
         }
 
-        // Токен валиден — получить секрет
+        // Token is valid - get the secret
         $secret = Secret::findById($approvalReq->secretId)
             ?? throw new \RuntimeException(__('ui.backend.secret.not_found'));
 
@@ -601,7 +601,7 @@ final class ApprovalService
             $secret->uuid
         );
 
-        // Потребить токен
+        // Consume the token
         $approvalReq->update([
             'status'            => 'expired',
             'access_token_hash' => null,
@@ -623,11 +623,11 @@ final class ApprovalService
     }
 
     // ------------------------------------------------------------------ //
-    //  Вспомогательные                                                    //
+    //  Helpers                                                    //
     // ------------------------------------------------------------------ //
 
     /**
-     * @throws \RuntimeException если секрет не найден или принадлежит другой орг.
+     * @throws \RuntimeException if the secret is not found or belongs to another org
      */
     private function findSecretInOrg(string $secretUuid, string $orgId): Secret
     {
@@ -639,7 +639,7 @@ final class ApprovalService
     }
 
     /**
-     * @throws \RuntimeException если запрос не найден или принадлежит другой орг.
+     * @throws \RuntimeException if the request is not found or belongs to another org
      */
     private function findRequestInOrg(string $requestUuid, string $orgId): ApprovalRequest
     {
@@ -648,7 +648,7 @@ final class ApprovalService
             throw new \RuntimeException(__('ui.backend.approval.request_not_found'));
         }
 
-        // Проверить что секрет принадлежит организации
+        // Check that the secret belongs to the organization
         $secret = Secret::findById($req->secretId);
         if ($secret === null || $secret->organizationId !== $orgId) {
             throw new \RuntimeException(__('ui.backend.approval.request_not_found'));

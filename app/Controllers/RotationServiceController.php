@@ -12,7 +12,7 @@ use Passway\Models\RotationService;
 use Passway\Services\RotationRegistryService;
 
 /**
- * Глобальные rotation services.
+ * Global rotation services.
  */
 final class RotationServiceController
 {

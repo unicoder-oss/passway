@@ -9,10 +9,10 @@ use Passway\Exceptions\AuthException;
 use Passway\Models\RotationService;
 
 /**
- * Управление глобальным каталогом внешних rotation services.
+ * Manage the global catalog of external rotation services.
  *
- * В текущей модели прав отдельного system-admin нет, поэтому эту роль временно
- * выполняет первый пользователь, созданный во время setup.
+ * The current permission model has no separate system-admin, so this role is temporarily
+ * performed by the first user created during setup.
  */
 final class RotationRegistryService
 {

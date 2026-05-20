@@ -7,15 +7,15 @@ namespace Passway\Core;
 use Throwable;
 
 /**
- * Ядро приложения — точка сборки всех компонентов.
+ * Application core - the assembly point for all components.
  *
- * Инициализирует:
- * - Конфигурацию (.env)
- * - DI-контейнер
- * - Базу данных
- * - Роутер
- * - Регистрирует маршруты
- * - Обрабатывает входящий запрос
+ * Initializes:
+ * - Configuration (.env)
+ * - DI container
+ * - Database
+ * - Router
+ * - Registers routes
+ * - Handles the incoming request
  */
 final class Application
 {
@@ -39,11 +39,11 @@ final class Application
     }
 
     // ------------------------------------------------------------------ //
-    //  Запуск приложения                                                   //
+    //  Application startup                                                   //
     // ------------------------------------------------------------------ //
 
     /**
-     * Принять HTTP-запрос, смаршрутизировать и отправить ответ.
+     * Accept the HTTP request, route it, and send the response.
      */
     public function run(): void
     {
@@ -51,7 +51,7 @@ final class Application
         set_request_locale(resolve_request_locale($request));
 
         try {
-            // Глобальная проверка setup — до маршрутизации
+            // Global setup check - before routing
             $setupMw  = $this->container->make(\Passway\Middleware\SetupMiddleware::class);
             $response = $setupMw->handle(
                 $request,
@@ -69,7 +69,7 @@ final class Application
     }
 
     // ------------------------------------------------------------------ //
-    //  Геттеры                                                             //
+    //  Getters                                                             //
     // ------------------------------------------------------------------ //
 
     public function getConfig(): Config       { return $this->config; }
@@ -77,28 +77,28 @@ final class Application
     public function getRouter(): Router       { return $this->router; }
 
     // ------------------------------------------------------------------ //
-    //  Инициализация                                                       //
+    //  Initialization                                                       //
     // ------------------------------------------------------------------ //
 
     private function boot(): void
     {
-        // 1. Конфигурация
+        // 1. Configuration
         $this->config = Config::getInstance();
 
-        // Настройки PHP в зависимости от окружения
+        // PHP settings depending on the environment
         $this->configurePhp();
 
-        // 2. DI-контейнер
+        // 2. DI container
         $this->container = Container::getInstance();
         $this->registerCoreBindings();
 
-        // 3. Роутер
+        // 3. Router
         $this->router = new Router($this->container);
 
-        // 4. Маршруты
+        // 4. Routes
         $this->registerRoutes();
 
-        // 5. Генерация setup-токена при первом запуске (если нужно)
+        // 5. Generate the setup token on first startup (if needed)
         $this->maybeInitSetupToken();
     }
 
@@ -119,7 +119,7 @@ final class Application
         $tz = $this->config->get('APP_TIMEZONE', 'UTC');
         date_default_timezone_set(is_string($tz) ? $tz : 'UTC');
 
-        // Безопасность
+        // Security
         ini_set('expose_php', '0');
         ini_set('session.use_strict_mode', '1');
         ini_set('session.cookie_httponly', '1');
@@ -135,7 +135,7 @@ final class Application
         $this->container->instance(Config::class, $this->config);
         $this->container->singleton(Database::class, fn() => Database::getInstance());
 
-        // Сервисный слой (Шаг 2)
+        // Service layer (Step 2)
         $this->container->singleton(
             \Passway\Services\EncryptionService::class,
             fn() => new \Passway\Services\EncryptionService()
@@ -179,7 +179,7 @@ final class Application
             fn() => new \Passway\Services\SchedulerService()
         );
 
-        // Сервисный слой (Шаг 3 — Аутентификация)
+        // Service layer (Step 3 - Authentication)
         $this->container->singleton(
             \Passway\Services\SessionService::class,
             fn($c) => new \Passway\Services\SessionService(
@@ -214,7 +214,7 @@ final class Application
             )
         );
 
-        // Сервисный слой (Шаг 4 — Setup)
+        // Service layer (Step 4 - Setup)
         $this->container->singleton(
             \Passway\Services\SetupService::class,
             fn($c) => new \Passway\Services\SetupService(
@@ -233,7 +233,7 @@ final class Application
             )
         );
 
-        // Сервисный слой (Шаг 10 — API-ключи + rate limiting)
+        // Service layer (Step 10 - API keys + rate limiting)
         $this->container->singleton(
             \Passway\Services\ApiKeyService::class,
             fn($c) => new \Passway\Services\ApiKeyService(
@@ -248,7 +248,7 @@ final class Application
             )
         );
 
-        // Сервисный слой (Шаг 9 — Система одобрений)
+        // Service layer (Step 9 - Approval system)
         $this->container->singleton(
             \Passway\Services\ApprovalService::class,
             fn($c) => new \Passway\Services\ApprovalService(
@@ -264,7 +264,7 @@ final class Application
             )
         );
 
-        // Сервисный слой (Шаг 8 — Контроль доступа)
+        // Service layer (Step 8 - Access control)
         $this->container->singleton(
             \Passway\Services\GroupService::class,
             fn($c) => new \Passway\Services\GroupService(
@@ -294,7 +294,7 @@ final class Application
             )
         );
 
-        // Сервисный слой (Шаг 7 — Секреты)
+        // Service layer (Step 7 - Secrets)
         $this->container->singleton(
             \Passway\Services\SecretService::class,
             fn($c) => new \Passway\Services\SecretService(
@@ -384,7 +384,7 @@ final class Application
             )
         );
 
-        // Сервисный слой (Шаг 6 — Каталоги)
+        // Service layer (Step 6 - Directories)
         $this->container->singleton(
             \Passway\Services\DirectoryService::class,
             fn($c) => new \Passway\Services\DirectoryService(
@@ -400,7 +400,7 @@ final class Application
             )
         );
 
-        // Сервисный слой (Шаг 5 — Организации, инвайты, роли)
+        // Service layer (Step 5 - Organizations, invites, roles)
         $this->container->singleton(
             \Passway\Services\OrganizationService::class,
             fn($c) => new \Passway\Services\OrganizationService(
@@ -435,8 +435,8 @@ final class Application
     }
 
     /**
-     * При первом запуске (setup_complete='0', setup_token_hash='') генерирует
-     * setup-токен и выводит его в stdout, чтобы администратор мог его найти.
+     * On first startup (setup_complete='0', setup_token_hash='') generates
+     * setup token and prints it to stdout so the administrator can find it.
      */
     private function maybeInitSetupToken(): void
     {
@@ -458,14 +458,14 @@ final class Application
             $rawToken = $setupService->generateAndStoreSetupToken();
 
             if ($rawToken !== null) {
-                // Вывести токен в stdout (видно в Docker-логах и при запуске из CLI)
+                // Print the token to stdout (visible in Docker logs and when started from CLI)
                 file_put_contents('php://stdout', \sprintf(
                     "\n[Passway] *** SETUP REQUIRED ***\nSetup token: %s\nVisit /setup to complete installation.\n\n",
                     $rawToken
                 ));
             }
         } catch (Throwable) {
-            // БД недоступна при старте — setup завершится ошибкой позже
+            // DB unavailable at startup - setup will fail later
         }
     }
 
@@ -473,7 +473,7 @@ final class Application
     {
         $router = $this->router;
 
-        // Файлы маршрутов
+        // Route files
         $routeFiles = [
             PASSWAY_ROOT . '/routes/web.php',
             PASSWAY_ROOT . '/routes/api.php',
@@ -481,7 +481,7 @@ final class Application
 
         foreach ($routeFiles as $file) {
             if (file_exists($file)) {
-                // Передаём $router в файл маршрутов через переменную
+                // Pass $router to the routes file through a variable
                 (static function (Router $router) use ($file) {
                     require $file;
                 })($router);
@@ -490,12 +490,12 @@ final class Application
     }
 
     // ------------------------------------------------------------------ //
-    //  Обработка исключений                                                //
+    //  Exception handling                                                //
     // ------------------------------------------------------------------ //
 
     private function handleException(Throwable $e, Request $request): Response
     {
-        // Логируем ошибку
+        // Log the error
         try {
             if (isset($this->container)) {
                 $this->container->make(\Passway\Services\LoggerService::class)->error(

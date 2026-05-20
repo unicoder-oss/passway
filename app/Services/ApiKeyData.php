@@ -5,18 +5,18 @@ declare(strict_types=1);
 namespace Passway\Services;
 
 /**
- * Value Object — результат генерации API-ключа.
+ * Value Object - API key generation result.
  *
- * fullKey передаётся пользователю ОДИН раз и больше не хранится.
- * keyPrefix хранится в БД для идентификации ключа в UI.
+ * fullKey is given to the user ONCE and is not stored afterward.
+ * keyPrefix is stored in the DB to identify the key in the UI.
  */
 final readonly class ApiKeyData
 {
     public function __construct(
-        /** Полный API-ключ: sv_{64hex} — показывается один раз */
+        /** Full API key: sv_{64hex} - is shown once */
         public string $fullKey,
 
-        /** Видимый префикс ключа — хранится в БД */
+        /** Visible key prefix - stored in the DB */
         public string $keyPrefix,
     ) {}
 }

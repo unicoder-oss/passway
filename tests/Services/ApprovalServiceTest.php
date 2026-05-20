@@ -19,7 +19,7 @@ use Passway\Services\SecretService;
 use Passway\Tests\DatabaseTestCase;
 
 /**
- * Тесты ApprovalService: создание запросов, одобрение, отклонение, токены.
+ * ApprovalService tests: request creation, approval, rejection, tokens.
  *
  * @requires extension pdo_sqlite
  * @requires extension sodium
@@ -50,7 +50,7 @@ final class ApprovalServiceTest extends DatabaseTestCase
         $this->svc      = new ApprovalService($this->orgSvc, $encSvc);
         $this->apiKeySvc = new ApiKeyService($this->orgSvc);
 
-        // team-режим
+        // team mode
         Database::getInstance()->query(
             "UPDATE system_config SET value = 'team' WHERE key = 'deploy_mode'"
         );
@@ -61,7 +61,7 @@ final class ApprovalServiceTest extends DatabaseTestCase
     // ------------------------------------------------------------------ //
 
     /**
-     * Создаёт орг. с owner, добавляет admin, создаёт каталог и секрет с requires_approval=true.
+     * Creates an org with an owner, adds an admin, and creates a directory and secret with requires_approval=true.
      *
      * @return array{owner: User, admin: User, requester: User, orgId: string, secretUuid: string}
      */
@@ -77,7 +77,7 @@ final class ApprovalServiceTest extends DatabaseTestCase
 
         $dir = $this->dirSvc->create($org->id, null, 'Secrets', $owner->id);
 
-        // Создаём секрет с requires_approval=true
+        // Create a secret with requires_approval=true
         $secret = $this->secretSvc->create($org->id, $dir->uuid, 'DB Password', 'static', 'supersecret', $owner->id);
         Database::getInstance()->update('secrets', ['requires_approval' => 1], ['id' => $secret->id]);
 
@@ -118,7 +118,7 @@ final class ApprovalServiceTest extends DatabaseTestCase
         $req      = $this->svc->request($secUuid, 'read', null, $requester->id, $orgId);
         $reviewers = \Passway\Models\ApprovalReviewer::findByRequestId($req->id);
 
-        // Единственный ревьювер — owner секрета
+        // The only reviewer is the secret owner
         $reviewerIds = \array_map(fn($r) => $r->reviewerId, $reviewers);
         $this->assertSame([$owner->id], $reviewerIds);
     }
@@ -147,7 +147,7 @@ final class ApprovalServiceTest extends DatabaseTestCase
         $org   = $this->orgSvc->create('Org2', $owner->id);
         $dir   = $this->dirSvc->create($org->id, null, 'Dir', $owner->id);
         $secret = $this->secretSvc->create($org->id, $dir->uuid, 'Normal', 'static', 'value', $owner->id);
-        // requires_approval остаётся false
+        // requires_approval remains false
 
         $this->expectException(\InvalidArgumentException::class);
         $this->svc->request($secret->uuid, 'read', null, $owner->id, $org->id);
@@ -202,7 +202,7 @@ final class ApprovalServiceTest extends DatabaseTestCase
         $this->assertCount(1, $mine);
         $this->assertSame($requester->id, $mine[0]->requestedBy);
 
-        // Owner видит только свои запросы (нет запросов от owner в этом тесте)
+        // Owner sees only their own requests (there are no owner requests in this test)
         $ownerMine = $this->svc->listMy($owner->id, $orgId);
         $this->assertCount(0, $ownerMine);
     }
@@ -307,9 +307,9 @@ final class ApprovalServiceTest extends DatabaseTestCase
         $this->assertSame($owner->id, $approved->approvedBy);
         $this->assertNotNull($approved->accessTokenHash);
         $this->assertNotEmpty($token);
-        // Токен - hex 64 символа (32 байта)
+        // Token is 64 hex characters (32 bytes)
         $this->assertSame(64, \strlen($token));
-        // В БД хранится hash, не сам токен
+        // The DB stores the hash, not the token itself
         $this->assertNotSame($token, $approved->accessTokenHash);
         $this->assertSame(\hash('sha256', $token), $approved->accessTokenHash);
 
@@ -357,7 +357,7 @@ final class ApprovalServiceTest extends DatabaseTestCase
         $req = $this->svc->request($secUuid, 'read', null, $requester->id, $orgId);
         $this->svc->approve($req->uuid, $owner->id, $orgId);
 
-        // Пытаемся одобрить повторно
+        // Try approving again
         $this->expectException(\RuntimeException::class);
         $this->svc->approve($req->uuid, $owner->id, $orgId);
     }
@@ -515,7 +515,7 @@ final class ApprovalServiceTest extends DatabaseTestCase
 
         $this->svc->useToken($req->uuid, $token, $requester->id, $orgId);
 
-        // Повторная попытка должна провалиться
+        // A repeated attempt should fail
         $this->expectException(AuthException::class);
         $this->svc->useToken($req->uuid, $token, $requester->id, $orgId);
     }
@@ -576,7 +576,7 @@ final class ApprovalServiceTest extends DatabaseTestCase
         ['owner' => $owner, 'orgId' => $orgId, 'secretUuid' => $secUuid] =
             $this->setupApprovalScenario();
 
-        // owner секрета имеет прямой доступ даже при requires_approval=true
+        // The secret owner has direct access even when requires_approval=true
         ['value' => $value] = $this->secretSvc->get($secUuid, $orgId, $owner->id);
         $this->assertSame('supersecret', $value);
     }

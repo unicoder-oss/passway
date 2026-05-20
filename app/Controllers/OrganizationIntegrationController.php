@@ -14,7 +14,7 @@ use Passway\Models\RotationService;
 use Passway\Services\OrganizationIntegrationService;
 
 /**
- * Интеграции rotation services для конкретной организации.
+ * Integrations rotation services for a specific organization.
  */
 final class OrganizationIntegrationController
 {

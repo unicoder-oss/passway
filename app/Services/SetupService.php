@@ -9,22 +9,22 @@ use Passway\Exceptions\AuthException;
 use Passway\Models\User;
 
 /**
- * Сервис первоначальной настройки системы.
+ * Service initial system setup.
  *
- * Управляет:
- *   - генерацией и верификацией setup_token
- *   - созданием первого администратора
- *   - сохранением deploy_mode
- *   - флагом setup_complete
+ * Manages:
+ *   - generation and verification of setup_token
+ *   - creation of the first administrator
+ *   - saving deploy_mode
+ *   - flag setup_complete
  *
  * Setup flow:
- *   1. Первый запуск: generateAndStoreSetupToken() → токен в stdout / setup_token.txt
- *   2. Администратор открывает /setup, вводит токен + данные → completeSetup()
- *   3. После completeSetup(): setup_complete='1', токен сгорает
+ *   1. First startup: generateAndStoreSetupToken() -> token to stdout / setup_token.txt
+ *   2. Administrator opens /setup, enters token plus data -> completeSetup()
+ *   3. After completeSetup(): setup_complete='1', token expires
  */
 final class SetupService
 {
-    /** Допустимые режимы развёртывания */
+    /** Allowed deployment modes */
     public const DEPLOY_MODES = ['solo', 'team'];
 
     public function __construct(
@@ -33,11 +33,11 @@ final class SetupService
     ) {}
 
     // ------------------------------------------------------------------ //
-    //  Состояние setup                                                    //
+    //  Setup state                                                    //
     // ------------------------------------------------------------------ //
 
     /**
-     * Проверить, завершён ли setup (setup_complete = '1').
+     * Check whether setup is complete (setup_complete = '1').
      */
     public function isSetupComplete(): bool
     {
@@ -52,7 +52,7 @@ final class SetupService
     }
 
     /**
-     * Проверить, сгенерирован ли setup_token (хеш не пустой).
+     * Check whether setup_token has been generated (hash is not empty).
      */
     public function hasSetupToken(): bool
     {
@@ -67,17 +67,17 @@ final class SetupService
     }
 
     // ------------------------------------------------------------------ //
-    //  Генерация токена                                                   //
+    //  Token generation                                                   //
     // ------------------------------------------------------------------ //
 
     /**
-     * Сгенерировать setup-токен, сохранить SHA-256 хеш в БД и записать
-     * plaintext в storage/setup_token.txt.
+     * Generate a setup token, save the SHA-256 hash in the DB, and write
+     * plaintext to storage/setup_token.txt.
      *
-     * Вызывается один раз при первом запуске.
-     * Если токен уже существует — возвращает null.
+     * Called once on first startup.
+     * If the token already exists, returns null.
      *
-     * @return string|null  Plaintext-токен (для вывода в stdout) или null
+     * @return string|null  Plaintext-token (for stdout output) or null
      */
     public function generateAndStoreSetupToken(): ?string
     {
@@ -93,14 +93,14 @@ final class SetupService
             [$tokenHash]
         );
 
-        // Сохраняем в файл для удобства (не обязательно, но полезно в Docker-логах)
+        // Save to a file for convenience (not required, but useful in Docker logs)
         $this->writeSetupTokenFile($rawToken);
 
         return $rawToken;
     }
 
     /**
-     * Верифицировать setup-токен (timing-safe).
+     * Verify setup token (timing-safe).
      */
     public function verifySetupToken(string $token): bool
     {
@@ -125,15 +125,15 @@ final class SetupService
     }
 
     // ------------------------------------------------------------------ //
-    //  Завершение setup                                                   //
+    //  Setup completion                                                   //
     // ------------------------------------------------------------------ //
 
     /**
-     * Завершить setup: создать admin-пользователя, сохранить deploy_mode,
-     * выставить setup_complete='1', аннулировать токен.
+     * Complete setup: create admin-user, save deploy_mode,
+     * set setup_complete='1' and invalidate the token.
      *
-     * @throws AuthException при неверном токене или уже завершённом setup
-     * @throws \InvalidArgumentException при некорректных входных данных
+     * @throws AuthException on invalid token or already completed setup
+     * @throws \InvalidArgumentException on invalid input data
      */
     public function completeSetup(
         string $setupToken,
@@ -141,17 +141,17 @@ final class SetupService
         string $password,
         string $deployMode,
     ): User {
-        // 1. Нельзя повторить setup
+        // 1. Setup cannot be repeated
         if ($this->isSetupComplete()) {
             throw new AuthException(__('ui.backend.setup.already_complete'));
         }
 
-        // 2. Проверить токен
+        // 2. Check token
         if (!$this->verifySetupToken($setupToken)) {
             throw new AuthException(__('ui.backend.setup.invalid_token'));
         }
 
-        // 3. Валидация входных данных
+        // 3. Validation input data
         $email      = \strtolower(\trim($email));
         $deployMode = \strtolower(\trim($deployMode));
 
@@ -159,7 +159,7 @@ final class SetupService
         $this->validatePassword($password);
         $this->validateDeployMode($deployMode);
 
-        // 4. Создать пользователя в транзакции
+        // 4. Create the user in a transaction
         $db = Database::getInstance();
 
         $db->transaction(function () use ($db, $email, $password, $deployMode): void {
@@ -178,7 +178,7 @@ final class SetupService
                 'updated_at'     => $now,
             ]);
 
-            // 5. Обновить system_config
+            // 5. Update system_config
             $db->query(
                 "UPDATE system_config SET value = '1' WHERE key = 'setup_complete'",
             );
@@ -186,13 +186,13 @@ final class SetupService
                 "UPDATE system_config SET value = ? WHERE key = 'deploy_mode'",
                 [$deployMode]
             );
-            // Аннулировать токен
+            // Invalidate the token
             $db->query(
                 "UPDATE system_config SET value = '' WHERE key = 'setup_token_hash'",
             );
         });
 
-        // 6. Удалить файл с токеном
+        // 6. Delete the token file
         $this->deleteSetupTokenFile();
 
         $user = User::findByEmail($email);
@@ -204,7 +204,7 @@ final class SetupService
     }
 
     // ------------------------------------------------------------------ //
-    //  Валидация                                                          //
+    //  Validation                                                          //
     // ------------------------------------------------------------------ //
 
     /**
@@ -218,7 +218,7 @@ final class SetupService
     }
 
     /**
-     * Пароль: минимум 8 символов, хотя бы одна буква и одна цифра.
+     * Password: minimum 8 characters, at least one letter and one digit.
      *
      * @throws \InvalidArgumentException
      */
@@ -248,7 +248,7 @@ final class SetupService
     }
 
     // ------------------------------------------------------------------ //
-    //  Файловые операции                                                  //
+    //  File operations                                                  //
     // ------------------------------------------------------------------ //
 
     private function writeSetupTokenFile(string $rawToken): void
@@ -265,7 +265,7 @@ final class SetupService
                 LOCK_EX
             );
         } catch (\Throwable) {
-            // Не критично — токен всё равно выводится в stdout
+            // Not critical; the token is still printed to stdout
         }
     }
 
@@ -277,7 +277,7 @@ final class SetupService
                 @\unlink($path);
             }
         } catch (\Throwable) {
-            // Не критично
+            // Not critical
         }
     }
 

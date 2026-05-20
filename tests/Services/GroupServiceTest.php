@@ -13,7 +13,7 @@ use Passway\Services\OrganizationService;
 use Passway\Tests\DatabaseTestCase;
 
 /**
- * Тесты GroupService: создание групп, управление участниками.
+ * GroupService tests: group creation, member management.
  *
  * @requires extension pdo_sqlite
  */

@@ -11,16 +11,16 @@ use Passway\Models\Organization;
 use Passway\Models\OrganizationMember;
 
 /**
- * Сервис инвайт-ссылок.
+ * Service invite links.
  *
- * Типы инвайтов:
- *   join_org   — вступить в существующую организацию
- *   create_org — создать новую организацию (только в team-режиме)
+ * Invite types:
+ *   join_org   - join an existing organization
+ *   create_org - create a new organization (team mode only)
  *
- * Безопасность:
- *   - Токен 64 hex (32 random bytes), хранится как plaintext (короткоживущий, одноразовый)
- *   - Срок действия по умолчанию: 1 час (OrganizationService::DEFAULT_INVITE_TTL)
- *   - После использования: used_at заполняется, повторно недоступен
+ * Security:
+ *   - 64-hex token (32 random bytes), stored as plaintext (short-lived, single-use)
+ *   - Default lifetime: 1 hour (OrganizationService::DEFAULT_INVITE_TTL)
+ *   - After use: used_at is filled, cannot be reused
  */
 final class InviteService
 {
@@ -31,14 +31,14 @@ final class InviteService
     ) {}
 
     // ------------------------------------------------------------------ //
-    //  Создание инвайта                                                   //
+    //  Invite creation
     // ------------------------------------------------------------------ //
 
     /**
-     * Создать инвайт-ссылку для вступления в организацию.
+     * Create an invite link for joining an organization.
      *
-     * @throws AuthException если создатель не имеет роли admin+
-     * @throws \InvalidArgumentException при некорректной роли
+     * @throws AuthException if the creator lacks admin+ role
+     * @throws \InvalidArgumentException on invalid role
      */
     public function createJoinOrgInvite(
         string $orgId,
@@ -52,12 +52,12 @@ final class InviteService
 
         $this->assertValidInviteRole($role);
 
-        // Только admin+ может создавать инвайты
+        // Only admin+ can create invites
         if (!$this->organizationService->hasPermission($orgId, $createdBy, 'admin')) {
             throw new AuthException(__('ui.backend.invite.requires_admin_create'), 403);
         }
 
-        // Только owner может создать инвайт с ролью admin
+        // Only owner can create an invite with admin role
         if ($role === 'admin' && !$this->organizationService->hasPermission($orgId, $createdBy, 'owner')) {
             throw new AuthException(__('ui.backend.invite.only_owner_create_admin'), 403);
         }
@@ -72,10 +72,10 @@ final class InviteService
     }
 
     /**
-     * Создать инвайт для регистрации и создания новой организации.
-     * Доступно только в team-режиме.
+     * Create an invite for registration and new organization creation.
+     * Available only in team mode.
      *
-     * @throws \RuntimeException в solo-режиме
+     * @throws \RuntimeException in solo mode
      */
     public function createOrgInvite(
         string $createdBy,
@@ -95,13 +95,13 @@ final class InviteService
     }
 
     // ------------------------------------------------------------------ //
-    //  Получение инвайта                                                  //
+    //  Invite lookup                                                  //
     // ------------------------------------------------------------------ //
 
     /**
-     * Найти валидный (не истёкший, не использованный) инвайт по токену.
+     * Find a valid (not expired, unused) invite by token.
      *
-     * @throws AuthException если инвайт не найден / истёк / использован
+     * @throws AuthException if the invite is not found / expired / used
      */
     public function findValid(string $token): InviteLink
     {
@@ -121,7 +121,7 @@ final class InviteService
     }
 
     /**
-     * Активные инвайты организации.
+     * Active organization invites.
      *
      * @return InviteLink[]
      */
@@ -131,15 +131,15 @@ final class InviteService
     }
 
     // ------------------------------------------------------------------ //
-    //  Принятие инвайта                                                   //
+    //  Invite acceptance                                                   //
     // ------------------------------------------------------------------ //
 
     /**
-     * Принять инвайт join_org: добавить acceptorUserId в организацию.
+     * Accept a join_org invite: add acceptorUserId to the organization.
      *
-     * @throws AuthException если инвайт недействителен
-     * @throws \RuntimeException если пользователь уже в орг.
-     * @return Organization — организация, в которую вступил пользователь
+     * @throws AuthException if the invite is invalid
+     * @throws \RuntimeException if the user is already in the org.
+     * @return Organization - organization the user joined
      */
     public function acceptJoinOrg(string $token, string $acceptorUserId): Organization
     {
@@ -213,13 +213,13 @@ final class InviteService
     }
 
     // ------------------------------------------------------------------ //
-    //  Отзыв инвайта                                                      //
+    //  Invite revocation
     // ------------------------------------------------------------------ //
 
     /**
-     * Аннулировать инвайт (пометить как истёкший).
+     * Invalidate an invite (mark as expired).
      *
-     * @throws AuthException если requesterId не имеет прав admin+
+     * @throws AuthException if requesterId lacks admin+ permission
      */
     public function revoke(string $inviteUuid, string $requesterId): void
     {
@@ -231,14 +231,14 @@ final class InviteService
             throw new \RuntimeException(__('ui.backend.invite.cannot_revoke_used'));
         }
 
-        // Проверка прав: только admin+ орг. или создатель инвайта
+        // Permission check: only organization admin+ or invite creator
         if ($invite->organizationId !== null) {
             if (!$this->organizationService->hasPermission($invite->organizationId, $requesterId, 'admin')) {
                 throw new AuthException(__('ui.backend.invite.requires_admin_revoke'), 403);
             }
         }
 
-        // Пометить как истёкший (expires_at = now)
+        // Mark as expired (expires_at = now)
         Database::getInstance()->update(
             'invite_links',
             ['expires_at' => now()->format('Y-m-d H:i:s')],
@@ -256,7 +256,7 @@ final class InviteService
     }
 
     // ------------------------------------------------------------------ //
-    //  Вспомогательные                                                    //
+    //  Helpers                                                    //
     // ------------------------------------------------------------------ //
 
     private function insertInvite(
@@ -316,7 +316,7 @@ final class InviteService
      */
     private function assertValidInviteRole(string $role): void
     {
-        // owner не выдаётся через инвайт — ownership передаётся отдельно
+        // owner is not granted through an invite - ownership is transferred separately
         $allowed = \array_filter(
             OrganizationMember::ROLES,
             fn($r) => $r !== 'owner'

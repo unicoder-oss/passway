@@ -10,8 +10,8 @@ use Passway\Services\TotpService;
 use PHPUnit\Framework\TestCase;
 
 /**
- * Тесты TotpService.
- * БД не нужна — тесты изолированы на уровне сервисов.
+ * TotpService tests.
+ * No DB is needed; tests are isolated at the service level.
  *
  * @requires extension sodium
  */
@@ -22,7 +22,7 @@ final class TotpServiceTest extends TestCase
 
     protected function setUp(): void
     {
-        $_ENV['MASTER_KEY'] = \str_repeat('ab', 32); // 64 hex символа
+        $_ENV['MASTER_KEY'] = \str_repeat('ab', 32); // 64 hex characters
         $_ENV['APP_NAME']   = 'PasswayTest';
 
         $this->encryption = new EncryptionService();
@@ -50,7 +50,7 @@ final class TotpServiceTest extends TestCase
     {
         $data = $this->svc->generateSecret();
 
-        // Base32 алфавит: A-Z и 2-7
+        // Base32 alphabet: A-Z and 2-7
         $this->assertMatchesRegularExpression('/^[A-Z2-7]+$/', $data['raw_secret']);
     }
 
@@ -58,7 +58,7 @@ final class TotpServiceTest extends TestCase
     {
         $data = $this->svc->generateSecret();
 
-        // raw_secret НЕ должен совпадать с зашифрованным значением
+        // raw_secret must NOT match the encrypted value
         $this->assertNotSame($data['raw_secret'], $data['totp_secret']);
     }
 
@@ -123,7 +123,7 @@ final class TotpServiceTest extends TestCase
     {
         $data = $this->svc->generateSecret();
 
-        // Сгенерировать текущий валидный код через ту же библиотеку
+        // Generate the current valid code through the same library
         $tfa  = new \RobThree\Auth\TwoFactorAuth('Test');
         $code = $tfa->getCode($data['raw_secret']);
 
@@ -137,8 +137,8 @@ final class TotpServiceTest extends TestCase
         $data   = $this->svc->generateSecret();
         $result = $this->svc->verifyCode($data['totp_secret'], $data['totp_nonce'], '000000');
 
-        // 000000 валиден примерно 1/1000000 раз — принимаем небольшую вероятность ложного срабатывания
-        // В реальном тесте мы убеждаемся, что функция работает без исключений
+        // 000000 is valid about 1/1000000 times; accept the small chance of a false positive
+        // In the real test, we ensure the function works without exceptions
         $this->assertIsBool($result);
     }
 
@@ -187,15 +187,15 @@ final class TotpServiceTest extends TestCase
     public function test_verify_code_raw_with_wrong_code(): void
     {
         $data   = $this->svc->generateSecret();
-        // Код с паддингом/пробелами — санитизируется внутри
+        // Code with padding/spaces is sanitized internally
         $result = $this->svc->verifyCodeRaw($data['raw_secret'], ' 999999 ');
 
-        // Или false, или true (маловероятно что 999999 совпадёт)
+        // Either false or true (it is unlikely that 999999 matches)
         $this->assertIsBool($result);
     }
 
     // ------------------------------------------------------------------ //
-    //  Encrypt → decrypt round-trip через verifyCode                     //
+    //  Encrypt -> decrypt round-trip through verifyCode                    //
     // ------------------------------------------------------------------ //
 
     public function test_full_cycle_generate_encrypt_verify(): void
@@ -204,11 +204,11 @@ final class TotpServiceTest extends TestCase
         $tfa  = new \RobThree\Auth\TwoFactorAuth('Test');
         $code = $tfa->getCode($data['raw_secret']);
 
-        // Шаг 1: сохранить encrypted_secret и nonce в БД (имитация)
+        // Step 1: save encrypted_secret and nonce to the DB (simulation)
         $encryptedSecret = $data['totp_secret'];
         $nonce           = $data['totp_nonce'];
 
-        // Шаг 2: верифицировать через зашифрованный secret
+        // Step 2: verify through the encrypted secret
         $result = $this->svc->verifyCode($encryptedSecret, $nonce, $code);
 
         $this->assertTrue($result);

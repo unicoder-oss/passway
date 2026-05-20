@@ -17,8 +17,8 @@ final class EncryptionServiceTest extends TestCase
 
     protected function setUp(): void
     {
-        // Устанавливаем тестовый master key (32 байта = 64 hex)
-        $_ENV['MASTER_KEY'] = str_repeat('ab', 32); // "ababab...ab" × 32 = 64 символа
+        // Set the test master key (32 bytes = 64 hex)
+        $_ENV['MASTER_KEY'] = str_repeat('ab', 32); // "ababab...ab" x 32 = 64 characters
         $this->svc = new EncryptionService();
     }
 
@@ -46,11 +46,11 @@ final class EncryptionServiceTest extends TestCase
         $enc1 = $this->svc->encrypt($plaintext);
         $enc2 = $this->svc->encrypt($plaintext);
 
-        // Разные nonce → разные ciphertext (семантическая безопасность)
+        // Different nonces -> different ciphertext (semantic security)
         $this->assertNotSame($enc1->value, $enc2->value);
         $this->assertNotSame($enc1->nonce, $enc2->nonce);
 
-        // Но расшифровка даёт одинаковый результат
+        // But decryption gives the same result
         $this->assertSame($plaintext, $this->svc->decrypt($enc1->value, $enc1->nonce));
         $this->assertSame($plaintext, $this->svc->decrypt($enc2->value, $enc2->nonce));
     }
@@ -75,7 +75,7 @@ final class EncryptionServiceTest extends TestCase
     public function test_decrypt_fails_with_wrong_nonce(): void
     {
         $encrypted = $this->svc->encrypt('secret-value');
-        $wrongNonce = str_repeat('ff', 24); // другой nonce
+        $wrongNonce = str_repeat('ff', 24); // another nonce
 
         $this->expectException(DecryptionException::class);
         $this->svc->decrypt($encrypted->value, $wrongNonce);
@@ -84,7 +84,7 @@ final class EncryptionServiceTest extends TestCase
     public function test_decrypt_fails_with_tampered_ciphertext(): void
     {
         $encrypted = $this->svc->encrypt('secret-value');
-        // Меняем один символ в base64
+        // Change one character in base64
         $tampered = base64_encode(str_repeat('X', 50));
 
         $this->expectException(DecryptionException::class);
@@ -132,8 +132,8 @@ final class EncryptionServiceTest extends TestCase
     {
         $this->assertTrue(EncryptionService::validateMasterKeyFormat(str_repeat('ab', 32)));
         $this->assertFalse(EncryptionService::validateMasterKeyFormat('tooshort'));
-        $this->assertFalse(EncryptionService::validateMasterKeyFormat(str_repeat('zz', 32))); // не hex
-        $this->assertFalse(EncryptionService::validateMasterKeyFormat('')); // пустой
+        $this->assertFalse(EncryptionService::validateMasterKeyFormat(str_repeat('zz', 32))); // not hex
+        $this->assertFalse(EncryptionService::validateMasterKeyFormat('')); // empty
     }
 
     public function test_encrypts_unicode_and_binary_content(): void
@@ -142,7 +142,7 @@ final class EncryptionServiceTest extends TestCase
         $enc         = $this->svc->encrypt($unicodeText);
         $this->assertSame($unicodeText, $this->svc->decrypt($enc->value, $enc->nonce));
 
-        // Бинарные данные (SSH private key и т.п.)
+        // Binary data (SSH private key, etc.)
         $binaryLike = base64_encode(random_bytes(512));
         $enc2       = $this->svc->encrypt($binaryLike);
         $this->assertSame($binaryLike, $this->svc->decrypt($enc2->value, $enc2->nonce));

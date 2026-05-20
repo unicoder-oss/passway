@@ -7,13 +7,13 @@ namespace Passway\Models;
 use Passway\Core\Database;
 
 /**
- * Тонкая модель записи истории ротации секрета.
+ * Thin model for a secret rotation history record.
  *
- * Структура таблицы secret_rotation_history:
+ * Table structure secret_rotation_history:
  *   - id, secret_id
- *   - encrypted_value (предыдущее зашифрованное значение), nonce
- *   - version (номер версии на момент ротации)
- *   - rotated_by (id пользователя или null)
+ *   - encrypted_value (previous encrypted value), nonce
+ *   - version (version number at rotation time)
+ *   - rotated_by (id user or null)
  *   - rotation_type (manual|scheduled|api)
  *   - status (success|failed|rolled_back)
  *   - error_message (nullable), created_at
@@ -34,7 +34,7 @@ final class SecretVersion
     ) {}
 
     // ------------------------------------------------------------------ //
-    //  Фабрика                                                            //
+    //  Factory                                                            //
     // ------------------------------------------------------------------ //
 
     /** @param array<string, mixed> $row */
@@ -57,11 +57,11 @@ final class SecretVersion
     }
 
     // ------------------------------------------------------------------ //
-    //  Запросы                                                            //
+    //  Queries                                                            //
     // ------------------------------------------------------------------ //
 
     /**
-     * Последние версии секрета (по убыванию version), не более $limit записей.
+     * Latest secret versions (by descending version), no more than $limit records.
      *
      * @return self[]
      */

@@ -6,5 +6,5 @@ namespace Passway\Exceptions;
 
 use RuntimeException;
 
-/** Ошибки аутентификации и авторизации. */
+/** Authentication and authorization errors. */
 final class AuthException extends RuntimeException {}

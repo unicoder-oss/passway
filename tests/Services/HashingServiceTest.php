@@ -20,7 +20,7 @@ final class HashingServiceTest extends TestCase
     }
 
     // ------------------------------------------------------------------ //
-    //  Пароли                                                              //
+    //  Passwords                                                           //
     // ------------------------------------------------------------------ //
 
     public function test_hash_password_returns_argon2id_hash(): void
@@ -46,12 +46,12 @@ final class HashingServiceTest extends TestCase
 
     public function test_same_password_produces_different_hashes(): void
     {
-        // Argon2id использует random salt — каждый хеш уникален
+        // Argon2id uses a random salt; each hash is unique
         $hash1 = $this->svc->hashPassword('password');
         $hash2 = $this->svc->hashPassword('password');
 
         $this->assertNotSame($hash1, $hash2);
-        // Но оба верифицируются
+        // But both verify successfully
         $this->assertTrue($this->svc->verifyPassword('password', $hash1));
         $this->assertTrue($this->svc->verifyPassword('password', $hash2));
     }
@@ -64,7 +64,7 @@ final class HashingServiceTest extends TestCase
     }
 
     // ------------------------------------------------------------------ //
-    //  Токены (SHA-256)                                                    //
+    //  Tokens (SHA-256)                                                     //
     // ------------------------------------------------------------------ //
 
     public function test_hash_token_returns_64_hex_chars(): void
@@ -103,7 +103,7 @@ final class HashingServiceTest extends TestCase
     }
 
     // ------------------------------------------------------------------ //
-    //  Timing-safe сравнение                                              //
+    //  Timing-safe comparison                                               //
     // ------------------------------------------------------------------ //
 
     public function test_timing_safe_equals_same_strings(): void

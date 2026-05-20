@@ -14,23 +14,23 @@ if (PHP_SAPI === 'cli-server') {
 /**
  * Passway — Front Controller
  *
- * Единственная точка входа для всех HTTP-запросов.
- * Загружает автозагрузчик Composer, инициализирует приложение
- * и передаёт управление роутеру.
+ * Single entry point for all HTTP requests.
+ * Loads the Composer autoloader, initializes the application,
+ * and passes control to the router.
  */
 
-// Строгий режим обработки ошибок
+// Strict error handling mode
 error_reporting(E_ALL);
 
-// В production ошибки НЕ выводятся пользователю (настраивается в App)
+// In production, errors are NOT shown to the user (configured in App)
 ini_set('display_errors', '0');
 ini_set('display_startup_errors', '0');
 
-// Запрет доступа к этому файлу напрямую извне корня (защита от включения)
+// Prevent direct access to this file outside the root (include protection)
 define('PASSWAY_ROOT', dirname(__DIR__));
 define('PASSWAY_START', microtime(true));
 
-// Проверяем наличие Composer
+// Check for Composer
 $autoloader = PASSWAY_ROOT . '/vendor/autoload.php';
 if (!file_exists($autoloader)) {
     http_response_code(503);
@@ -44,20 +44,20 @@ if (!file_exists($autoloader)) {
 
 require_once $autoloader;
 
-// Запускаем приложение
+// Run the application
 use Passway\Core\Application;
 
 try {
     $app = Application::getInstance();
     $app->run();
 } catch (\Throwable $e) {
-    // Последний рубеж — если Application упал до инициализации обработчика ошибок
+    // Last line of defense if Application failed before error handler initialization
     http_response_code(500);
     header('Content-Type: application/json');
 
     $body = ['error' => 'Internal Server Error'];
 
-    // В development показываем детали
+    // Show details in development
     if (($_ENV['APP_DEBUG'] ?? 'false') === 'true') {
         $body['message'] = $e->getMessage();
         $body['file']    = $e->getFile();

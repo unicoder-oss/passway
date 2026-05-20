@@ -9,26 +9,26 @@ use ReflectionClass;
 use RuntimeException;
 
 /**
- * Простой DI-контейнер (Service Locator + автовайринг).
+ * Simple DI container (Service Locator + autowiring).
  *
- * Поддерживает:
- * - bind($abstract, $concrete)   — фабрика (новый экземпляр при каждом вызове)
- * - singleton($abstract, $concrete) — единственный экземпляр
- * - instance($abstract, $object) — зарегистрировать готовый объект
- * - make($abstract)              — разрешить зависимость
- * - Автовайринг через Reflection (конструктор с type-hinted параметрами)
+ * Supports:
+ * - bind($abstract, $concrete)   - factory (new instance on each call)
+ * - singleton($abstract, $concrete) - single instance
+ * - instance($abstract, $object) - register an existing object
+ * - make($abstract)              - resolve dependency
+ * - Autowiring through Reflection (constructor with type-hinted parameters)
  */
 final class Container
 {
     private static ?Container $instance = null;
 
-    /** @var array<string, Closure> Фабрики */
+    /** @var array<string, Closure> Factories */
     private array $bindings = [];
 
-    /** @var array<string, Closure> Синглтон-фабрики */
+    /** @var array<string, Closure> Singleton factories */
     private array $singletons = [];
 
-    /** @var array<string, object> Уже созданные синглтоны */
+    /** @var array<string, object> Already-created singletons */
     private array $instances = [];
 
     private function __construct() {}
@@ -42,11 +42,11 @@ final class Container
     }
 
     // ------------------------------------------------------------------ //
-    //  Регистрация                                                         //
+    //  Registration                                                         //
     // ------------------------------------------------------------------ //
 
     /**
-     * Зарегистрировать фабрику (новый объект при каждом make()).
+     * Register a factory (new object on each make()).
      */
     public function bind(string $abstract, Closure|string $concrete): void
     {
@@ -54,7 +54,7 @@ final class Container
     }
 
     /**
-     * Зарегистрировать синглтон.
+     * Register a singleton.
      */
     public function singleton(string $abstract, Closure|string $concrete): void
     {
@@ -62,7 +62,7 @@ final class Container
     }
 
     /**
-     * Зарегистрировать уже созданный объект как синглтон.
+     * Register an already-created object as a singleton.
      */
     public function instance(string $abstract, object $object): void
     {
@@ -70,11 +70,11 @@ final class Container
     }
 
     // ------------------------------------------------------------------ //
-    //  Разрешение зависимостей                                             //
+    //  Dependency resolution                                             //
     // ------------------------------------------------------------------ //
 
     /**
-     * Создать/получить объект по имени класса или интерфейса.
+     * Create/get an object by class or interface name.
      *
      * @template T
      * @param class-string<T> $abstract
@@ -82,29 +82,29 @@ final class Container
      */
     public function make(string $abstract): object
     {
-        // 1. Готовый синглтон
+        // 1. Existing singleton
         if (isset($this->instances[$abstract])) {
             return $this->instances[$abstract]; // @phpstan-ignore-line
         }
 
-        // 2. Зарегистрированный синглтон
+        // 2. Registered singleton
         if (isset($this->singletons[$abstract])) {
             $instance = ($this->singletons[$abstract])($this);
             $this->instances[$abstract] = $instance;
             return $instance; // @phpstan-ignore-line
         }
 
-        // 3. Зарегистрированная фабрика
+        // 3. Registered factory
         if (isset($this->bindings[$abstract])) {
             return ($this->bindings[$abstract])($this); // @phpstan-ignore-line
         }
 
-        // 4. Автовайринг через Reflection
+        // 4. Autowiring through Reflection
         return $this->autoWire($abstract);
     }
 
     /**
-     * Проверить, зарегистрирована ли зависимость.
+     * Check whether a dependency is registered.
      */
     public function has(string $abstract): bool
     {
@@ -115,7 +115,7 @@ final class Container
     }
 
     // ------------------------------------------------------------------ //
-    //  Приватные методы                                                    //
+    //  Private methods                                                    //
     // ------------------------------------------------------------------ //
 
     private function normalizeFactory(string $abstract, Closure|string $concrete): Closure
@@ -123,12 +123,12 @@ final class Container
         if ($concrete instanceof Closure) {
             return $concrete;
         }
-        // Если передана строка — имя класса
+        // If a string is passed - class name
         return fn(Container $c) => $c->autoWire($concrete);
     }
 
     /**
-     * Автоматически создать объект, разрешив зависимости конструктора.
+     * Automatically create an object by resolving constructor dependencies.
      */
     private function autoWire(string $class): object
     {

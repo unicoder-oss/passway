@@ -7,18 +7,18 @@ namespace Passway\Database\Migrations;
 use Passway\Database\Migration;
 
 /**
- * Миграция 006: Разграничение доступа и API-ключи.
+ * Migration 006: Access control and API keys.
  *
- * Таблицы:
- *   - api_keys            — API-ключи (формат sv_{env}_{random64})
- *   - api_key_permissions — права API-ключей на ресурсы
- *   - user_permissions    — гранулярные права пользователей и групп
+ * Tables:
+ *   - api_keys            — API keys (format sv_{env}_{random64})
+ *   - api_key_permissions — API key permissions for resources
+ *   - user_permissions    — granular permissions for users and groups
  *
- * Модель прав:
- *   subject_type: user | group (на каталог или секрет)
+ * Permission model:
+ *   subject_type: user | group (for a directory or secret)
  *   permission:   read | write | delete | create_subdirectories
- *   is_deny:      явный запрет (переопределяет разрешение)
- *   expires_at:   временное разрешение (NULL = постоянное)
+ *   is_deny:      explicit deny (overrides allow)
+ *   expires_at:   temporary permission (NULL = permanent)
  */
 final class CreatePermissionsApiKeysTables extends Migration
 {
@@ -27,24 +27,24 @@ final class CreatePermissionsApiKeysTables extends Migration
         // ------------------------------------------------------------------ //
         //  api_keys                                                            //
         // ------------------------------------------------------------------ //
-        // Формат ключа: sv_{env}_{64 random hex chars}
-        // В БД хранится только SHA-256 хэш — сам ключ показывается ОДИН раз при создании.
+        // Key format: sv_{env}_{64 random hex chars}
+        // Only the SHA-256 hash is stored in the DB; the key itself is shown ONCE at creation.
         $this->createTable('api_keys', [
             "id               {$this->pkType()}",
             'uuid             VARCHAR(36) NOT NULL',
             'organization_id  BIGINT NOT NULL',
-            // user_id — владелец ключа (может быть NULL для "системных" ключей)
+            // user_id — key owner (can be NULL for "system" keys)
             'user_id          BIGINT',
             'name             VARCHAR(255) NOT NULL',
-            // SHA-256(raw_key) — для поиска при аутентификации
+            // SHA-256(raw_key) — for lookup during authentication
             'key_hash         VARCHAR(64) NOT NULL',
-            // Первые символы ключа для идентификации в UI (sv_prod_)
+            // First key characters for identification in the UI (sv_prod_)
             'key_prefix       VARCHAR(20) NOT NULL',
             // production | staging | development
             "environment      VARCHAR(50) NOT NULL DEFAULT 'production'",
             "is_active        {$this->boolType(true)}",
             "last_used_at     {$this->tsType()}",
-            // NULL = без ограничения срока
+            // NULL = no expiration limit
             "expires_at       {$this->tsType()}",
             "created_at       {$this->nowDefault()}",
             $this->foreignKey('organization_id', 'organizations', 'id', 'CASCADE'),
@@ -63,13 +63,13 @@ final class CreatePermissionsApiKeysTables extends Migration
         // ------------------------------------------------------------------ //
         //  api_key_permissions                                                 //
         // ------------------------------------------------------------------ //
-        // resource_id = NULL означает права на все ресурсы указанного типа.
+        // resource_id = NULL means permissions for all resources of the specified type.
         $this->createTable('api_key_permissions', [
             "id             {$this->pkType()}",
             'api_key_id     BIGINT NOT NULL',
             // directory | secret | organization
             'resource_type  VARCHAR(50) NOT NULL',
-            // NULL = все ресурсы данного типа
+            // NULL = all resources of this type
             'resource_id    BIGINT',
             // read | write | delete | create_subdirectories
             'permission     VARCHAR(50) NOT NULL',
@@ -85,13 +85,13 @@ final class CreatePermissionsApiKeysTables extends Migration
         // ------------------------------------------------------------------ //
         //  user_permissions                                                    //
         // ------------------------------------------------------------------ //
-        // Гранулярные права субъектов (user/group) на ресурсы (directory/secret).
+        // Granular permissions for subjects (user/group) on resources (directory/secret).
         //
-        // Приоритет проверки прав:
-        //  1. Явный запрет (is_deny=true) → доступ запрещён
-        //  2. Явное разрешение → доступ разрешён
-        //  3. Наследованное право от родительского каталога → применяется
-        //  4. Нет права → доступ запрещён
+        // Permission check priority:
+        //  1. Explicit deny (is_deny=true) -> access denied
+        //  2. Explicit allow -> access allowed
+        //  3. Inherited permission from the parent directory -> applied
+        //  4. No permission -> access denied
         $this->createTable('user_permissions', [
             "id             {$this->pkType()}",
             // user | group
@@ -102,9 +102,9 @@ final class CreatePermissionsApiKeysTables extends Migration
             'resource_id    BIGINT NOT NULL',
             // read | write | delete | create_subdirectories
             'permission     VARCHAR(50) NOT NULL',
-            // true = явный запрет (overrides allow)
+            // true = explicit deny (overrides allow)
             "is_deny        {$this->boolType(false)}",
-            // Временное разрешение: NULL = постоянное
+            // Temporary permission: NULL = permanent
             "expires_at     {$this->tsType()}",
             'granted_by     BIGINT',
             "created_at     {$this->nowDefault()}",

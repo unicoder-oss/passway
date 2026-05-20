@@ -15,7 +15,7 @@ use Passway\Services\TokenService;
 use Passway\Tests\DatabaseTestCase;
 
 /**
- * Тесты InviteService: создание, верификация, принятие, отзыв.
+ * InviteService tests: creation, verification, acceptance, revocation.
  *
  * @requires extension pdo_sqlite
  */
@@ -159,7 +159,7 @@ final class InviteServiceTest extends DatabaseTestCase
         $org    = $this->orgSvc->create('Org', $owner->id);
         $invite = $this->svc->createJoinOrgInvite($org->id, 'reader', $owner->id, 1);
 
-        // Принудительно истечь инвайт
+        // Force the invite to expire
         Database::getInstance()->update(
             'invite_links',
             ['expires_at' => \date('Y-m-d H:i:s', \time() - 1)],

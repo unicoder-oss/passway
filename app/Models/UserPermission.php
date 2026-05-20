@@ -7,13 +7,13 @@ namespace Passway\Models;
 use Passway\Core\Database;
 
 /**
- * Тонкая модель гранулярного права субъекта (user/group/api_key) на ресурс (directory/secret).
+ * Thin model granular subject permission (user/group/api_key) on a resource (directory/secret).
  *
- * Приоритет проверки (см. PermissionService):
- *   1. Явный запрет (is_deny=true) — запрещает доступ
- *   2. Явное разрешение (is_deny=false) — разрешает доступ
- *   3. Наследование от родительского каталога
- *   4. Нет записи → доступ запрещён
+ * Check priority (see PermissionService):
+ *   1. Explicit deny (is_deny=true) - denies access
+ *   2. Explicit allow (is_deny=false) - allows access
+ *   3. Inheritance from parent directory
+ *   4. No entry -> access denied
  */
 final class UserPermission
 {
@@ -35,7 +35,7 @@ final class UserPermission
     ) {}
 
     // ------------------------------------------------------------------ //
-    //  Фабрика                                                            //
+    //  Factory                                                            //
     // ------------------------------------------------------------------ //
 
     /** @param array<string, mixed> $row */
@@ -58,7 +58,7 @@ final class UserPermission
     }
 
     // ------------------------------------------------------------------ //
-    //  Запросы                                                            //
+    //  Queries                                                            //
     // ------------------------------------------------------------------ //
 
     public static function findById(string $id): ?self
@@ -71,7 +71,7 @@ final class UserPermission
     }
 
     /**
-     * Права конкретного субъекта на конкретный ресурс.
+     * Permissions for a specific subject on a specific resource.
      *
      * @return self[]
      */
@@ -91,7 +91,7 @@ final class UserPermission
     }
 
     /**
-     * Все права на указанный ресурс (для отображения/управления).
+     * All permissions on the specified resource (for display/management).
      *
      * @return self[]
      */

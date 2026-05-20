@@ -10,14 +10,14 @@ use Passway\Core\Request;
 use Passway\Core\Response;
 
 /**
- * Middleware: редирект на /setup если первоначальная настройка не завершена.
+ * Middleware: redirects to /setup if initial setup is incomplete.
  *
- * Применяется глобально в Application::run() перед диспетчеризацией.
- * Пропускает запросы к /setup и /health без проверки.
+ * Applied globally in Application::run() before dispatch.
+ * Skips requests to /setup and /health without checking.
  */
 final class SetupMiddleware
 {
-    /** Пути, доступные до завершения setup */
+    /** Paths available before setup completion */
     private const ALLOWED_PATHS = ['/setup', '/health'];
 
     public function handle(Request $request, Closure $next): Response
@@ -31,7 +31,7 @@ final class SetupMiddleware
                 "SELECT value FROM system_config WHERE key = 'setup_complete'"
             );
         } catch (\Throwable) {
-            // БД недоступна — перенаправить на /setup
+            // DB is unavailable - redirect to /setup
             return $this->setupRequired($request);
         }
 

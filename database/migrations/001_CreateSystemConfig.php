@@ -7,10 +7,10 @@ namespace Passway\Database\Migrations;
 use Passway\Database\Migration;
 
 /**
- * Миграция 001: Системная конфигурация.
+ * Migration 001: System configuration.
  *
- * Создаёт таблицу system_config для хранения системных параметров
- * в формате ключ-значение (режим развёртывания, флаги первоначальной настройки и т.п.).
+ * Creates the system_config table for storing system parameters
+ * in key-value format (deployment mode, initial setup flags, etc.).
  */
 final class CreateSystemConfig extends Migration
 {
@@ -26,12 +26,12 @@ final class CreateSystemConfig extends Migration
             'UNIQUE (key)',
         ]);
 
-        // Начальные системные значения
+        // Initial system values
         $stmt = $this->db->getPdo()->prepare(
             "INSERT INTO system_config (key, value) VALUES (?, ?) ON CONFLICT (key) DO NOTHING"
         );
 
-        // Для SQLite используем INSERT OR IGNORE
+        // Use INSERT OR IGNORE for SQLite
         if ($this->driver === 'sqlite') {
             $stmt = $this->db->getPdo()->prepare(
                 "INSERT OR IGNORE INTO system_config (key, value) VALUES (?, ?)"

@@ -5,10 +5,10 @@ declare(strict_types=1);
 namespace Passway\Core;
 
 /**
- * HTTP-ответ.
+ * HTTP response.
  *
- * Предоставляет fluent-интерфейс для формирования ответа.
- * send() выводит все заголовки и тело, после чего выполнение завершается.
+ * Provides a fluent interface for building a response.
+ * send() outputs all headers and the body, then execution ends.
  */
 final class Response
 {
@@ -20,7 +20,7 @@ final class Response
     private array $headers = [];
 
     // ------------------------------------------------------------------ //
-    //  Статические фабрики                                                 //
+    //  Static factories
     // ------------------------------------------------------------------ //
 
     public static function make(int $status = 200): self
@@ -31,7 +31,7 @@ final class Response
     }
 
     /**
-     * Отправить JSON-ответ.
+     * Send a JSON response.
      *
      * @param array<string, mixed>|list<mixed> $data
      */
@@ -43,7 +43,7 @@ final class Response
     }
 
     /**
-     * Отправить JSON-ответ об успехе.
+     * Send a successful JSON response.
      *
      * @param array<string, mixed>|null $data
      */
@@ -57,7 +57,7 @@ final class Response
     }
 
     /**
-     * Отправить JSON-ответ об ошибке.
+     * Send an error JSON response.
      */
     public static function error(string $message, int $status = 400, array $extra = []): self
     {
@@ -69,7 +69,7 @@ final class Response
     }
 
     /**
-     * Перенаправление.
+     * Redirect.
      */
     public static function redirect(string $url, int $status = 302): self
     {
@@ -77,7 +77,7 @@ final class Response
     }
 
     /**
-     * Ответ 404.
+     * Response 404.
      */
     public static function notFound(string $message = 'Not Found'): self
     {
@@ -85,7 +85,7 @@ final class Response
     }
 
     /**
-     * Ответ 401.
+     * Response 401.
      */
     public static function unauthorized(string $message = 'Unauthorized'): self
     {
@@ -93,7 +93,7 @@ final class Response
     }
 
     /**
-     * Ответ 403.
+     * Response 403.
      */
     public static function forbidden(string $message = 'Forbidden'): self
     {
@@ -101,7 +101,7 @@ final class Response
     }
 
     /**
-     * Ответ 422 (ошибка валидации).
+     * Response 422 (validation error).
      *
      * @param array<string, string[]> $errors
      */
@@ -111,7 +111,7 @@ final class Response
     }
 
     /**
-     * Ответ 500.
+     * Response 500.
      */
     public static function serverError(string $message = 'Internal Server Error'): self
     {
@@ -119,7 +119,7 @@ final class Response
     }
 
     // ------------------------------------------------------------------ //
-    //  Fluent-методы построения ответа                                     //
+    //  Fluent response-building methods                                     //
     // ------------------------------------------------------------------ //
 
     public function withStatus(int $status): self
@@ -151,12 +151,12 @@ final class Response
     }
 
     // ------------------------------------------------------------------ //
-    //  Отправка                                                            //
+    //  Sending                                                            //
     // ------------------------------------------------------------------ //
 
     /**
-     * Отправить ответ клиенту.
-     * После вызова execution продолжается (exit не вызывается).
+     * Send the response to the client.
+     * After the call execution continues (exit is not called).
      */
     public function send(): void
     {
@@ -167,7 +167,7 @@ final class Response
         http_response_code($this->statusCode);
         header("Content-Type: {$this->contentType}");
 
-        // Заголовки безопасности (базовые)
+        // Security headers (basic)
         header('X-Content-Type-Options: nosniff');
         header('X-Frame-Options: DENY');
         header('Referrer-Policy: strict-origin-when-cross-origin');
@@ -180,7 +180,7 @@ final class Response
     }
 
     /**
-     * Отправить ответ и завершить выполнение.
+     * Send the response and finish execution.
      */
     public function sendAndExit(): never
     {
@@ -189,7 +189,7 @@ final class Response
     }
 
     // ------------------------------------------------------------------ //
-    //  Геттеры                                                             //
+    //  Getters                                                             //
     // ------------------------------------------------------------------ //
 
     public function getStatusCode(): int    { return $this->statusCode; }

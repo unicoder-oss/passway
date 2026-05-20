@@ -15,15 +15,15 @@ use Passway\Services\ApiKeyAccessService;
 use Passway\Services\OrganizationService;
 
 /**
- * Контроллер организаций.
+ * Controller organizations.
  *
- * POST   /api/v1/organizations                            — создать
- * GET    /api/v1/organizations                            — список своих
- * GET    /api/v1/organizations/:uuid                      — детали
- * GET    /api/v1/organizations/:uuid/members              — список участников
- * PATCH  /api/v1/organizations/:uuid/members/:userUuid   — изменить роль
- * DELETE /api/v1/organizations/:uuid/members/:userUuid   — удалить участника
- * POST   /api/v1/organizations/:uuid/transfer             — передать владение
+ * POST   /api/v1/organizations                            - create
+ * GET    /api/v1/organizations                            - list own
+ * GET    /api/v1/organizations/:uuid                      - details
+ * GET    /api/v1/organizations/:uuid/members              - list members
+ * PATCH  /api/v1/organizations/:uuid/members/:userUuid   - change role
+ * DELETE /api/v1/organizations/:uuid/members/:userUuid   - remove member
+ * POST   /api/v1/organizations/:uuid/transfer             - transfer ownership
  */
 final class OrganizationController
 {
@@ -216,7 +216,7 @@ final class OrganizationController
         $uuid = $request->routeParam('uuid');
         $org  = Organization::findByUuid((string) $uuid);
         if ($org === null) {
-            // Бросаем 404 — перехватится в Application::handleException()
+            // Throw 404 - it will be caught in Application::handleException()
             throw new \RuntimeException(__('ui.backend.common.organization_not_found'));
         }
         return $org;

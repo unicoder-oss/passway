@@ -3,8 +3,8 @@
 declare(strict_types=1);
 
 /**
- * Web-маршруты (браузерный интерфейс).
- * Переменная $router инжектируется из Application::registerRoutes().
+ * Web routes (browser interface).
+ * The $router variable is injected from Application::registerRoutes().
  *
  * @var \Passway\Core\Router $router
  */
@@ -19,21 +19,21 @@ use Passway\Core\Response;
 use Passway\Middleware\AuthMiddleware;
 
 // ------------------------------------------------------------------ //
-//  Первоначальная настройка                                           //
+//  Initial Setup                                                       //
 // ------------------------------------------------------------------ //
 
 $router->get('/setup',  [SetupController::class, 'show']);
 $router->post('/setup', [SetupController::class, 'process']);
 
 // ------------------------------------------------------------------ //
-//  Базовые страницы                                                    //
+//  Base Pages                                                          //
 // ------------------------------------------------------------------ //
 
 $router->get('/', [WebController::class, 'home'], [AuthMiddleware::class]);
 $router->get('/partials/home-organizations', [WebController::class, 'homeOrganizationsPartial'], [AuthMiddleware::class]);
 $router->get('/api', [WebController::class, 'showApiDocs'], [AuthMiddleware::class]);
 
-// Health check (Docker, балансировщики)
+// Health check (Docker, load balancers)
 $router->get('/health', fn() => Response::json([
     'status'  => 'ok',
     'service' => 'passway',
@@ -41,26 +41,26 @@ $router->get('/health', fn() => Response::json([
 ]));
 
 // ------------------------------------------------------------------ //
-//  Аутентификация                                                      //
+//  Authentication                                                      //
 // ------------------------------------------------------------------ //
 
 $router->group('/auth', function (\Passway\Core\Router $router) {
 
-    // --- Email + пароль ---
+    // --- Email + password ---
     $router->get('/login',   [LoginController::class, 'show']);
     $router->post('/login',  [LoginController::class, 'login']);
     $router->get('/logout',  [LoginController::class, 'logout']);
 
-    // Текущий пользователь (требует аутентификации)
+    // Current user (requires authentication)
     $router->get('/me', [LoginController::class, 'me'], [AuthMiddleware::class]);
 
     // --- TOTP (2FA) ---
     $router->group('/totp', function (\Passway\Core\Router $router) {
-        // Ввод кода при login (pending-сессия в PHP session)
+        // Code entry during login (pending session in PHP session)
         $router->get('/verify',  [TotpController::class, 'showVerify']);
         $router->post('/verify', [TotpController::class, 'verify']);
 
-        // Управление TOTP (требует аутентификации)
+        // TOTP management (requires authentication)
         $router->get('/setup',     [TotpController::class, 'setup'],   [AuthMiddleware::class]);
         $router->post('/enable',   [TotpController::class, 'enable'],  [AuthMiddleware::class]);
         $router->post('/disable',  [TotpController::class, 'disable'], [AuthMiddleware::class]);
@@ -68,15 +68,15 @@ $router->group('/auth', function (\Passway\Core\Router $router) {
 
     // --- Passkey / WebAuthn ---
     $router->group('/passkey', function (\Passway\Core\Router $router) {
-        // Регистрация (требует аутентификации)
+        // Registration (requires authentication)
         $router->post('/register/start',  [PasskeyController::class, 'registerStart'],  [AuthMiddleware::class]);
         $router->post('/register/finish', [PasskeyController::class, 'registerFinish'], [AuthMiddleware::class]);
 
-        // Аутентификация (публичный)
+        // Authentication (public)
         $router->post('/authenticate/start',  [PasskeyController::class, 'authenticateStart']);
         $router->post('/authenticate/finish', [PasskeyController::class, 'authenticateFinish']);
 
-        // Список и удаление (требует аутентификации)
+        // List and delete (requires authentication)
         $router->get('/list',         [PasskeyController::class, 'list'],   [AuthMiddleware::class]);
         $router->delete('/:uuid',     [PasskeyController::class, 'delete'], [AuthMiddleware::class]);
     });
@@ -135,7 +135,7 @@ $router->post('/organizations/:uuid/directories/:dirUuid/secrets/:secUuid/delete
 $router->post('/organizations/:uuid/directories/:dirUuid/secrets/:secUuid/owner', [WebController::class, 'transferSecretOwnership'], [AuthMiddleware::class]);
 
 // ------------------------------------------------------------------ //
-//  Инвайты (web — принятие ссылки)                                    //
+//  Invites (web — link acceptance)                                    //
 // ------------------------------------------------------------------ //
 
 $router->get('/invite/:token',  [InviteController::class, 'showAccept']);

@@ -5,13 +5,13 @@ declare(strict_types=1);
 namespace Passway\Services;
 
 /**
- * Value Object — результат шифрования.
+ * Value Object - encryption result.
  *
- * Содержит зашифрованное значение и nonce, необходимые для расшифровки.
- * Безопасно сериализуется для хранения в БД.
+ * Contains the encrypted value and nonce needed for decryption.
+ * Safely serializes for storage in the DB.
  *
  * @property-read string $value  base64(ciphertext + auth tag)
- * @property-read string $nonce  hex(24 bytes) = 48 символов
+ * @property-read string $nonce  hex(24 bytes) = 48 characters
  */
 final readonly class EncryptedData
 {
@@ -19,12 +19,12 @@ final readonly class EncryptedData
         /** base64(XChaCha20-Poly1305 ciphertext + 16-byte MAC) */
         public string $value,
 
-        /** hex-encoded nonce (24 байта = 48 символов) */
+        /** hex-encoded nonce (24 bytes = 48 characters) */
         public string $nonce,
     ) {}
 
     /**
-     * Создать из массива (например, из строки БД).
+     * Create from an array (for example, from a row DB).
      *
      * @param array{value: string, nonce: string} $data
      */
@@ -37,7 +37,7 @@ final readonly class EncryptedData
     }
 
     /**
-     * Сериализовать в массив для записи в БД.
+     * Serialize to an array for writing to the DB.
      *
      * @return array{encrypted_value: string, nonce: string}
      */

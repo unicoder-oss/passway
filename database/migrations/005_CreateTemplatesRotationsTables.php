@@ -7,12 +7,12 @@ namespace Passway\Database\Migrations;
 use Passway\Database\Migration;
 
 /**
- * Миграция 005: Шаблоны секретов и сервисы ротации.
+ * Migration 005: Secret templates and rotation services.
  *
- * Таблицы:
- *   - templates                — встроенные и пользовательские шаблоны
- *   - rotation_services        — внешние сервисы ротации (регистрируются sysadmin)
- *   - organization_integrations — конфигурация сервисов ротации для организаций
+ * Tables:
+ *   - templates                — built-in and user templates
+ *   - rotation_services        — external rotation services (registered by sysadmin)
+ *   - organization_integrations — rotation service configuration for organizations
  */
 final class CreateTemplatesRotationsTables extends Migration
 {
@@ -21,21 +21,21 @@ final class CreateTemplatesRotationsTables extends Migration
         // ------------------------------------------------------------------ //
         //  templates                                                           //
         // ------------------------------------------------------------------ //
-        // organization_id = NULL → системный шаблон (встроенный, недоступен для изменения)
-        // Встроенные шаблоны: password, ssh_key
+        // organization_id = NULL -> system template (built-in, not editable)
+        // Built-in templates: password, ssh_key
         $this->createTable('templates', [
             "id               {$this->pkType()}",
             'uuid             VARCHAR(36) NOT NULL',
-            // NULL = системный шаблон
+            // NULL = system template
             'organization_id  BIGINT',
             'name             VARCHAR(255) NOT NULL',
             'system_key       VARCHAR(120)',
             // password | ssh_key
             'type             VARCHAR(50) NOT NULL',
             'description      TEXT',
-            // JSON с параметрами генерации:
+            // JSON with generation parameters:
             // password: {"min_length":8,"max_length":256,"use_upper":true,"use_lower":true,"use_digits":true,"use_special":true}
-            // ssh_key:  {"algorithm":"rsa","bits":4096} или {"algorithm":"ed25519"}
+            // ssh_key:  {"algorithm":"rsa","bits":4096} or {"algorithm":"ed25519"}
             'config_json      TEXT NOT NULL',
             "is_system        {$this->boolType(false)}",
             'created_by       BIGINT',
@@ -51,29 +51,29 @@ final class CreateTemplatesRotationsTables extends Migration
         $this->createIndex('templates', ['type']);
         $this->createIndex('templates', ['is_system']);
 
-        // Вставляем встроенные системные шаблоны
+        // Insert built-in system templates
         $this->insertSystemTemplates();
 
         // ------------------------------------------------------------------ //
         //  rotation_services                                                   //
         // ------------------------------------------------------------------ //
-        // Сервисы ротации регистрируются системным администратором.
-        // Протокол:
-        //   GET  /health  — проверка доступности (возвращает {"status":"ok"})
-        //   GET  /spec    — спецификация (список поддерживаемых типов секретов и параметров)
-        //   POST /validate — проверка текущего значения
-        //   POST /rotate   — ротация секрета
+        // Rotation services are registered by a system administrator.
+        // Protocol:
+        //   GET  /health  — availability check (returns {"status":"ok"})
+        //   GET  /spec    — specification (list of supported secret types and parameters)
+        //   POST /validate — validate the current value
+        //   POST /rotate   — rotate the secret
         $this->createTable('rotation_services', [
             "id            {$this->pkType()}",
             'uuid          VARCHAR(36) NOT NULL',
             'name          VARCHAR(255) NOT NULL',
-            // Базовый URL сервиса (без завершающего /)
+            // Base service URL (without a trailing /)
             'url           VARCHAR(500) NOT NULL',
             'health_url    VARCHAR(500)',
-            // JSON-спецификация, загруженная с /spec
+            // JSON specification loaded from /spec
             'spec_json     TEXT',
             "is_active     {$this->boolType(true)}",
-            // Прошёл ли последний health check
+            // Whether the last health check passed
             "is_verified   {$this->boolType(false)}",
             "last_check_at {$this->tsType()}",
             'created_by    BIGINT',
@@ -89,16 +89,16 @@ final class CreateTemplatesRotationsTables extends Migration
         // ------------------------------------------------------------------ //
         //  organization_integrations                                           //
         // ------------------------------------------------------------------ //
-        // Привязка сервиса ротации к организации с зашифрованными credentials.
-        // Одна организация может иметь несколько интеграций с одним сервисом
-        // (например, разные credentials для разных окружений).
+        // Bind a rotation service to an organization with encrypted credentials.
+        // One organization can have multiple integrations with one service
+        // (for example, different credentials for different environments).
         $this->createTable('organization_integrations', [
             "id                   {$this->pkType()}",
             'uuid                 VARCHAR(36) NOT NULL',
             'organization_id      BIGINT NOT NULL',
             'rotation_service_id  BIGINT NOT NULL',
             'name                 VARCHAR(255) NOT NULL',
-            // Credentials зашифрованы тем же master key
+            // Credentials are encrypted with the same master key
             'encrypted_credentials TEXT',
             'credentials_nonce    VARCHAR(48)',
             "is_active            {$this->boolType(true)}",
@@ -115,8 +115,8 @@ final class CreateTemplatesRotationsTables extends Migration
         $this->createIndex('organization_integrations', ['organization_id']);
         $this->createIndex('organization_integrations', ['rotation_service_id']);
 
-        // Теперь добавляем FK в secrets на organization_integrations
-        // (в migration 004 это поле было BIGINT без FK, т.к. таблица не существовала)
+        // Now add an FK from secrets to organization_integrations
+        // (in migration 004 this field was BIGINT without an FK because the table did not exist)
         if ($this->driver === 'pgsql') {
             $this->exec("
                 ALTER TABLE secrets
@@ -126,7 +126,7 @@ final class CreateTemplatesRotationsTables extends Migration
                 ON DELETE SET NULL
             ");
         }
-        // В SQLite FK проверяется только при INSERT/UPDATE, не при ALTER TABLE
+        // SQLite checks FKs only on INSERT/UPDATE, not on ALTER TABLE
     }
 
     public function down(): void
@@ -140,7 +140,7 @@ final class CreateTemplatesRotationsTables extends Migration
     }
 
     // ------------------------------------------------------------------ //
-    //  Приватные методы                                                    //
+    //  Private methods                                                   //
     // ------------------------------------------------------------------ //
 
     private function insertSystemTemplates(): void

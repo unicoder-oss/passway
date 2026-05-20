@@ -7,7 +7,7 @@ namespace Passway\Models;
 use Passway\Core\Database;
 
 /**
- * Зарегистрированный внешний сервис ротации.
+ * Registered external rotation service.
  */
 final class RotationService
 {

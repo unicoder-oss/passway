@@ -15,11 +15,11 @@ use Passway\Models\UserPermission;
 use Passway\Services\PermissionService;
 
 /**
- * Контроллер тонкогранулированных прав на каталоги.
+ * Controller fine-grained directory permissions.
  *
- * GET    /api/v1/organizations/:uuid/directories/:dirUuid/permissions           — список прав
- * POST   /api/v1/organizations/:uuid/directories/:dirUuid/permissions           — выдать право
- * DELETE /api/v1/organizations/:uuid/directories/:dirUuid/permissions/:permId   — отозвать право
+ * GET    /api/v1/organizations/:uuid/directories/:dirUuid/permissions           - list permissions
+ * POST   /api/v1/organizations/:uuid/directories/:dirUuid/permissions           - grant permission
+ * DELETE /api/v1/organizations/:uuid/directories/:dirUuid/permissions/:permId   - revoke permission
  */
 final class PermissionController
 {

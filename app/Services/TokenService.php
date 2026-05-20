@@ -5,29 +5,29 @@ declare(strict_types=1);
 namespace Passway\Services;
 
 /**
- * Сервис генерации криптографически стойких токенов.
+ * Service for generating cryptographically strong tokens.
  *
- * Все токены генерируются через random_bytes() — CSPRNG.
- * Возвращаемые значения — hex-строки для безопасной передачи в URL/заголовках.
+ * All tokens are generated through random_bytes() - CSPRNG.
+ * Return values - hex strings for safe transfer in URLs/headers.
  *
- * Хранение в БД:
- *   - Токены НИКОГДА не хранятся в открытом виде
- *   - В БД хранится SHA-256 хеш (HashingService::hashToken())
- *   - Исключение: key_prefix API-ключа — несекретный идентификатор для UI
+ * Storage in DB:
+ *   - Tokens NEVER are not stored in plaintext
+ *   - DB stores a SHA-256 hash (HashingService::hashToken())
+ *   - Exception: key_prefix API key - non-secret identifier for the UI
  */
 final class TokenService
 {
     // ------------------------------------------------------------------ //
-    //  Сессионные токены                                                  //
+    //  Session tokens
     // ------------------------------------------------------------------ //
 
     /**
-     * Сгенерировать сессионный токен.
+     * Generate a session token.
      *
-     * Формат: 64 hex-символа (32 байта случайных данных).
-     * Передаётся клиенту в cookie. В БД хранится SHA-256 хеш.
+     * Format: 64 hex-characters (32 bytes of random data).
+     * Sent to the client in a cookie. DB stores a SHA-256 hash.
      *
-     * @return string 64 hex-символа
+     * @return string 64 hex-characters
      */
     public function generateSessionToken(): string
     {
@@ -35,18 +35,18 @@ final class TokenService
     }
 
     // ------------------------------------------------------------------ //
-    //  API-ключи                                                          //
+    //  API keys                                                          //
     // ------------------------------------------------------------------ //
 
     /**
-     * Сгенерировать API-ключ.
+     * Generate an API key.
      *
-     * Формат: sv_{64 hex}
+     * Format: sv_{64 hex}
      *
-     * Полный ключ передаётся пользователю ОДИН раз при создании.
-     * В БД хранятся только: SHA-256 хеш (key_hash) и префикс (key_prefix).
+     * The full key is given to the user ONCE on creation.
+     * Only these are stored in the DB: SHA-256 hash (key_hash) and prefix (key_prefix).
      *
-     * @return ApiKeyData          Полный ключ + метаданные
+     * @return ApiKeyData          Full key plus metadata
      */
     public function generateApiKey(): ApiKeyData
     {
@@ -61,16 +61,16 @@ final class TokenService
     }
 
     // ------------------------------------------------------------------ //
-    //  Инвайт-токены                                                      //
+    //  Invite tokens
     // ------------------------------------------------------------------ //
 
     /**
-     * Сгенерировать инвайт-токен.
+     * Generate invite-token.
      *
-     * Формат: 64 hex-символа.
-     * Используется в ссылках-приглашениях. Действует 1 час, одноразовый.
+     * Format: 64 hex-characters.
+     * Used in invite links. Valid for 1 hour and single-use.
      *
-     * @return string 64 hex-символа
+     * @return string 64 hex-characters
      */
     public function generateInviteToken(): string
     {
@@ -78,16 +78,16 @@ final class TokenService
     }
 
     // ------------------------------------------------------------------ //
-    //  Setup-токен (первоначальная настройка)                             //
+    //  Setup-token (initial setup)                             //
     // ------------------------------------------------------------------ //
 
     /**
-     * Сгенерировать токен первоначальной настройки.
+     * Generate an initial setup token.
      *
-     * Выводится в stdout и сохраняется в setup_token.txt при первом запуске.
-     * Одноразовый — сгорает после использования.
+     * Printed to stdout and saved in setup_token.txt on first startup.
+     * Single-use - expires after use.
      *
-     * @return string 64 hex-символа
+     * @return string 64 hex-characters
      */
     public function generateSetupToken(): string
     {
@@ -95,13 +95,13 @@ final class TokenService
     }
 
     // ------------------------------------------------------------------ //
-    //  Токены одобрений                                                   //
+    //  Tokens approval                                                   //
     // ------------------------------------------------------------------ //
 
     /**
-     * Сгенерировать одноразовый токен доступа после одобрения запроса.
+     * Generate a one-time access token after request approval.
      *
-     * @return string 64 hex-символа
+     * @return string 64 hex-characters
      */
     public function generateApprovalAccessToken(): string
     {
@@ -109,11 +109,11 @@ final class TokenService
     }
 
     // ------------------------------------------------------------------ //
-    //  Вспомогательные методы                                             //
+    //  Helper methods                                             //
     // ------------------------------------------------------------------ //
 
     /**
-     * Проверить, что строка имеет формат API-ключа (для быстрой валидации).
+     * Check that a string has API key format (for quick validation).
      */
     public function looksLikeApiKey(string $value): bool
     {

@@ -13,7 +13,7 @@ use Passway\Services\TokenService;
 use Passway\Tests\DatabaseTestCase;
 
 /**
- * Тесты AuthService: loginWithPassword, rate limiting, audit log.
+ * AuthService tests: loginWithPassword, rate limiting, audit log.
  *
  * @requires extension pdo_sqlite
  */
@@ -30,7 +30,7 @@ final class AuthServiceTest extends DatabaseTestCase
         $session = new SessionService(new TokenService(), $this->hashing);
         $this->svc = new AuthService($this->hashing, $session);
 
-        // Убедиться что setup_complete = '1'
+        // Ensure setup_complete = '1'
         Database::getInstance()->query(
             "UPDATE system_config SET value = '1' WHERE key = 'setup_complete'"
         );
@@ -147,14 +147,14 @@ final class AuthServiceTest extends DatabaseTestCase
         $this->createTestUser('ratelimit@example.com');
         $ip = '99.88.77.66';
 
-        // 5 неудачных попыток
+        // 5 failed attempts
         for ($i = 0; $i < 5; $i++) {
             try {
                 $this->svc->loginWithPassword('ratelimit@example.com', 'WrongPass!', $ip, null);
             } catch (AuthException) {}
         }
 
-        // 6-я попытка — rate limit (даже с правильным паролем)
+        // 6th attempt is rate limited (even with the correct password)
         $this->expectException(AuthException::class);
         $this->svc->loginWithPassword('ratelimit@example.com', 'Test1234!', $ip, null);
     }
@@ -165,14 +165,14 @@ final class AuthServiceTest extends DatabaseTestCase
         $ip1 = '11.22.33.44';
         $ip2 = '55.66.77.88';
 
-        // Заблокировать ip1
+        // Block ip1
         for ($i = 0; $i < 5; $i++) {
             try {
                 $this->svc->loginWithPassword('ratelimit2@example.com', 'WrongPass!', $ip1, null);
             } catch (AuthException) {}
         }
 
-        // ip2 должен работать
+        // ip2 should work
         $result = $this->svc->loginWithPassword('ratelimit2@example.com', 'Test1234!', $ip2, null);
         $this->assertSame('success', $result['status']);
     }
@@ -185,14 +185,14 @@ final class AuthServiceTest extends DatabaseTestCase
     {
         $user = $this->createTestUser('totp@example.com');
 
-        // Включить TOTP (фиктивные значения — важен только флаг)
+        // Enable TOTP (dummy values; only the flag matters)
         Database::getInstance()->update('users', [
             'totp_enabled' => 1,
             'totp_secret'  => 'fake_secret',
             'totp_nonce'   => \str_repeat('ab', 24),
         ], ['id' => $user->id]);
 
-        // Запустить session для хранения pending
+        // Start session to store pending state
         if (\session_status() === PHP_SESSION_NONE) {
             \session_start();
         }
@@ -209,7 +209,7 @@ final class AuthServiceTest extends DatabaseTestCase
 
     public function test_write_audit_log_stores_entry(): void
     {
-        // user_id=null чтобы не нарушать FK-constraint (нет пользователя с id=42)
+        // user_id=null to avoid violating the FK constraint (there is no user with id=42)
         $this->svc->writeAuditLog(null, 'system.test', '127.0.0.1', 'Agent', true, ['key' => 'value']);
 
         $row = Database::getInstance()->fetchOne(

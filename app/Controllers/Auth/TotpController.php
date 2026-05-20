@@ -15,12 +15,12 @@ use Passway\Services\TotpService;
 use Passway\Services\ViewService;
 
 /**
- * Контроллер TOTP (2FA).
+ * Controller TOTP (2FA).
  *
- * POST /auth/totp/verify   — ввод кода после password-login (pending сессия)
- * GET  /auth/totp/setup    — получить secret + QR URI для настройки (требует auth)
- * POST /auth/totp/enable   — подтвердить и включить TOTP (требует auth + код)
- * POST /auth/totp/disable  — отключить TOTP (требует auth + пароль)
+ * POST /auth/totp/verify   - code entry after password login (pending session)
+ * GET  /auth/totp/setup    - get secret plus QR URI for setup (requires auth)
+ * POST /auth/totp/enable   - confirm and enable TOTP (requires auth + code)
+ * POST /auth/totp/disable  - disable TOTP (requires auth + password)
  */
 final class TotpController
 {
@@ -55,8 +55,8 @@ final class TotpController
     // ------------------------------------------------------------------ //
 
     /**
-     * Проверить TOTP-код в процессе входа (после успешного пароля).
-     * Pending user_id берётся из PHP session (хранит AuthService::loginWithPassword).
+     * Check the TOTP code during login (after a successful password).
+     * Pending user_id is taken from the PHP session (stored by AuthService::loginWithPassword).
      */
     public function verify(Request $request): Response
     {
@@ -74,7 +74,7 @@ final class TotpController
             return Response::validationError(['code' => [__('ui.auth.totp.code_required')]]);
         }
 
-        // Получить user_id из pending-сессии
+        // Get user_id from the pending session
         try {
             $userId = $this->authService->getPendingTotpUserId();
         } catch (AuthException $e) {
@@ -89,7 +89,7 @@ final class TotpController
             return Response::error(__('ui.auth.totp.not_configured'), 400);
         }
 
-        // Верифицировать код
+        // Verify the code
         try {
             $valid = $this->totpService->verifyCode(
                 encryptedSecret: $user->totpSecret,
@@ -112,7 +112,7 @@ final class TotpController
             return Response::error(__('ui.auth.totp.invalid_code'), 401);
         }
 
-        // Завершить вход
+        // Complete login
         try {
             $result = $this->authService->completeTotpLogin(
                 userAgent: $request->header('User-Agent') ?? ''
@@ -150,11 +150,11 @@ final class TotpController
     // ------------------------------------------------------------------ //
 
     /**
-     * Начать настройку TOTP: вернуть новый secret и QR URI.
-     * Пользователь должен отсканировать QR в authenticator-приложении,
-     * затем подтвердить кодом через POST /auth/totp/enable.
+     * Start setup TOTP: return a new secret and QR URI.
+     * The user must scan the QR in an authenticator app,
+     * then confirm with a code through POST /auth/totp/enable.
      *
-     * Требует AuthMiddleware.
+     * Requires AuthMiddleware.
      */
     public function setup(Request $request): Response
     {
@@ -164,11 +164,11 @@ final class TotpController
             return Response::error(__('ui.auth.totp.already_enabled'), 400);
         }
 
-        // Генерируем новый secret (raw, для QR) и шифруем для хранения в session
+        // Generate a new secret (raw, for QR) and encrypt it for session storage
         $data      = $this->totpService->generateSecret();
         $qrCodeUri = $this->totpService->getQrCodeUri($user->email, $data['raw_secret']);
 
-        // Временно храним зашифрованный secret в PHP session до подтверждения
+        // Temporarily store the encrypted secret in PHP session until confirmation
         if (\session_status() === PHP_SESSION_NONE) {
             \session_start();
         }
@@ -190,10 +190,10 @@ final class TotpController
     // ------------------------------------------------------------------ //
 
     /**
-     * Включить TOTP после сканирования QR.
-     * Тело: { "code": "123456" }
+     * Enable TOTP after scanning the QR.
+     * Body: { "code": "123456" }
      *
-     * Требует AuthMiddleware.
+     * Requires AuthMiddleware.
      */
     public function enable(Request $request): Response
     {
@@ -208,7 +208,7 @@ final class TotpController
             return Response::validationError(['code' => [__('ui.auth.totp.code_required')]]);
         }
 
-        // Получить pending secret из session
+        // Get the pending secret from the session
         if (\session_status() === PHP_SESSION_NONE) {
             \session_start();
         }
@@ -219,7 +219,7 @@ final class TotpController
             return Response::error(__('ui.auth.totp.setup_expired'), 400);
         }
 
-        // Верифицировать код против pending secret
+        // Verify the code against the pending secret
         try {
             $valid = $this->totpService->verifyCode(
                 encryptedSecret: $setup['encrypted'],
@@ -234,7 +234,7 @@ final class TotpController
             return Response::error(__('ui.auth.totp.invalid_code_with_time_hint'), 401);
         }
 
-        // Сохранить в БД и включить TOTP
+        // Save to DB and enable TOTP
         $user->update([
             'totp_secret'  => $setup['encrypted'],
             'totp_nonce'   => $setup['nonce'],
@@ -254,10 +254,10 @@ final class TotpController
     // ------------------------------------------------------------------ //
 
     /**
-     * Отключить TOTP.
-     * Тело: { "password": "..." }  — подтверждение текущего пароля.
+     * Disable TOTP.
+     * Body: { "password": "..." }  - current password confirmation.
      *
-     * Требует AuthMiddleware.
+     * Requires AuthMiddleware.
      */
     public function disable(Request $request): Response
     {
@@ -276,7 +276,7 @@ final class TotpController
             return Response::error(__('ui.auth.totp.disable_password_not_set'), 400);
         }
 
-        // Verify password using HashingService — получим из контейнера
+        // Verify password using HashingService - get it from the container
         $hashingService = \Passway\Core\Application::getInstance()->getContainer()
             ->make(\Passway\Services\HashingService::class);
 

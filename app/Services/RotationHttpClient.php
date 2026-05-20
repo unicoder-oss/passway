@@ -7,9 +7,9 @@ namespace Passway\Services;
 use Passway\Models\Secret;
 
 /**
- * HTTP-клиент протокола внешних сервисов ротации.
+ * HTTP client for the external rotation service protocol.
  *
- * В тестах transport можно подменить closure без реального HTTP.
+ * In tests, transport can be replaced with a closure without real HTTP.
  */
 final class RotationHttpClient
 {
@@ -117,7 +117,7 @@ final class RotationHttpClient
 
     /**
      * Best-effort rollback convention: reuses `/rotate` with explicit target value.
-     * Сервис может не поддерживать это поведение; тогда rollback silently fails.
+     * The service may not support this behavior; then rollback silently fails.
      *
      * @param array<string, mixed> $credentials
      */

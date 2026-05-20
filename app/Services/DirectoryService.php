@@ -10,23 +10,23 @@ use Passway\Exceptions\AuthException;
 use Passway\Models\Directory;
 
 /**
- * Сервис управления каталогами.
+ * Directory management service.
  *
- * Авторизация (через PermissionService, который включает ACL и role fallback):
+ * Authorization (through PermissionService, which includes ACL and role fallback):
  *   read                  — list, show
  *   write                 — create, rename, move
- *   delete                — только владелец каталога
- *   create_subdirectories — legacy alias для write на родителе
+ *   delete                - directory owner only
+ *   create_subdirectories - legacy alias for write on the parent
  *
- * Структура пути (materialized path):
- *   Корневой каталог : /{uuid}
- *   Дочерний        : /{parent_uuid}/.../{uuid}
+ * Path structure (materialized path):
+ *   Root directory : /{uuid}
+ *   Child        : /{parent_uuid}/.../{uuid}
  */
 final class DirectoryService
 {
     /**
-     * Максимальная глубина вложенности (depth 0..19 = 20 уровней).
-     * depth 0 — корневой каталог.
+     * Maximum nesting depth (depth 0..19 = 20 levels).
+     * depth 0 - root directory.
      */
     public const MAX_DEPTH = 19;
 
@@ -37,20 +37,20 @@ final class DirectoryService
     ) {}
 
     // ------------------------------------------------------------------ //
-    //  Создание                                                           //
+    //  Creation                                                           //
     // ------------------------------------------------------------------ //
 
     /**
-     * Создать каталог в организации.
+     * Create a directory in the organization.
      *
-     * @param string      $orgId      ID организации
-     * @param string|null $parentUuid UUID родителя (null = корневой каталог)
-     * @param string      $name       Имя каталога
-     * @param string      $userId     ID создателя
+     * @param string      $orgId      Organization ID
+     * @param string|null $parentUuid Parent UUID (null = root directory)
+     * @param string      $name       Directory name
+     * @param string      $userId     Creator ID
      *
-     * @throws AuthException             если нет прав (требуется editor+)
-     * @throws \InvalidArgumentException при пустом/слишком длинном имени
-     * @throws \RuntimeException         если родитель не найден или превышена глубина
+     * @throws AuthException             if permission is missing (requires editor+)
+     * @throws \InvalidArgumentException on empty/too long name
+     * @throws \RuntimeException         if the parent is not found or depth is exceeded
      */
     public function create(
         string  $orgId,
@@ -82,10 +82,10 @@ final class DirectoryService
                     __('ui.backend.directory.max_depth_reached', ['levels' => (string) (self::MAX_DEPTH + 1)])
                 );
             }
-            // В новой модели вложенные каталоги регулируются правом write на родителе.
+            // In the new model, nested directories are controlled by write permission on the parent.
             $this->assertCan('write', $userId, 'directory', $parent->id, $orgId);
         } else {
-            // Корневой каталог — org-level editor
+            // Root directory - org-level editor
             $this->assertHasPermission($orgId, $userId, 'editor');
         }
 
@@ -114,14 +114,14 @@ final class DirectoryService
     }
 
     // ------------------------------------------------------------------ //
-    //  Чтение                                                             //
+    //  Reading                                                             //
     // ------------------------------------------------------------------ //
 
     /**
-     * Список всех каталогов организации (плоский, сортировка по depth/path).
+     * List all organization directories (flat, sorted by depth/path).
      *
      * @return Directory[]
-     * @throws AuthException если нет прав (требуется reader+)
+     * @throws AuthException if permission is missing (requires reader+)
      */
     public function listAll(string $orgId, string $userId): array
     {
@@ -130,11 +130,11 @@ final class DirectoryService
     }
 
     /**
-     * Прямые дочерние каталоги (или корневые, если parentUuid = null).
+     * Direct child directories (or root directories, if parentUuid = null).
      *
      * @return Directory[]
-     * @throws AuthException если нет прав
-     * @throws \RuntimeException если родитель не найден в данной организации
+     * @throws AuthException if permission is missing
+     * @throws \RuntimeException if the parent is not found in this organization
      */
     public function listChildren(string $orgId, ?string $parentUuid, string $userId): array
     {
@@ -153,10 +153,10 @@ final class DirectoryService
     }
 
     /**
-     * Найти каталог по UUID с проверкой принадлежности организации.
+     * Find a directory by UUID with organization ownership check.
      *
-     * @throws AuthException если нет прав
-     * @throws \RuntimeException если не найден или принадлежит другой орг.
+     * @throws AuthException if permission is missing
+     * @throws \RuntimeException if not found or belongs to another org
      */
     public function findInOrg(string $dirUuid, string $orgId, string $userId): Directory
     {
@@ -171,15 +171,15 @@ final class DirectoryService
     }
 
     // ------------------------------------------------------------------ //
-    //  Переименование                                                     //
+    //  Rename                                                     //
     // ------------------------------------------------------------------ //
 
     /**
-     * Переименовать каталог.
+     * Rename a directory.
      *
-     * @throws AuthException             если нет прав (требуется editor+)
-     * @throws \InvalidArgumentException при пустом/слишком длинном имени
-     * @throws \RuntimeException         если не найден
+     * @throws AuthException             if permission is missing (requires editor+)
+     * @throws \InvalidArgumentException on empty/too long name
+     * @throws \RuntimeException         if not found
      */
     public function rename(
         string $dirUuid,
@@ -209,16 +209,16 @@ final class DirectoryService
     }
 
     // ------------------------------------------------------------------ //
-    //  Перемещение                                                        //
+    //  Move                                                        //
     // ------------------------------------------------------------------ //
 
     /**
-     * Переместить каталог (и все его потомки) к новому родителю.
-     * Если newParentUuid = null — переместить в корень организации.
+     * Move a directory (and all its descendants) to a new parent.
+     * If newParentUuid = null, move to the organization root.
      *
-     * @throws AuthException     если нет прав (требуется editor+)
-     * @throws \RuntimeException при кольцевой ссылке, превышении глубины или
-     *                           если каталог/родитель не найден
+     * @throws AuthException     if permission is missing (requires editor+)
+     * @throws \RuntimeException on a circular reference, depth excess, or
+     *                           if the directory/parent is not found
      */
     public function move(
         string  $dirUuid,
@@ -233,14 +233,14 @@ final class DirectoryService
 
         $this->assertCan('write', $userId, 'directory', $dir->id, $orgId);
 
-        // Определить нового родителя
+        // Determine the new parent
         $newParent = null;
         if ($newParentUuid !== null) {
             $newParent = Directory::findByUuid($newParentUuid);
             if ($newParent === null || $newParent->organizationId !== $orgId) {
                 throw new \RuntimeException(__('ui.backend.directory.new_parent_not_found'));
             }
-            // Защита от кольцевых ссылок
+            // Protection against circular references
             if ($newParent->uuid === $dir->uuid) {
                 throw new \RuntimeException(__('ui.backend.directory.cannot_move_into_self'));
             }
@@ -254,7 +254,7 @@ final class DirectoryService
             }
         }
 
-        // Ничего не меняется — пропустить
+        // Nothing changes - skip
         if ($dir->parentId === ($newParent?->id)) {
             return;
         }
@@ -271,7 +271,7 @@ final class DirectoryService
         $db->transaction(function () use (
             $db, $dir, $newParent, $newDepth, $newBasePath, $oldBasePath, $depthDelta, $now
         ): void {
-            // Обновить сам каталог
+            // Update the directory itself
             $db->update('directories', [
                 'parent_id'  => $newParent !== null ? (int) $newParent->id : null,
                 'depth'      => $newDepth,
@@ -279,7 +279,7 @@ final class DirectoryService
                 'updated_at' => $now,
             ], ['id' => $dir->id]);
 
-            // Обновить всех потомков (пересчитать path и depth)
+            // Update all descendants (recalculate path and depth)
             foreach (Directory::findDescendants($oldBasePath) as $desc) {
                 $newDescPath = $newBasePath . \substr($desc->path, \strlen($oldBasePath));
                 $db->update('directories', [
@@ -292,14 +292,14 @@ final class DirectoryService
     }
 
     // ------------------------------------------------------------------ //
-    //  Удаление                                                           //
+    //  Deletion                                                           //
     // ------------------------------------------------------------------ //
 
     /**
-     * Мягкое удаление каталога и всех его потомков (устанавливает deleted_at).
+     * Soft-delete a directory and all its descendants (sets deleted_at).
      *
-     * @throws AuthException     если пользователь не владелец каталога
-     * @throws \RuntimeException если не найден
+     * @throws AuthException     if the user is not the directory owner
+     * @throws \RuntimeException if not found
      */
     public function delete(string $dirUuid, string $orgId, string $userId): void
     {
@@ -314,7 +314,7 @@ final class DirectoryService
         $db  = Database::getInstance();
 
         $db->transaction(function () use ($db, $dir, $now): void {
-            // Сначала удалить потомков (по materialized path)
+            // Delete descendants first (by materialized path)
             foreach (Directory::findDescendants($dir->path) as $desc) {
                 $db->query(
                     'UPDATE secrets SET deleted_at = ? WHERE directory_id = ? AND deleted_at IS NULL',
@@ -322,7 +322,7 @@ final class DirectoryService
                 );
                 $db->update('directories', ['deleted_at' => $now], ['id' => $desc->id]);
             }
-            // Удалить сам каталог
+            // Delete the directory itself
             $db->query(
                 'UPDATE secrets SET deleted_at = ? WHERE directory_id = ? AND deleted_at IS NULL',
                 [$now, (int) $dir->id]
@@ -433,7 +433,7 @@ final class DirectoryService
     }
 
     // ------------------------------------------------------------------ //
-    //  Вспомогательные                                                    //
+    //  Helpers                                                    //
     // ------------------------------------------------------------------ //
 
     /**

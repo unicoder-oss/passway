@@ -13,13 +13,13 @@ use Passway\Models\Organization;
 use Passway\Services\ApiKeyService;
 
 /**
- * Контроллер управления API-ключами.
+ * Controller API key management.
  *
- * GET    /api/v1/organizations/:uuid/api-keys                             — список ключей
- * POST   /api/v1/organizations/:uuid/api-keys                             — создать ключ
- * GET    /api/v1/organizations/:uuid/api-keys/:keyUuid                    — детали ключа
- * PATCH  /api/v1/organizations/:uuid/api-keys/:keyUuid                    — сменить роль ключа
- * DELETE /api/v1/organizations/:uuid/api-keys/:keyUuid                    — отозвать ключ
+ * GET    /api/v1/organizations/:uuid/api-keys                             - list keys
+ * POST   /api/v1/organizations/:uuid/api-keys                             - create key
+ * GET    /api/v1/organizations/:uuid/api-keys/:keyUuid                    - key details
+ * PATCH  /api/v1/organizations/:uuid/api-keys/:keyUuid                    - change key role
+ * DELETE /api/v1/organizations/:uuid/api-keys/:keyUuid                    - revoke key
  */
 final class ApiKeyController
 {
@@ -78,7 +78,7 @@ final class ApiKeyController
             return Response::validationError(['name' => [$e->getMessage()]]);
         }
 
-        // Возвращаем сырой ключ ОДИН РАЗ
+        // Return the raw key ONCE
         return Response::success(\array_merge(
             $this->serializeKey($apiKey),
             ['key' => $rawKey]

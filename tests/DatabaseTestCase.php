@@ -10,10 +10,10 @@ use PHPUnit\Framework\TestCase;
 use ReflectionClass;
 
 /**
- * Базовый TestCase для тестов, требующих БД (SQLite :memory:).
+ * Base TestCase for tests that require a database (SQLite :memory:).
  *
- * Запускает все миграции один раз для класса (setUpBeforeClass).
- * Очищает тестовые данные между тестами (setUp).
+ * Runs all migrations once per class (setUpBeforeClass).
+ * Clears test data between tests (setUp).
  *
  * @requires extension pdo_sqlite
  */
@@ -27,15 +27,15 @@ abstract class DatabaseTestCase extends TestCase
     {
         parent::setUpBeforeClass();
 
-        // Убедиться, что env настроен на :memory:
+        // Ensure the env is configured for :memory:
         $_ENV['DB_DRIVER']      = 'sqlite';
         $_ENV['DB_SQLITE_PATH'] = ':memory:';
         $_ENV['MASTER_KEY']     = str_repeat('ab', 32);
 
-        // Сбросить синглтон и создать свежее соединение
+        // Reset the singleton and create a fresh connection
         static::resetDbSingleton();
 
-        // Прогнать все миграции
+        // Run all migrations
         $runner = new MigrationRunner(Database::getInstance());
         $runner->up();
     }
@@ -51,7 +51,7 @@ abstract class DatabaseTestCase extends TestCase
     // ------------------------------------------------------------------ //
 
     /**
-     * Сбросить синглтон Database (для теста создаётся новый :memory: экземпляр).
+     * Reset the Database singleton (the test gets a new :memory: instance).
      */
     protected static function resetDbSingleton(): void
     {
@@ -61,15 +61,15 @@ abstract class DatabaseTestCase extends TestCase
     }
 
     /**
-     * Очистить тестовые данные, сохраняя структуру таблиц.
-     * Порядок соответствует FK-зависимостям (потомки первыми).
+     * Clear test data while preserving the table structure.
+     * Order matches FK dependencies (children first).
      */
     protected function truncateTables(): void
     {
         $db  = Database::getInstance();
         $pdo = $db->getPdo();
 
-        // Отключить FK-проверки в SQLite на время очистки
+        // Disable SQLite FK checks during cleanup
         $pdo->exec('PRAGMA foreign_keys = OFF');
 
         $tables = [
@@ -91,14 +91,14 @@ abstract class DatabaseTestCase extends TestCase
             try {
                 $pdo->exec("DELETE FROM {$table}");
             } catch (\Throwable) {
-                // Таблица может не существовать в частичных конфигурациях — ок
+                // The table may not exist in partial configurations; that is ok
             }
         }
 
-        // Восстановить FK-проверки
+        // Restore FK checks
         $pdo->exec('PRAGMA foreign_keys = ON');
 
-        // Сбросить system_config до дефолтных значений
+        // Reset system_config to default values
         try {
             $pdo->exec("UPDATE system_config SET value = '1' WHERE key = 'setup_complete'");
             $pdo->exec("UPDATE system_config SET value = '' WHERE key = 'deploy_mode'");
@@ -106,7 +106,7 @@ abstract class DatabaseTestCase extends TestCase
     }
 
     /**
-     * Вставить тестового пользователя и вернуть его User-объект.
+     * Insert a test user and return its User object.
      */
     protected function createTestUser(
         string $email        = 'test@example.com',
@@ -118,7 +118,7 @@ abstract class DatabaseTestCase extends TestCase
             $passwordHash   = $hashingService->hashPassword('Test1234!');
         }
 
-        // Нормализуем email как это делают findByEmail() и AuthService
+        // Normalize email like findByEmail() and AuthService do
         $email = \strtolower(\trim($email));
 
         $now = (new \DateTimeImmutable('now', new \DateTimeZone('UTC')))->format('Y-m-d H:i:s');

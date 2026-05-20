@@ -7,14 +7,14 @@ namespace Passway\Database\Migrations;
 use Passway\Database\Migration;
 
 /**
- * Миграция 003: Организации, инвайты, роли, группы.
+ * Migration 003: Organizations, invites, roles, groups.
  *
- * Таблицы:
- *   - organizations        — организации
- *   - organization_members — участники с ролями
- *   - invite_links         — инвайт-ссылки (1 час, одноразовые)
- *   - groups               — группы пользователей внутри организации
- *   - group_members        — принадлежность пользователей к группам
+ * Tables:
+ *   - organizations        — organizations
+ *   - organization_members — members with roles
+ *   - invite_links         — invite links (1 hour, single use)
+ *   - groups               — user groups within an organization
+ *   - group_members        — user group membership
  */
 final class CreateOrganizationsTables extends Migration
 {
@@ -27,14 +27,14 @@ final class CreateOrganizationsTables extends Migration
             "id          {$this->pkType()}",
             'uuid        VARCHAR(36) NOT NULL',
             'name        VARCHAR(255) NOT NULL',
-            // slug для URL: только [a-z0-9-]
+            // URL slug: [a-z0-9-] only
             'slug        VARCHAR(100) NOT NULL',
-            // owner_id — текущий Владелец организации
+            // owner_id — current organization owner
             'owner_id    BIGINT NOT NULL',
             "is_active   {$this->boolType(true)}",
             "created_at  {$this->nowDefault()}",
             "updated_at  {$this->nowDefault()}",
-            // Мягкое удаление
+            // Soft deletion
             "deleted_at  {$this->tsType()}",
             $this->foreignKey('owner_id', 'users', 'id', 'RESTRICT'),
         ], [
@@ -49,12 +49,12 @@ final class CreateOrganizationsTables extends Migration
         // ------------------------------------------------------------------ //
         //  organization_members                                                //
         // ------------------------------------------------------------------ //
-        // Роли: owner | admin | moderator | user | observer
+        // Roles: owner | admin | moderator | user | observer
         $this->createTable('organization_members', [
             "id               {$this->pkType()}",
             'organization_id  BIGINT NOT NULL',
             'user_id          BIGINT NOT NULL',
-            // Валидные роли — проверяются на уровне приложения
+            // Valid roles are checked at the application level
             "role             VARCHAR(50) NOT NULL DEFAULT 'user'",
             'invited_by       BIGINT',
             "joined_at        {$this->nowDefault()}",
@@ -72,9 +72,9 @@ final class CreateOrganizationsTables extends Migration
         // ------------------------------------------------------------------ //
         //  invite_links                                                        //
         // ------------------------------------------------------------------ //
-        // Типы:
-        //   create_org — зарегистрироваться и создать организацию
-        //   join_org   — зарегистрироваться и вступить в организацию
+        // Types:
+        //   create_org — register and create an organization
+        //   join_org   — register and join an organization
         $this->createTable('invite_links', [
             "id               {$this->pkType()}",
             'uuid             VARCHAR(36) NOT NULL',

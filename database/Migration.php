@@ -7,10 +7,10 @@ namespace Passway\Database;
 use Passway\Core\Database;
 
 /**
- * Базовый класс миграции.
+ * Base migration class.
  *
- * Каждая миграция наследует этот класс и реализует up() и down().
- * Предоставляет вспомогательные методы для генерации кросс-платформенного SQL
+ * Each migration extends this class and implements up() and down().
+ * Provides helper methods for generating cross-platform SQL
  * (PostgreSQL / SQLite).
  */
 abstract class Migration
@@ -25,17 +25,17 @@ abstract class Migration
     }
 
     /**
-     * Применить миграцию (создать таблицы/индексы).
+     * Apply the migration (create tables/indexes).
      */
     abstract public function up(): void;
 
     /**
-     * Откатить миграцию (удалить таблицы/индексы).
+     * Roll back the migration (drop tables/indexes).
      */
     abstract public function down(): void;
 
     /**
-     * Имя миграции (по умолчанию — имя файла класса).
+     * Migration name (defaults to the class filename).
      */
     public function getName(): string
     {
@@ -43,11 +43,11 @@ abstract class Migration
     }
 
     // ------------------------------------------------------------------ //
-    //  Генераторы кросс-платформенного SQL                                 //
+    //  Cross-platform SQL generators                                      //
     // ------------------------------------------------------------------ //
 
     /**
-     * SQL-тип для целочисленного автоинкрементного PK.
+     * SQL type for an integer auto-incrementing PK.
      */
     protected function pkType(): string
     {
@@ -55,8 +55,8 @@ abstract class Migration
     }
 
     /**
-     * SQL-тип для большого автоинкрементного PK (audit log и т.п.).
-     * В SQLite нет BIGSERIAL — используем тот же INTEGER.
+     * SQL type for a large auto-incrementing PK (audit log, etc.).
+     * SQLite has no BIGSERIAL, so use the same INTEGER type.
      */
     protected function bigPkType(): string
     {
@@ -64,9 +64,9 @@ abstract class Migration
     }
 
     /**
-     * SQL-тип BOOLEAN.
+     * SQL BOOLEAN type.
      * PostgreSQL: BOOLEAN; SQLite: INTEGER (0/1).
-     * Validation выполняется на уровне приложения.
+     * Validation is performed at the application level.
      */
     protected function boolType(bool $default = false): string
     {
@@ -78,7 +78,7 @@ abstract class Migration
     }
 
     /**
-     * SQL для DEFAULT CURRENT_TIMESTAMP.
+     * SQL for DEFAULT CURRENT_TIMESTAMP.
      */
     protected function nowDefault(): string
     {
@@ -88,7 +88,7 @@ abstract class Migration
     }
 
     /**
-     * SQL-тип TIMESTAMP (nullable).
+     * SQL TIMESTAMP type (nullable).
      */
     protected function tsType(): string
     {
@@ -96,7 +96,7 @@ abstract class Migration
     }
 
     /**
-     * TEXT тип (идентично для обоих драйверов).
+     * TEXT type (identical for both drivers).
      */
     protected function textType(): string
     {
@@ -104,7 +104,7 @@ abstract class Migration
     }
 
     /**
-     * Выполнить SQL-запрос напрямую.
+     * Execute an SQL query directly.
      */
     protected function exec(string $sql): void
     {
@@ -112,10 +112,10 @@ abstract class Migration
     }
 
     /**
-     * Создать таблицу если не существует.
+     * Create a table if it does not exist.
      *
-     * @param string[] $columns  Массив строк вида "col_name DEFINITION"
-     * @param string[] $constraints  Массив строк-ограничений (UNIQUE, FOREIGN KEY и т.п.)
+     * @param string[] $columns  Array of strings in the form "col_name DEFINITION"
+     * @param string[] $constraints  Array of constraint strings (UNIQUE, FOREIGN KEY, etc.)
      */
     protected function createTable(string $name, array $columns, array $constraints = []): void
     {
@@ -125,7 +125,7 @@ abstract class Migration
     }
 
     /**
-     * Удалить таблицу если существует.
+     * Drop a table if it exists.
      */
     protected function dropTable(string $name): void
     {
@@ -133,7 +133,7 @@ abstract class Migration
     }
 
     /**
-     * Создать индекс если не существует.
+     * Create an index if it does not exist.
      *
      * @param string[] $columns
      */
@@ -147,7 +147,7 @@ abstract class Migration
     }
 
     /**
-     * Удалить индекс.
+     * Drop an index.
      */
     protected function dropIndex(string $table, array $columns): void
     {
@@ -163,8 +163,8 @@ abstract class Migration
     }
 
     /**
-     * FOREIGN KEY с учётом SQLite (в SQLite FK описываются внутри CREATE TABLE).
-     * Для ALTER TABLE — только в PostgreSQL; в SQLite возможно лишь при пересоздании таблицы.
+     * FOREIGN KEY with SQLite in mind (SQLite defines FKs inside CREATE TABLE).
+     * For ALTER TABLE, only PostgreSQL is supported; SQLite requires table recreation.
      */
     protected function foreignKey(
         string $column,
@@ -177,12 +177,12 @@ abstract class Migration
     }
 
     /**
-     * Добавить столбец к существующей таблице (only PG; SQLite needs recreation).
+     * Add a column to an existing table (only PG; SQLite needs recreation).
      */
     protected function addColumn(string $table, string $column, string $definition): void
     {
         if (!$this->driver === 'sqlite') {
-            // SQLite поддерживает ADD COLUMN с 3.20+, но без FOREIGN KEY
+            // SQLite supports ADD COLUMN since 3.20+, but without FOREIGN KEY
         }
         $this->exec("ALTER TABLE {$table} ADD COLUMN {$column} {$definition}");
     }

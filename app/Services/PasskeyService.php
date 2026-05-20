@@ -27,19 +27,19 @@ use Webauthn\Exception\InvalidDataException;
 use ParagonIE\ConstantTime\Base64UrlSafe;
 
 /**
- * WebAuthn / Passkey сервис (FIDO2).
+ * WebAuthn / Passkey service (FIDO2).
  *
- * Использует web-auth/webauthn-lib ^4.8.
- * Challenge временно хранится в PHP session (server-side → безопасно).
+ * Uses web-auth/webauthn-lib ^4.8.
+ * Challenge is temporarily stored in PHP session (server-side -> safe).
  *
- * Хранение credential:
- *   passkeys.credential_id  — base64url ID от аутентификатора
- *   passkeys.public_key     — JSON-сериализованный PublicKeyCredentialSource
- *   passkeys.sign_count     — счётчик подписей (anti-replay)
+ * Credential storage:
+ *   passkeys.credential_id  - base64url ID from the authenticator
+ *   passkeys.public_key     - JSON-serialized PublicKeyCredentialSource
+ *   passkeys.sign_count     - signature counter (anti-replay)
  *
- * NOTE: PublicKeyCredentialLoader и PublicKeyCredentialSource::createFromArray()
- *       помечены deprecated в 4.8/4.9 (будет Symfony serializer в 5.0).
- *       Используем их т.к. symfony/serializer не установлен.
+ * NOTE: PublicKeyCredentialLoader and PublicKeyCredentialSource::createFromArray()
+ *       are marked deprecated in 4.8/4.9 (Symfony serializer will be used in 5.0).
+ *       Using them because symfony/serializer is not installed.
  */
 final class PasskeyService
 {
@@ -57,14 +57,14 @@ final class PasskeyService
         $this->rpName = (string) ($_ENV['APP_NAME'] ?? 'Passway');
         $this->securedRelyingPartyIds = $this->buildSecuredRelyingPartyIds();
 
-        // Поддержка только "none" attestation — достаточно для большинства use-cases.
-        // Для аппаратных ключей с верификацией аттестации нужен MetadataService.
+        // Support only "none" attestation - sufficient for most use cases.
+        // For hardware keys with attestation verification MetadataService is needed.
         $supportManager = new AttestationStatementSupportManager();
         $supportManager->add(new NoneAttestationStatementSupport());
 
         $attestationObjectLoader = AttestationObjectLoader::create($supportManager);
 
-        // @deprecated в 4.8, заменится на Symfony serializer в 5.0
+        // @deprecated in 4.8, will be replaced by Symfony serializer in 5.0
         $this->loader = PublicKeyCredentialLoader::create($attestationObjectLoader);
 
         $this->attestationValidator = new AuthenticatorAttestationResponseValidator();
@@ -72,12 +72,12 @@ final class PasskeyService
     }
 
     // ------------------------------------------------------------------ //
-    //  Регистрация: шаг 1 — создать options                              //
+    //  Registration: step 1 - create options
     // ------------------------------------------------------------------ //
 
     /**
-     * Начать регистрацию passkey.
-     * Возвращает PublicKeyCredentialCreationOptions в виде JSON-массива для браузера.
+     * Start passkey registration.
+     * Returns PublicKeyCredentialCreationOptions as a JSON array for the browser.
      *
      * @return array<string, mixed>
      * @throws AuthException
@@ -95,13 +95,13 @@ final class PasskeyService
 
         $challenge = \random_bytes(32);
 
-        // Алгоритмы: ES256 (ECDSA P-256, предпочтительный) и RS256 (RSA 2048)
+        // Algorithms: ES256 (ECDSA P-256, preferred) and RS256 (RSA 2048)
         $pubKeyCredParams = [
             PublicKeyCredentialParameters::create('public-key', -7),    // ES256
             PublicKeyCredentialParameters::create('public-key', -257),  // RS256
         ];
 
-        // Исключить уже зарегистрированные ключи для этого пользователя
+        // Exclude keys already registered for this user
         $excludeCredentials = $this->buildExcludeCredentials($user);
 
         $authenticatorSelection = AuthenticatorSelectionCriteria::create(
@@ -120,22 +120,22 @@ final class PasskeyService
             timeout:                60000,
         );
 
-        // Сохранить options в session для шага finishRegistration
+        // Save options in the session for the finishRegistration step
         $_SESSION['webauthn_reg_options'] = \serialize($options);
         $_SESSION['webauthn_reg_user_id'] = $user->id;
 
-        // Отдаём клиенту JSON-представление
+        // Return the JSON representation to the client
         return $this->optionsToArray($options);
     }
 
     // ------------------------------------------------------------------ //
-    //  Регистрация: шаг 2 — верифицировать ответ аутентификатора         //
+    //  Registration: step 2 - verify authenticator response
     // ------------------------------------------------------------------ //
 
     /**
-     * Завершить регистрацию passkey.
+     * Finish passkey registration.
      *
-     * @param array<string, mixed> $credentialResponse JSON от navigator.credentials.create()
+     * @param array<string, mixed> $credentialResponse JSON from navigator.credentials.create()
      * @throws AuthException
      */
     public function finishRegistration(User $user, array $credentialResponse, string $name = 'Passkey'): Passkey
@@ -159,7 +159,7 @@ final class PasskeyService
                 throw new AuthException(__('ui.backend.passkey.invalid_registration_response_type'));
             }
 
-            // Передаём hostname вместо PSR-7 request (поддерживается с 4.5)
+            // Pass hostname instead of PSR-7 request (supported since 4.5)
             $credentialSource = $this->attestationValidator->check(
                 authenticatorAttestationResponse:      $publicKeyCredential->response,
                 publicKeyCredentialCreationOptions:    $creationOptions,
@@ -174,14 +174,14 @@ final class PasskeyService
     }
 
     // ------------------------------------------------------------------ //
-    //  Аутентификация: шаг 1 — создать options                           //
+    //  Authentication: step 1 - create options
     // ------------------------------------------------------------------ //
 
     /**
-     * Начать аутентификацию по passkey.
+     * Start passkey authentication.
      *
-     * @param string|null $email Если указан — подставляем allowCredentials для этого email.
-     *                           Если null — discoverable credentials (resident keys).
+     * @param string|null $email If specified, provide allowCredentials for this email.
+     *                           If null, discoverable credentials (resident keys).
      * @return array<string, mixed>
      */
     public function startAuthentication(?string $email = null): array
@@ -212,14 +212,14 @@ final class PasskeyService
     }
 
     // ------------------------------------------------------------------ //
-    //  Аутентификация: шаг 2 — верифицировать ответ                      //
+    //  Authentication: step 2 - verify response
     // ------------------------------------------------------------------ //
 
     /**
-     * Завершить аутентификацию.
-     * Возвращает аутентифицированного User или бросает AuthException.
+     * Finish authentication.
+     * Returns an authenticated User or throws AuthException.
      *
-     * @param array<string, mixed> $credentialResponse JSON от navigator.credentials.get()
+     * @param array<string, mixed> $credentialResponse JSON from navigator.credentials.get()
      * @throws AuthException
      */
     public function finishAuthentication(array $credentialResponse): User
@@ -243,29 +243,29 @@ final class PasskeyService
                 throw new AuthException(__('ui.backend.passkey.invalid_authentication_response_type'));
             }
 
-            // Достать credential_id из ответа (base64url encoded в rawId)
+            // Extract credential_id from the response (base64url encoded in rawId)
             $credentialId = Base64UrlSafe::encodeUnpadded($publicKeyCredential->rawId);
 
-            // Найти ключ в БД
+            // Find key in DB
             $passkey = Passkey::findByCredentialId($credentialId);
             if ($passkey === null) {
                 throw new AuthException(__('ui.backend.passkey.not_found'));
             }
 
-            // Найти пользователя
+            // Find user
             $user = User::findById((int) $passkey->userId);
             if ($user === null || !$user->isActive) {
                 throw new AuthException(__('ui.backend.passkey.user_not_found_or_inactive'));
             }
 
-            // Загрузить PublicKeyCredentialSource из JSON
+            // Load PublicKeyCredentialSource from JSON
             $credentialSourceData = \json_decode($passkey->publicKey, true);
             if (!\is_array($credentialSourceData)) {
                 throw new AuthException(__('ui.backend.passkey.invalid_credential_data'));
             }
             $credentialSource = PublicKeyCredentialSource::createFromArray($credentialSourceData);
 
-            // Верифицировать
+            // Verify
             $updatedSource = $this->assertionValidator->check(
                 credentialId:                        $credentialSource,
                 authenticatorAssertionResponse:      $publicKeyCredential->response,
@@ -278,14 +278,14 @@ final class PasskeyService
             throw new AuthException(__('ui.backend.passkey.authentication_failed', ['message' => $e->getMessage()]));
         }
 
-        // Обновить sign_count и last_used_at
+        // Update sign_count and last_used_at
         $this->updateCredential($passkey, $updatedSource);
 
         return $user;
     }
 
     // ------------------------------------------------------------------ //
-    //  Хранение credential                                                //
+    //  Credential storage                                                //
     // ------------------------------------------------------------------ //
 
     private function storeCredential(
@@ -295,7 +295,7 @@ final class PasskeyService
     ): Passkey {
         $credentialId = Base64UrlSafe::encodeUnpadded($source->publicKeyCredentialId);
 
-        // Сохраняем весь source как JSON (deprecated jsonSerialize, но работает в 4.8)
+        // Save the full source as JSON (deprecated jsonSerialize, but works in 4.8)
         $publicKeyJson = \json_encode($source->jsonSerialize(), \JSON_UNESCAPED_UNICODE);
 
         $db  = Database::getInstance();
@@ -372,8 +372,8 @@ final class PasskeyService
     }
 
     /**
-     * Привести PublicKeyCredentialCreationOptions к JSON-массиву для браузера.
-     * base64url-кодирует бинарные поля (challenge, user.id и т.д.)
+     * Convert PublicKeyCredentialCreationOptions to a JSON array for the browser.
+     * base64url-encodes binary fields (challenge, user.id etc.)
      *
      * @return array<string, mixed>
      */
@@ -411,7 +411,7 @@ final class PasskeyService
     }
 
     /**
-     * Привести PublicKeyCredentialRequestOptions к JSON-массиву для браузера.
+     * Convert PublicKeyCredentialRequestOptions to a JSON array for the browser.
      *
      * @return array<string, mixed>
      */

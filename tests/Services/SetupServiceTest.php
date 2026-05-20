@@ -13,7 +13,7 @@ use Passway\Services\TokenService;
 use Passway\Tests\DatabaseTestCase;
 
 /**
- * Тесты SetupService: генерация токена, верификация, completeSetup.
+ * SetupService tests: token generation, verification, completeSetup.
  *
  * @requires extension pdo_sqlite
  */
@@ -30,7 +30,7 @@ final class SetupServiceTest extends DatabaseTestCase
             new TokenService(),
         );
 
-        // Установить начальное состояние: setup не завершён, токена нет
+        // Set initial state: setup is not complete and there is no token
         Database::getInstance()->query(
             "UPDATE system_config SET value = '0' WHERE key = 'setup_complete'"
         );
@@ -136,7 +136,7 @@ final class SetupServiceTest extends DatabaseTestCase
 
     public function test_verify_returns_false_when_no_stored_hash(): void
     {
-        // Нет токена в БД
+        // No token in the DB
         $this->assertFalse($this->svc->verifySetupToken(\str_repeat('a', 64)));
     }
 
@@ -199,7 +199,7 @@ final class SetupServiceTest extends DatabaseTestCase
 
         $this->svc->completeSetup($token, 'admin@example.com', 'Secure12', 'solo');
 
-        // Токен аннулирован — повторная верификация провалится
+        // Token is invalidated; repeated verification will fail
         $this->assertFalse($this->svc->verifySetupToken($token));
         $this->assertFalse($this->svc->hasSetupToken());
     }
@@ -223,7 +223,7 @@ final class SetupServiceTest extends DatabaseTestCase
     }
 
     // ------------------------------------------------------------------ //
-    //  Валидация                                                          //
+    //  Validation                                                          //
     // ------------------------------------------------------------------ //
 
     public function test_validate_email_throws_for_invalid(): void

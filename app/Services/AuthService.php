@@ -9,19 +9,19 @@ use Passway\Exceptions\AuthException;
 use Passway\Models\User;
 
 /**
- * Сервис аутентификации: email+пароль, TOTP-пендинг, логи.
+ * Authentication service: email+password, TOTP pending, logs.
  *
- * Возвращаемые статусы loginWithPassword():
+ * Returned statuses loginWithPassword():
  *   'success'        → ['status', 'user', 'raw_token']
- *   'totp_required'  → ['status']  (pending user_id сохранён в PHP session)
+ *   'totp_required'  -> ['status']  (pending user_id saved in PHP session)
  */
 final class AuthService
 {
-    /** Максимум неудачных попыток за окно до блокировки */
+    /** Maximum failed attempts per window before blocking */
     private const RATE_LIMIT_MAX     = 5;
-    /** Окно rate limiting в секундах (15 минут) */
+    /** Rate limiting window in seconds (15 minutes) */
     private const RATE_LIMIT_WINDOW  = 900;
-    /** TTL pending-TOTP сессии в секундах (5 минут) */
+    /** TTL pending-TOTP session in seconds (5 minutes) */
     private const TOTP_PENDING_TTL   = 300;
 
     public function __construct(
@@ -31,14 +31,14 @@ final class AuthService
     ) {}
 
     // ------------------------------------------------------------------ //
-    //  Email + пароль                                                     //
+    //  Email + password                                                     //
     // ------------------------------------------------------------------ //
 
     /**
-     * Попытка входа по email + паролю.
+     * Login attempt by email and password.
      *
      * @return array{status: string, user?: User, raw_token?: string}
-     * @throws AuthException при неверных данных / rate limit / inactive
+     * @throws AuthException on invalid credentials / rate limit / inactive
      */
     public function loginWithPassword(
         string  $email,
@@ -46,18 +46,18 @@ final class AuthService
         ?string $ip,
         ?string $userAgent,
     ): array {
-        // 1. Проверка setup_complete
+        // 1. Check setup_complete
         $this->assertSetupComplete();
 
-        // 2. Rate limiting по IP
+        // 2. Rate limiting by IP
         $this->assertRateLimit($ip);
 
-        // 3. Найти пользователя
+        // 3. Find user
         $email = \strtolower(\trim($email));
         $user  = User::findByEmail($email);
 
         if ($user === null || $user->passwordHash === null) {
-            // Не раскрываем, что пользователь не существует
+            // Do not reveal that the user does not exist
             $this->recordFailedAttempt($ip);
             $this->writeAuditLog(null, 'auth.login_fail', $ip, $userAgent, false, [
                 'email'  => $email,
@@ -66,7 +66,7 @@ final class AuthService
             throw new AuthException(__('ui.backend.auth.invalid_credentials'));
         }
 
-        // 4. Проверить активность аккаунта
+        // 4. Check account activity
         if (!$user->isActive) {
             $this->recordFailedAttempt($ip);
             $this->writeAuditLog($user->id, 'auth.login_fail', $ip, $userAgent, false, [
@@ -75,7 +75,7 @@ final class AuthService
             throw new AuthException(__('ui.backend.auth.account_inactive'));
         }
 
-        // 5. Проверить пароль
+        // 5. Check password
         if (!$this->hashingService->verifyPassword($password, $user->passwordHash)) {
             $this->recordFailedAttempt($ip);
             $this->writeAuditLog($user->id, 'auth.login_fail', $ip, $userAgent, false, [
@@ -84,23 +84,23 @@ final class AuthService
             throw new AuthException(__('ui.backend.auth.invalid_credentials'));
         }
 
-        // 6. Перехешировать пароль если параметры изменились
+        // 6. Rehash the password if parameters changed
         if ($this->hashingService->needsRehash($user->passwordHash)) {
             $newHash = $this->hashingService->hashPassword($password);
             $user->update(['password_hash' => $newHash]);
         }
 
-        // 7. TOTP: если включён — отложить создание сессии до ввода кода
+        // 7. TOTP: if enabled, defer session creation until code entry
         if ($user->totpEnabled) {
             $this->storeTotpPending($user->id, $ip);
             $this->writeAuditLog($user->id, 'auth.totp_pending', $ip, $userAgent, true);
             return ['status' => 'totp_required'];
         }
 
-        // 8. Создать сессию
+        // 8. Create a session
         $rawToken = $this->sessionService->create($user->id, $ip, $userAgent);
 
-        // 9. Обновить last_login
+        // 9. Update last_login
         $user->update([
             'last_login_at' => now()->format('Y-m-d H:i:s'),
             'last_login_ip' => $ip,
@@ -122,7 +122,7 @@ final class AuthService
     // ------------------------------------------------------------------ //
 
     /**
-     * Сохранить "ожидание TOTP" в PHP session после успешного пароля.
+     * Save "TOTP pending" in the PHP session after successful password verification.
      */
     private function storeTotpPending(string $userId, ?string $ip): void
     {
@@ -135,8 +135,8 @@ final class AuthService
     }
 
     /**
-     * Завершить вход после TOTP-верификации.
-     * Вызывается из TotpController::verify().
+     * Complete login after TOTP verification.
+     * Called from TotpController::verify().
      *
      * @return array{status: string, user: User, raw_token: string}
      * @throws AuthException
@@ -180,8 +180,8 @@ final class AuthService
     }
 
     /**
-     * Получить user_id из pending-TOTP (без завершения — для TotpService).
-     * @throws AuthException если нет pending-сессии
+     * Get user_id from pending TOTP (without completion - for TotpService).
+     * @throws AuthException if missing pending-session
      */
     public function getPendingTotpUserId(): string
     {
@@ -201,8 +201,8 @@ final class AuthService
     // ------------------------------------------------------------------ //
 
     /**
-     * Проверить что setup завершён (setup_complete = '1').
-     * @throws AuthException с кодом 503 если нет
+     * Check that setup is complete (setup_complete = '1').
+     * @throws AuthException with code 503 if missing
      */
     public function assertSetupComplete(): void
     {
@@ -220,8 +220,8 @@ final class AuthService
     // ------------------------------------------------------------------ //
 
     /**
-     * Проверить rate limit для данного IP.
-     * @throws AuthException 429 если превышен лимит
+     * Check rate limit for this IP.
+     * @throws AuthException 429 if the limit is exceeded
      */
     private function assertRateLimit(?string $ip): void
     {
@@ -241,7 +241,7 @@ final class AuthService
             return; // Нет записи — не заблокирован
         }
 
-        // Если окно истекло — запись устарела, не блокируем
+        // If the window expired - the record is stale, do not block
         if ($row['window_start'] < $windowStart) {
             return;
         }
@@ -255,7 +255,7 @@ final class AuthService
     }
 
     /**
-     * Зафиксировать неудачную попытку (increment или сброс окна).
+     * Record a failed attempt (increment or reset the window).
      */
     private function recordFailedAttempt(?string $ip): void
     {
@@ -273,7 +273,7 @@ final class AuthService
         );
 
         if ($row === null) {
-            // Первый неудачный запрос — вставляем
+            // First failed request - insert
             try {
                 $db->insert('rate_limit_log', [
                     'ip_address'   => $ip,
@@ -283,21 +283,21 @@ final class AuthService
                     'updated_at'   => $now,
                 ]);
             } catch (\Exception) {
-                // Гонка — другой запрос уже вставил, увеличиваем count
+                // Race - another request has already inserted, increment count
                 $db->query(
                     'UPDATE rate_limit_log SET count = count + 1, updated_at = ? WHERE ip_address = ? AND bucket = ?',
                     [$now, $ip, 'auth']
                 );
             }
         } elseif ($row['window_start'] < $windowStart) {
-            // Окно истекло — сбрасываем счётчик
+            // Window expired - reset the counter
             $db->update(
                 'rate_limit_log',
                 ['count' => 1, 'window_start' => $now, 'updated_at' => $now],
                 ['ip_address' => $ip, 'bucket' => 'auth']
             );
         } else {
-            // В пределах окна — увеличиваем
+            // Within the window - increment
             $db->query(
                 'UPDATE rate_limit_log SET count = count + 1, updated_at = ? WHERE ip_address = ? AND bucket = ?',
                 [$now, $ip, 'auth']

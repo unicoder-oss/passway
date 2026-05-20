@@ -19,7 +19,7 @@ use Passway\Services\TemplateService;
 use Passway\Tests\DatabaseTestCase;
 
 /**
- * Тесты SecretService: создание, список, чтение, обновление, удаление, история.
+ * SecretService tests: create, list, read, update, delete, history.
  *
  * @requires extension pdo_sqlite
  * @requires extension sodium
@@ -33,7 +33,7 @@ final class SecretServiceTest extends DatabaseTestCase
 
     public static function setUpBeforeClass(): void
     {
-        // Установить MASTER_KEY до инициализации БД
+        // Set MASTER_KEY before database initialization
         $_ENV['MASTER_KEY'] = \bin2hex(\random_bytes(32));
         parent::setUpBeforeClass();
     }
@@ -47,7 +47,7 @@ final class SecretServiceTest extends DatabaseTestCase
         $this->dirSvc = new DirectoryService($this->orgSvc, $this->permSvc);
         $this->svc    = new SecretService($this->orgSvc, new EncryptionService(), $this->permSvc);
 
-        // team-режим — нет ограничений по числу организаций
+        // team mode has no limit on the number of organizations
         Database::getInstance()->query(
             "UPDATE system_config SET value = 'team' WHERE key = 'deploy_mode'"
         );
@@ -154,7 +154,7 @@ final class SecretServiceTest extends DatabaseTestCase
         $s1 = $this->svc->create($org->id, $dir->uuid, 'Token', 'static', 'old', $owner->id);
         $this->svc->delete($s1->uuid, $org->id, $owner->id);
 
-        // После удаления имя освобождается
+        // After deletion, the name becomes available
         $s2 = $this->svc->create($org->id, $dir->uuid, 'Token', 'static', 'new', $owner->id);
         $this->assertSame('Token', $s2->name);
     }
@@ -682,7 +682,7 @@ final class SecretServiceTest extends DatabaseTestCase
         $this->assertSame('NewName', $updated->name);
         $this->assertSame(1, $updated->version);
 
-        // История не должна содержать записей
+        // History should not contain records
         $versions = SecretVersion::findBySecretId($secret->id);
         $this->assertCount(0, $versions);
     }
@@ -764,7 +764,7 @@ final class SecretServiceTest extends DatabaseTestCase
         $dir    = $this->dirSvc->create($org->id, null, 'Dir', $owner->id);
         $secret = $this->svc->create($org->id, $dir->uuid, 'Secret', 'static', 'v0', $owner->id);
 
-        // 12 обновлений значения — история должна обрезаться до 10
+        // 12 value updates; history should be pruned to 10
         for ($i = 1; $i <= 12; $i++) {
             $this->svc->update($secret->uuid, $org->id, $owner->id, null, "v{$i}");
         }
@@ -827,7 +827,7 @@ final class SecretServiceTest extends DatabaseTestCase
         $versions = $this->svc->listVersions($secret->uuid, $org->id, $owner->id);
 
         $this->assertCount(2, $versions);
-        // Сортировка по убыванию version
+        // Sort by descending version
         $this->assertSame(2, $versions[0]->version);
         $this->assertSame(1, $versions[1]->version);
     }

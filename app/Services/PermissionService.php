@@ -12,13 +12,13 @@ use Passway\Models\Secret;
 use Passway\Models\UserPermission;
 
 /**
- * Сервис тонкогранулированного контроля доступа на уровне каталогов.
+ * Service fine-grained directory-level access control.
  *
- * Приоритет проверки:
- *   1. ACL на целевом ресурсе.
- *   2. ACL на ближайшем предке (для секретов: папка -> родительские папки).
- *   3. Fallback на роль в организации, если ACL-правил не найдено.
- *   4. Нет совпадений → доступ запрещён.
+ * Check priority:
+ *   1. ACL on the target resource.
+ *   2. ACL on the nearest ancestor (for secrets: folder -> parent folders).
+ *   3. Fallback to the organization role if no ACL rules are found.
+ *   4. No matches -> access denied.
  */
 final class PermissionService
 {
@@ -26,8 +26,8 @@ final class PermissionService
     public const VALID_ACCESS_POLICIES = ['inherit', 'allow', 'deny'];
 
     /**
-     * Минимальная роль в организации, достаточная для данного права.
-     * Пользователи с этой ролью проходят проверку без fine-grained анализа.
+     * Minimum role in the organization, sufficient for this permission.
+     * Users with this role pass the check without fine-grained analysis.
      */
     private const PERM_TO_ORG_ROLE = [
         'read'                  => 'reader',
@@ -44,17 +44,17 @@ final class PermissionService
     ) {}
 
     // ------------------------------------------------------------------ //
-    //  Проверка доступа                                                   //
+    //  Access check                                                   //
     // ------------------------------------------------------------------ //
 
     /**
-     * Проверить, имеет ли пользователь указанное право на ресурс.
+     * Check whether the user has the specified permission on the resource.
      *
      * @param string $permission   read|write|delete|create_subdirectories
-     * @param string $userId       ID пользователя
+     * @param string $userId       User ID
      * @param string $resourceType directory|secret
-     * @param string $resourceId   ID ресурса (числовой)
-     * @param string $orgId        ID организации
+     * @param string $resourceId   Resource ID (numeric)
+     * @param string $orgId        Organization ID
      */
     public function can(
         string $permission,
@@ -68,12 +68,12 @@ final class PermissionService
             return $this->getApiKeyAccessService()->can($apiKey->id, $permission, $resourceType, $resourceId, $orgId);
         }
 
-        // Пользователь должен хотя бы состоять в организации
+        // The user must at least belong to the organization
         if ($this->organizationService->getMemberRole($orgId, $userId) === null) {
             return false;
         }
 
-        // 1–2. Fine-grained ACL на ресурсе и его предках
+        // 1-2. Fine-grained ACL on the resource and its ancestors
         $fineGrained = $this->checkFineGrained($permission, $userId, $resourceType, $resourceId, $orgId);
         if ($fineGrained !== null) {
             return $fineGrained;
@@ -84,21 +84,21 @@ final class PermissionService
             return $defaultPolicy;
         }
 
-        // 3. Fallback на роль в организации
+        // 3. Fallback to the organization role
         $minRole = self::PERM_TO_ORG_ROLE[$permission] ?? 'editor';
         return $this->organizationService->hasPermission($orgId, $userId, $minRole);
     }
 
     // ------------------------------------------------------------------ //
-    //  Управление записями прав                                           //
+    //  Permission entry management                                           //
     // ------------------------------------------------------------------ //
 
     /**
-     * Выдать разрешение или запрет субъекту на ресурс.
-     * Если запись для той же тройки (subject, resource, permission) уже есть — обновляет её.
+     * Grant an allow or deny permission to a subject on a resource.
+     * If an entry for the same triple (subject, resource, permission) already exists - updates it.
      *
-     * @throws AuthException             если requesterId не имеет admin+
-     * @throws \InvalidArgumentException при невалидных параметрах
+     * @throws AuthException             if requesterId lacks admin+
+     * @throws \InvalidArgumentException on invalid parameters
      */
     public function grant(
         string  $subjectType,
@@ -136,7 +136,7 @@ final class PermissionService
         $db  = Database::getInstance();
         $now = now()->format('Y-m-d H:i:s');
 
-        // Upsert: обновить существующую запись или вставить новую
+        // Upsert: update an existing entry or insert a new one
         $existing = UserPermission::findForSubject($subjectType, $subjectId, $resourceType, $resourceId);
         $found    = null;
         foreach ($existing as $p) {
@@ -196,10 +196,10 @@ final class PermissionService
     }
 
     /**
-     * Отозвать право по ID.
+     * Revoke permission by ID.
      *
-     * @throws AuthException     если нет прав (admin+)
-     * @throws \RuntimeException если запись не найдена
+     * @throws AuthException     if permission is missing (admin+)
+     * @throws \RuntimeException if the entry is not found
      */
     public function revoke(string $permId, string $requesterId, string $orgId): void
     {
@@ -223,10 +223,10 @@ final class PermissionService
     }
 
     /**
-     * Список всех прав на каталог (для управления).
+     * List all permissions on a directory (for management).
      *
      * @return UserPermission[]
-     * @throws AuthException если нет прав (admin+)
+     * @throws AuthException if permission is missing (admin+)
      */
     public function listForDirectory(string $dirId, string $requesterId, string $orgId): array
     {
@@ -337,11 +337,11 @@ final class PermissionService
     }
 
     // ------------------------------------------------------------------ //
-    //  Вспомогательные                                                    //
+    //  Helpers                                                    //
     // ------------------------------------------------------------------ //
 
     /**
-     * Проверить ACL пользователя/групп на ресурсе и его предках.
+     * Check user/group ACL on the resource and its ancestors.
      */
     private function checkFineGrained(
         string $permission,
@@ -397,8 +397,8 @@ final class PermissionService
     }
 
     /**
-     * Проверить права на конкретный ресурс (без наследования).
-     * Возвращает true/false если нашли правило, null если правил нет.
+     * Check permissions on a specific resource (without inheritance).
+     * Returns true/false if a rule is found, null if there are no rules.
      */
     private function evalPermission(
         string $permission,
@@ -416,13 +416,13 @@ final class PermissionService
             );
         }
 
-        // Отфильтровать: нужное право и не просроченные
+        // Filter: the needed permission and non-expired
         $perms = \array_filter(
             $perms,
             fn(UserPermission $p) => $p->permission === $permission && $this->isActive($p)
         );
 
-        // Явные запреты имеют приоритет над разрешениями
+        // Explicit denies take priority over allows
         foreach ($perms as $p) {
             if ($p->isDeny) {
                 return false;
@@ -444,8 +444,8 @@ final class PermissionService
     }
 
     /**
-     * Построить цепочку ресурсов для проверки ACL
-     * (от конкретного ресурса к корневому каталогу).
+     * Build the resource chain for ACL checks
+     * (from the specific resource to the root directory).
      *
      * @return array<int, array{resource_type:string, resource_id:string, default_read_access:string, default_write_access:string}>
      */
@@ -506,7 +506,7 @@ final class PermissionService
     }
 
     /**
-     * Проверить, что право ещё не истекло.
+     * Check that the permission has not expired yet.
      */
     private function isActive(UserPermission $perm): bool
     {

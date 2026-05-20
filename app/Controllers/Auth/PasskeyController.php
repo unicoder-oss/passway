@@ -14,15 +14,15 @@ use Passway\Services\PasskeyService;
 use Passway\Services\SessionService;
 
 /**
- * Контроллер WebAuthn / Passkey.
+ * Controller WebAuthn / Passkey.
  *
- * Регистрация (требует auth):
- *   POST /auth/passkey/register/start   — создать PublicKeyCredentialCreationOptions
- *   POST /auth/passkey/register/finish  — сохранить passkey в БД
+ * Registration (requires auth):
+ *   POST /auth/passkey/register/start   - create PublicKeyCredentialCreationOptions
+ *   POST /auth/passkey/register/finish  - save passkey in DB
  *
- * Аутентификация (публичный):
- *   POST /auth/passkey/authenticate/start   — создать PublicKeyCredentialRequestOptions
- *   POST /auth/passkey/authenticate/finish  — верифицировать, выдать сессию
+ * Authentication (public):
+ *   POST /auth/passkey/authenticate/start   - create PublicKeyCredentialRequestOptions
+ *   POST /auth/passkey/authenticate/finish  - verify and issue a session
  */
 final class PasskeyController
 {
@@ -37,7 +37,7 @@ final class PasskeyController
     // ------------------------------------------------------------------ //
 
     /**
-     * Требует AuthMiddleware.
+     * Requires AuthMiddleware.
      */
     public function registerStart(Request $request): Response
     {
@@ -56,8 +56,8 @@ final class PasskeyController
     // ------------------------------------------------------------------ //
 
     /**
-     * Тело: { "credential": {...}, "name": "My Passkey" }
-     * Требует AuthMiddleware.
+     * Body: { "credential": {...}, "name": "My Passkey" }
+     * Requires AuthMiddleware.
      */
     public function registerFinish(Request $request): Response
     {
@@ -99,8 +99,8 @@ final class PasskeyController
     // ------------------------------------------------------------------ //
 
     /**
-     * Тело (опциональное): { "email": "user@example.com" }
-     * Если email не указан — discoverable credentials (resident key).
+     * Body (optional): { "email": "user@example.com" }
+     * If email is not provided - discoverable credentials (resident key).
      */
     public function authenticateStart(Request $request): Response
     {
@@ -123,7 +123,7 @@ final class PasskeyController
     // ------------------------------------------------------------------ //
 
     /**
-     * Тело: { "credential": {...} }
+     * Body: { "credential": {...} }
      */
     public function authenticateFinish(Request $request): Response
     {
@@ -167,8 +167,8 @@ final class PasskeyController
     // ------------------------------------------------------------------ //
 
     /**
-     * Список passkey текущего пользователя.
-     * Требует AuthMiddleware.
+     * List the current user passkeys.
+     * Requires AuthMiddleware.
      */
     public function list(Request $request): Response
     {
@@ -191,8 +191,8 @@ final class PasskeyController
     // ------------------------------------------------------------------ //
 
     /**
-     * Удалить passkey по UUID.
-     * Требует AuthMiddleware.
+     * Delete a passkey by UUID.
+     * Requires AuthMiddleware.
      */
     public function delete(Request $request): Response
     {
@@ -212,7 +212,7 @@ final class PasskeyController
             return Response::notFound();
         }
 
-        // Не удалять последний passkey если нет пароля
+        // Do not delete the last passkey if there is no password
         if ($user->passwordHash === null) {
             $count = (int) \Passway\Core\Database::getInstance()->fetchColumn(
                 'SELECT COUNT(*) FROM passkeys WHERE user_id = ?',

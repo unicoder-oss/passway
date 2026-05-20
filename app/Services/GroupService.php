@@ -11,11 +11,11 @@ use Passway\Models\GroupMember;
 use Passway\Models\OrganizationMember;
 
 /**
- * Сервис управления группами пользователей внутри организации.
+ * Service for managing user groups within an organization.
  *
- * Авторизация:
- *   admin+  — создание/удаление групп, управление участниками
- *   reader+ — чтение (list, show, listMembers)
+ * Authorization:
+ *   admin+  - create/delete groups, manage members
+ *   reader+ - reading (list, show, listMembers)
  */
 final class GroupService
 {
@@ -25,15 +25,15 @@ final class GroupService
     ) {}
 
     // ------------------------------------------------------------------ //
-    //  Создание                                                           //
+    //  Creation                                                           //
     // ------------------------------------------------------------------ //
 
     /**
-     * Создать группу в организации.
+     * Create a group in an organization.
      *
-     * @throws AuthException             если нет прав (admin+)
-     * @throws \InvalidArgumentException при пустом/слишком длинном имени
-     * @throws \RuntimeException         если имя уже занято в организации
+     * @throws AuthException             if permission is missing (admin+)
+     * @throws \InvalidArgumentException on empty/too long name
+     * @throws \RuntimeException         if the name is already taken in the organization
      */
     public function create(
         string  $orgId,
@@ -89,12 +89,12 @@ final class GroupService
     }
 
     // ------------------------------------------------------------------ //
-    //  Чтение                                                             //
+    //  Reading                                                             //
     // ------------------------------------------------------------------ //
 
     /**
      * @return Group[]
-     * @throws AuthException если нет прав (reader+)
+     * @throws AuthException if permission is missing (reader+)
      */
     public function list(string $orgId, string $userId): array
     {
@@ -104,8 +104,8 @@ final class GroupService
     }
 
     /**
-     * @throws AuthException     если нет прав (reader+)
-     * @throws \RuntimeException если не найдена или принадлежит другой орг.
+     * @throws AuthException     if permission is missing (reader+)
+     * @throws \RuntimeException if not found or belongs to another org.
      */
     public function findInOrg(string $groupUuid, string $orgId, string $userId): Group
     {
@@ -119,12 +119,12 @@ final class GroupService
     }
 
     // ------------------------------------------------------------------ //
-    //  Удаление                                                           //
+    //  Deletion                                                           //
     // ------------------------------------------------------------------ //
 
     /**
-     * @throws AuthException     если нет прав (admin+)
-     * @throws \RuntimeException если не найдена
+     * @throws AuthException     if permission is missing (admin+)
+     * @throws \RuntimeException if not found
      */
     public function delete(string $groupUuid, string $orgId, string $userId): void
     {
@@ -147,14 +147,14 @@ final class GroupService
     }
 
     // ------------------------------------------------------------------ //
-    //  Управление участниками                                             //
+    //  Member management                                             //
     // ------------------------------------------------------------------ //
 
     /**
-     * Добавить пользователя в группу.
+     * Add a user to a group.
      *
-     * @throws AuthException     если нет прав (admin+)
-     * @throws \RuntimeException если группа не найдена, пользователь не в орг. или уже в группе
+     * @throws AuthException     if permission is missing (admin+)
+     * @throws \RuntimeException if the group is not found, the user is not in the org, or is already in the group
      */
     public function addMember(
         string $groupUuid,
@@ -202,10 +202,10 @@ final class GroupService
     }
 
     /**
-     * Удалить пользователя из группы.
+     * Remove a user from a group.
      *
-     * @throws AuthException     если нет прав (admin+)
-     * @throws \RuntimeException если группа не найдена или пользователь не в группе
+     * @throws AuthException     if permission is missing (admin+)
+     * @throws \RuntimeException if the group is not found or the user is not in the group
      */
     public function removeMember(
         string $groupUuid,
@@ -243,8 +243,8 @@ final class GroupService
 
     /**
      * @return GroupMember[]
-     * @throws AuthException     если нет прав (reader+)
-     * @throws \RuntimeException если группа не найдена
+     * @throws AuthException     if permission is missing (reader+)
+     * @throws \RuntimeException if the group is not found
      */
     public function listMembers(string $groupUuid, string $orgId, string $userId): array
     {
@@ -258,7 +258,7 @@ final class GroupService
     }
 
     /**
-     * Получить ID всех групп пользователя в организации.
+     * Get IDs of all user groups in an organization.
      *
      * @return string[]
      */
@@ -272,7 +272,7 @@ final class GroupService
     }
 
     // ------------------------------------------------------------------ //
-    //  Вспомогательные                                                    //
+    //  Helpers                                                    //
     // ------------------------------------------------------------------ //
 
     private function assertHasPermission(string $orgId, string $userId, string $minRole): void

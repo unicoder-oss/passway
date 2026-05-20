@@ -21,14 +21,14 @@ use Passway\Services\RotationService;
 use Passway\Services\SecretService;
 
 /**
- * Контроллер секретов организации.
+ * Controller organization secrets.
  *
- * GET    /api/v1/organizations/:uuid/directories/:dirUuid/secrets                  — список
- * POST   /api/v1/organizations/:uuid/directories/:dirUuid/secrets                  — создать
- * GET    /api/v1/organizations/:uuid/directories/:dirUuid/secrets/:secUuid         — детали + значение
- * PATCH  /api/v1/organizations/:uuid/directories/:dirUuid/secrets/:secUuid         — обновить
- * DELETE /api/v1/organizations/:uuid/directories/:dirUuid/secrets/:secUuid         — мягкое удаление
- * GET    /api/v1/organizations/:uuid/directories/:dirUuid/secrets/:secUuid/versions — история
+ * GET    /api/v1/organizations/:uuid/directories/:dirUuid/secrets                  - list
+ * POST   /api/v1/organizations/:uuid/directories/:dirUuid/secrets                  - create
+ * GET    /api/v1/organizations/:uuid/directories/:dirUuid/secrets/:secUuid         - details + value
+ * PATCH  /api/v1/organizations/:uuid/directories/:dirUuid/secrets/:secUuid         - update
+ * DELETE /api/v1/organizations/:uuid/directories/:dirUuid/secrets/:secUuid         - soft delete
+ * GET    /api/v1/organizations/:uuid/directories/:dirUuid/secrets/:secUuid/versions - history
      * GET    /api/v1/organizations/:uuid/secrets/:secUuid/acl                           — exact ACL
      * PUT    /api/v1/organizations/:uuid/secrets/:secUuid/acl                           — replace exact ACL
      * GET    /api/v1/organizations/:uuid/secrets/:secUuid/access-policy                 — default access policy

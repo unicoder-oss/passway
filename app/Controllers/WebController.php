@@ -1871,7 +1871,7 @@ final class WebController
             try {
                 $qrCodeImage = $this->totpService->getQrCodeImageDataUri($user->email, $data['raw_secret']);
             } catch (\Throwable) {
-                // Не срываем настройку TOTP, если QR не удалось отрисовать локально.
+                // Do not break TOTP setup if QR rendering failed locally.
             }
 
             $this->ensureSessionStarted();

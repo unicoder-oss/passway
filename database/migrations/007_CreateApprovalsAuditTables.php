@@ -7,15 +7,15 @@ namespace Passway\Database\Migrations;
 use Passway\Database\Migration;
 
 /**
- * Миграция 007: Система одобрений и журнал аудита.
+ * Migration 007: Approval system and audit log.
  *
- * Таблицы:
- *   - approval_requests   — запросы на доступ к секретам с флагом requires_approval
- *   - approval_reviewers  — уполномоченные ревьюверы запроса
- *   - audit_log           — полный журнал всех операций (хранение ≥ 90 дней)
+ * Tables:
+ *   - approval_requests   — access requests for secrets with the requires_approval flag
+ *   - approval_reviewers  — authorized reviewers for the request
+ *   - audit_log           — complete log of all operations (retention >= 90 days)
  *
  * Rate limiting:
- *   - rate_limit_log      — счётчики запросов для rate limiting (очищается cron)
+ *   - rate_limit_log      — request counters for rate limiting (cleaned by cron)
  */
 final class CreateApprovalsAuditTables extends Migration
 {
@@ -24,8 +24,8 @@ final class CreateApprovalsAuditTables extends Migration
         // ------------------------------------------------------------------ //
         //  approval_requests                                                   //
         // ------------------------------------------------------------------ //
-        // Создаётся когда пользователь обращается к секрету с requires_approval=true.
-        // После одобрения генерируется одноразовый токен (действует expires_at).
+        // Created when a user accesses a secret with requires_approval=true.
+        // After approval, a one-time token is generated (valid until expires_at).
         $this->createTable('approval_requests', [
             "id              {$this->pkType()}",
             'uuid            VARCHAR(36) NOT NULL',
@@ -38,10 +38,10 @@ final class CreateApprovalsAuditTables extends Migration
             "status          VARCHAR(50) NOT NULL DEFAULT 'pending'",
             'approved_by     BIGINT',
             'rejection_reason TEXT',
-            // Срок действия одобренного доступа
+            // Approved access expiration time
             "expires_at      {$this->tsType()} NOT NULL",
-            // Одноразовый токен доступа (показывается ОДИН раз после одобрения)
-            // В БД хранится SHA-256 хэш
+            // One-time access token (shown ONCE after approval)
+            // The DB stores the SHA-256 hash
             'access_token_hash VARCHAR(64)',
             "created_at      {$this->nowDefault()}",
             "resolved_at     {$this->tsType()}",
@@ -60,13 +60,13 @@ final class CreateApprovalsAuditTables extends Migration
         // ------------------------------------------------------------------ //
         //  approval_reviewers                                                  //
         // ------------------------------------------------------------------ //
-        // Список пользователей, уполномоченных одобрять/отклонять конкретный запрос.
-        // Заполняется автоматически при создании запроса на основе прав.
+        // List of users authorized to approve/reject a specific request.
+        // Populated automatically when the request is created based on permissions.
         $this->createTable('approval_reviewers', [
             "id                    {$this->pkType()}",
             'approval_request_id   BIGINT NOT NULL',
             'reviewer_id           BIGINT NOT NULL',
-            // Когда было отправлено уведомление
+            // When the notification was sent
             "notified_at           {$this->tsType()}",
             "created_at            {$this->nowDefault()}",
             $this->foreignKey('approval_request_id', 'approval_requests', 'id', 'CASCADE'),
@@ -81,28 +81,28 @@ final class CreateApprovalsAuditTables extends Migration
         // ------------------------------------------------------------------ //
         //  audit_log                                                           //
         // ------------------------------------------------------------------ //
-        // Иммутабельный журнал: записи НИКОГДА не изменяются.
-        // Удаляются только через cron после истечения срока хранения (90 дней).
+        // Immutable log: records are NEVER changed.
+        // Deleted only via cron after the retention period expires (90 days).
         //
-        // Категории событий (action):
-        //   auth.*        — аутентификация (login, logout, fail, 2fa, passkey)
-        //   user.*        — управление пользователями
-        //   org.*         — управление организациями
-        //   invite.*      — инвайт-ссылки
-        //   dir.*         — операции с каталогами
-        //   secret.*      — доступ к секретам (read, write, delete, rotate)
-        //   approval.*    — система одобрений
-        //   apikey.*      — управление API-ключами
-        //   rotation.*    — ротация секретов
-        //   permission.*  — изменение прав доступа
-        //   system.*      — системные события
+        // Event categories (action):
+        //   auth.*        — authentication (login, logout, fail, 2fa, passkey)
+        //   user.*        — user management
+        //   org.*         — organization management
+        //   invite.*      — invite links
+        //   dir.*         — directory operations
+        //   secret.*      — secret access (read, write, delete, rotate)
+        //   approval.*    — approval system
+        //   apikey.*      — API key management
+        //   rotation.*    — secret rotation
+        //   permission.*  — access permission changes
+        //   system.*      — system events
         $this->createTable('audit_log', [
             "id              {$this->bigPkType()}",
             'organization_id BIGINT',
             'user_id         BIGINT',
             'api_key_id      BIGINT',
             'session_id      BIGINT',
-            // Категория и действие (например: "secret.read", "auth.login_fail")
+            // Category and action (for example: "secret.read", "auth.login_fail")
             'action          VARCHAR(100) NOT NULL',
             // directory | secret | user | organization | api_key | system
             'resource_type   VARCHAR(50)',
@@ -110,17 +110,17 @@ final class CreateApprovalsAuditTables extends Migration
             'resource_uuid   VARCHAR(36)',
             'ip_address      VARCHAR(45)',
             'user_agent      TEXT',
-            // JSON с дополнительными деталями события (не содержит секретных данных)
+            // JSON with additional event details (contains no secret data)
             'details_json    TEXT',
             "success         {$this->boolType(true)}",
             "created_at      {$this->nowDefault()}",
-            // FK без CASCADE — лог должен сохраняться даже после удаления пользователя/орг
+            // FK without CASCADE — the log must persist even after user/org deletion
             $this->foreignKey('organization_id', 'organizations', 'id', 'SET NULL'),
             $this->foreignKey('user_id', 'users', 'id', 'SET NULL'),
             $this->foreignKey('api_key_id', 'api_keys', 'id', 'SET NULL'),
         ]);
 
-        // Индексы для эффективной фильтрации в журнале
+        // Indexes for efficient log filtering
         $this->createIndex('audit_log', ['organization_id']);
         $this->createIndex('audit_log', ['user_id']);
         $this->createIndex('audit_log', ['action']);
@@ -132,17 +132,17 @@ final class CreateApprovalsAuditTables extends Migration
         // ------------------------------------------------------------------ //
         //  rate_limit_log                                                      //
         // ------------------------------------------------------------------ //
-        // Скользящее окно для rate limiting (100 req/min API, 20 req/min auth).
-        // Записи автоматически очищаются cron-задачей каждую минуту.
+        // Sliding window for rate limiting (100 req/min API, 20 req/min auth).
+        // Records are automatically cleaned by a cron job every minute.
         $this->createTable('rate_limit_log', [
             "id          {$this->pkType()}",
-            // IP-адрес клиента
+            // Client IP address
             'ip_address  VARCHAR(45) NOT NULL',
             // api | auth
             'bucket      VARCHAR(20) NOT NULL',
-            // Количество запросов в текущем окне
+            // Number of requests in the current window
             'count       INTEGER NOT NULL DEFAULT 1',
-            // Начало текущего окна (для скользящего окна)
+            // Start of the current window (for the sliding window)
             "window_start {$this->tsType()} NOT NULL",
             "updated_at   {$this->nowDefault()}",
         ], [

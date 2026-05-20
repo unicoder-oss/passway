@@ -7,9 +7,9 @@ namespace Passway\Models;
 use Passway\Core\Database;
 
 /**
- * Шаблон генерации секрета.
+ * Secret generation template.
  *
- * Системные шаблоны имеют `organization_id = NULL` и `is_system = true`.
+ * System templates have `organization_id = NULL` and `is_system = true`.
  */
 final class Template
 {

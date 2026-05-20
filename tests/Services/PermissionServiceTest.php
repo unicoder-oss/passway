@@ -16,7 +16,7 @@ use Passway\Services\SecretService;
 use Passway\Tests\DatabaseTestCase;
 
 /**
- * Тесты PermissionService: org-level, fine-grained, наследование, группы.
+ * PermissionService tests: org-level, fine-grained, inheritance, groups.
  *
  * @requires extension pdo_sqlite
  */
@@ -100,7 +100,7 @@ final class PermissionServiceTest extends DatabaseTestCase
         $user  = $this->createTestUser('user@test.com');
         $this->orgSvc->addMember($org->id, $user->id, 'reader', null);
 
-        // reader по роли уже умеет read, но не умеет write без ACL.
+        // The reader role can already read, but cannot write without an ACL.
         $this->assertFalse($this->svc->can('write', $user->id, 'directory', $dir->id, $org->id));
 
         $this->svc->grant('user', $user->id, 'directory', $dir->id, 'write', false, null, $owner->id, $org->id);

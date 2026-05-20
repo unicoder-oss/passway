@@ -8,13 +8,13 @@ use Passway\Core\Database;
 use Passway\Models\User;
 
 /**
- * Управление сессиями пользователей.
+ * User session management.
  *
- * Хранение:
- *   - cookie содержит raw-токен (64 hex символа)
- *   - в БД хранится SHA-256(raw-токен) — plaintext НИКОГДА не хранится
+ * Storage:
+ *   - cookie contains raw-token (64 hex characters)
+ *   - DB stores SHA-256(raw-token); plaintext is NEVER stored
  *
- * TTL берётся из SESSION_TTL (.env), по умолчанию 86400 секунд (1 сутки).
+ * TTL is taken from SESSION_TTL (.env), default 86400 seconds (1 day).
  */
 final class SessionService
 {
@@ -28,11 +28,11 @@ final class SessionService
     }
 
     // ------------------------------------------------------------------ //
-    //  Создание                                                           //
+    //  Creation                                                           //
     // ------------------------------------------------------------------ //
 
     /**
-     * Создать новую сессию. Возвращает raw-токен для записи в cookie.
+     * Create a new session. Returns the raw token to write to the cookie.
      */
     public function create(string $userId, ?string $ip, ?string $userAgent): string
     {
@@ -56,12 +56,12 @@ final class SessionService
     }
 
     // ------------------------------------------------------------------ //
-    //  Валидация                                                          //
+    //  Validation                                                          //
     // ------------------------------------------------------------------ //
 
     /**
-     * Проверить сессию по raw-токену из cookie.
-     * Возвращает User или null если сессия невалидна / истекла.
+     * Check a session by the raw token from the cookie.
+     * Returns User or null if the session is invalid / expired.
      */
     public function validate(string $rawToken): ?User
     {
@@ -79,7 +79,7 @@ final class SessionService
             return null;
         }
 
-        // Обновляем время последней активности
+        // Update last activity time
         $db->update(
             'sessions',
             ['last_activity_at' => $now],
@@ -90,11 +90,11 @@ final class SessionService
     }
 
     // ------------------------------------------------------------------ //
-    //  Инвалидация                                                        //
+    //  Invalidation                                                        //
     // ------------------------------------------------------------------ //
 
     /**
-     * Инвалидировать одну сессию (logout).
+     * Invalidate one session (logout).
      */
     public function invalidate(string $rawToken): void
     {
@@ -103,22 +103,22 @@ final class SessionService
     }
 
     /**
-     * Инвалидировать все сессии пользователя (смена пароля, подозрительная активность).
+     * Invalidate all user sessions (password change, suspicious activity).
      */
     public function invalidateAll(string $userId): void
     {
-        // Используем query() т.к. delete() поддерживает только равенство,
-        // а нам нужно удалить по user_id (что тоже равенство — ок)
+        // Use query() because delete() supports only equality,
+        // and we need to delete by user_id (which is also equality, OK)
         Database::getInstance()->delete('sessions', ['user_id' => $userId]);
     }
 
     // ------------------------------------------------------------------ //
-    //  Очистка                                                            //
+    //  Cleanup                                                            //
     // ------------------------------------------------------------------ //
 
     /**
-     * Удалить все истёкшие сессии. Вызывается cron-задачей.
-     * Возвращает количество удалённых строк.
+     * Delete all expired sessions. Called by a cron job.
+     * Returns the number of deleted rows.
      */
     public function cleanup(): int
     {
@@ -138,7 +138,7 @@ final class SessionService
     // ------------------------------------------------------------------ //
 
     /**
-     * Записать session-cookie в ответ (вызывать до отправки headers).
+     * Write the session cookie to the response (call before sending headers).
      */
     public function setCookie(string $rawToken): void
     {
@@ -157,7 +157,7 @@ final class SessionService
     }
 
     /**
-     * Удалить session-cookie (logout).
+     * Delete the session cookie (logout).
      */
     public function clearCookie(): void
     {
@@ -174,7 +174,7 @@ final class SessionService
     }
 
     /**
-     * Прочитать raw-токен из cookie.
+     * Read the raw token from the cookie.
      */
     public function getTokenFromCookie(): ?string
     {

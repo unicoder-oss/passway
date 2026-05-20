@@ -10,10 +10,10 @@ use Passway\Exceptions\AuthException;
 use Passway\Services\SetupService;
 
 /**
- * Контроллер первоначальной настройки.
+ * Initial setup controller.
  *
- * GET  /setup  — форма ввода данных setup
- * POST /setup  — обработка формы
+ * GET  /setup  - setup data entry form
+ * POST /setup  - form handling
  */
 final class SetupController
 {
@@ -108,7 +108,7 @@ final class SetupController
             return $this->redirectWithErrors([$e->getMessage()], $old);
         }
 
-        // Успех — перенаправить на страницу входа
+        // Success - redirect to the login page
         return Response::redirect('/auth/login?success=' . \urlencode(__('ui.auth.login.success_setup_complete')));
     }
 

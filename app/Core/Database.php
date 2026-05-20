@@ -10,11 +10,11 @@ use PDOStatement;
 use RuntimeException;
 
 /**
- * Менеджер соединения с базой данных (Singleton).
+ * Database connection manager (Singleton).
  *
- * Поддерживает PostgreSQL и SQLite через PDO.
- * Предоставляет удобные методы-хелперы поверх подготовленных запросов.
- * Все запросы выполняются через prepared statements для защиты от SQL Injection.
+ * Supports PostgreSQL and SQLite through PDO.
+ * Provides convenient helper methods over prepared statements.
+ * All queries use prepared statements to protect against SQL injection.
  */
 final class Database
 {
@@ -37,11 +37,11 @@ final class Database
     }
 
     // ------------------------------------------------------------------ //
-    //  Публичный API                                                       //
+    //  Public API                                                       //
     // ------------------------------------------------------------------ //
 
     /**
-     * Получить нативный PDO-объект (для сложных запросов).
+     * Get the native PDO object (for complex queries).
      */
     public function getPdo(): PDO
     {
@@ -49,7 +49,7 @@ final class Database
     }
 
     /**
-     * Драйвер БД: 'pgsql' или 'sqlite'.
+     * Driver DB: 'pgsql' or 'sqlite'.
      */
     public function getDriver(): string
     {
@@ -57,8 +57,8 @@ final class Database
     }
 
     /**
-     * Выполнить произвольный SQL с параметрами.
-     * Возвращает PDOStatement для итерации.
+     * Execute arbitrary SQL with parameters.
+     * Returns PDOStatement for iteration.
      *
      * @param array<string|int, mixed> $params
      */
@@ -70,7 +70,7 @@ final class Database
     }
 
     /**
-     * Получить одну строку или null.
+     * Get one row or null.
      *
      * @param array<string|int, mixed> $params
      * @return array<string, mixed>|null
@@ -82,7 +82,7 @@ final class Database
     }
 
     /**
-     * Получить все строки.
+     * Get all rows.
      *
      * @param array<string|int, mixed> $params
      * @return array<int, array<string, mixed>>
@@ -93,7 +93,7 @@ final class Database
     }
 
     /**
-     * Получить значение первого столбца первой строки.
+     * Get the first column value from the first row.
      *
      * @param array<string|int, mixed> $params
      */
@@ -103,7 +103,7 @@ final class Database
     }
 
     /**
-     * Вставить запись. Возвращает ID вставленной строки.
+     * Insert a record. Returns the inserted row ID.
      *
      * @param array<string, mixed> $data
      */
@@ -125,10 +125,10 @@ final class Database
     }
 
     /**
-     * Обновить записи. Возвращает количество затронутых строк.
+     * Update records. Returns the number of affected rows.
      *
-     * @param array<string, mixed> $data  Поля для обновления
-     * @param array<string, mixed> $where Условия WHERE (AND)
+     * @param array<string, mixed> $data  Fields to update
+     * @param array<string, mixed> $where WHERE conditions (AND)
      */
     public function update(string $table, array $data, array $where): int
     {
@@ -158,9 +158,9 @@ final class Database
     }
 
     /**
-     * Удалить записи. Возвращает количество затронутых строк.
+     * Delete records. Returns the number of affected rows.
      *
-     * @param array<string, mixed> $where Условия WHERE (AND)
+     * @param array<string, mixed> $where WHERE conditions (AND)
      */
     public function delete(string $table, array $where): int
     {
@@ -187,7 +187,7 @@ final class Database
     }
 
     // ------------------------------------------------------------------ //
-    //  Транзакции                                                          //
+    //  Transactions                                                          //
     // ------------------------------------------------------------------ //
 
     public function beginTransaction(): void
@@ -208,7 +208,7 @@ final class Database
     }
 
     /**
-     * Выполнить callback в транзакции с автоматическим rollback при исключении.
+     * Run a callback in a transaction with automatic rollback on exception.
      *
      * @template T
      * @param callable(): T $callback
@@ -228,15 +228,15 @@ final class Database
     }
 
     // ------------------------------------------------------------------ //
-    //  Утилиты                                                             //
+    //  Utilities                                                             //
     // ------------------------------------------------------------------ //
 
     /**
-     * Экранировать имя таблицы/колонки (защита от SQL Injection в идентификаторах).
+     * Escape a table/column name (SQL injection protection in identifiers).
      */
     public function quoteIdentifier(string $name): string
     {
-        // Разрешаем только буквы, цифры, подчёркивания и точку (schema.table)
+        // Allow only letters, digits, underscores, and a dot (schema.table)
         if (!preg_match('/^[a-zA-Z_][a-zA-Z0-9_.]*$/', $name)) {
             throw new RuntimeException("Invalid identifier: {$name}");
         }
@@ -245,7 +245,7 @@ final class Database
     }
 
     /**
-     * Проверить, существует ли таблица.
+     * Check whether a table exists.
      */
     public function tableExists(string $table): bool
     {
@@ -264,7 +264,7 @@ final class Database
     }
 
     /**
-     * Вернуть SQL-выражение для текущего времени (с учётом диалекта).
+     * Return the SQL expression for the current time (with dialect awareness).
      */
     public function nowExpr(): string
     {
@@ -272,7 +272,7 @@ final class Database
     }
 
     // ------------------------------------------------------------------ //
-    //  Приватные методы                                                    //
+    //  Private methods                                                    //
     // ------------------------------------------------------------------ //
 
     private function connect(): void
@@ -289,13 +289,13 @@ final class Database
         try {
             if ($this->driver === 'sqlite') {
                 $path = $_ENV['DB_SQLITE_PATH'] ?? PASSWAY_ROOT . '/storage/passway.db';
-                // Создаём директорию если не существует
+                // Create the directory if it does not exist
                 $dir  = dirname($path);
                 if (!is_dir($dir)) {
                     mkdir($dir, 0755, true);
                 }
                 $this->pdo = new PDO("sqlite:{$path}", null, null, $options);
-                // Включаем WAL и foreign keys для SQLite
+                // Enable WAL and foreign keys for SQLite
                 $this->pdo->exec('PRAGMA journal_mode=WAL');
                 $this->pdo->exec('PRAGMA foreign_keys=ON');
             } else {
@@ -309,7 +309,7 @@ final class Database
                 $dsn = "pgsql:host={$host};port={$port};dbname={$dbname};sslmode={$sslmode}";
                 $this->pdo = new PDO($dsn, $user, $pass, $options);
 
-                // Устанавливаем timezone для сессии PostgreSQL
+                // Set the timezone for the PostgreSQL session
                 $this->pdo->exec("SET timezone = 'UTC'");
             }
         } catch (PDOException $e) {

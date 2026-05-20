@@ -7,8 +7,8 @@ namespace Passway\Models;
 use Passway\Core\Database;
 
 /**
- * Тонкая модель WebAuthn-ключа (passkey / FIDO2 credential).
- * public_key хранит полный JSON PublicKeyCredentialSource от webauthn-lib.
+ * Thin model WebAuthn key (passkey / FIDO2 credential).
+ * public_key stores the full JSON PublicKeyCredentialSource from webauthn-lib.
  */
 final class Passkey
 {
@@ -27,7 +27,7 @@ final class Passkey
     ) {}
 
     // ------------------------------------------------------------------ //
-    //  Фабрика из строки БД                                               //
+    //  Factory from row DB                                               //
     // ------------------------------------------------------------------ //
 
     /** @param array<string, mixed> $row */
@@ -49,7 +49,7 @@ final class Passkey
     }
 
     // ------------------------------------------------------------------ //
-    //  Запросы                                                            //
+    //  Queries                                                            //
     // ------------------------------------------------------------------ //
 
     public static function findByCredentialId(string $credentialId): ?self

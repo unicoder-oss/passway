@@ -7,8 +7,8 @@ namespace Passway\Models;
 use Passway\Core\Database;
 
 /**
- * Тонкая модель пользователя — только чтение/запись через Database.
- * Бизнес-логика живёт в Services.
+ * Thin user model - read/write only through Database.
+ * Business logic lives in Services.
  */
 final class User
 {
@@ -32,7 +32,7 @@ final class User
     ) {}
 
     // ------------------------------------------------------------------ //
-    //  Фабрика из строки БД                                               //
+    //  Factory from row DB                                               //
     // ------------------------------------------------------------------ //
 
     /** @param array<string, mixed> $row */
@@ -59,7 +59,7 @@ final class User
     }
 
     // ------------------------------------------------------------------ //
-    //  Запросы                                                            //
+    //  Queries                                                            //
     // ------------------------------------------------------------------ //
 
     public static function findById(int|string $id): ?self
@@ -90,7 +90,7 @@ final class User
     }
 
     // ------------------------------------------------------------------ //
-    //  Запись                                                             //
+    //  Writes                                                             //
     // ------------------------------------------------------------------ //
 
     /**
@@ -116,7 +116,7 @@ final class User
     }
 
     /**
-     * Сколько пользователей в системе (для solo-режима).
+     * Number of users in the system (for solo mode).
      */
     public static function count(): int
     {

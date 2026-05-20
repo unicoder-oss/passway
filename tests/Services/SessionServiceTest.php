@@ -11,8 +11,8 @@ use Passway\Services\TokenService;
 use Passway\Tests\DatabaseTestCase;
 
 /**
- * Тесты SessionService.
- * Использует in-memory SQLite (DB_SQLITE_PATH=:memory:).
+ * SessionService tests.
+ * Uses in-memory SQLite (DB_SQLITE_PATH=:memory:).
  *
  * @requires extension pdo_sqlite
  */
@@ -54,9 +54,9 @@ final class SessionServiceTest extends DatabaseTestCase
         $row = $db->fetchOne('SELECT token_hash FROM sessions WHERE user_id = ?', [$user->id]);
 
         $this->assertNotNull($row);
-        // Хэш должен быть 64 hex символа (SHA-256)
+        // Hash should be 64 hex characters (SHA-256)
         $this->assertSame(64, \strlen($row['token_hash']));
-        // Токен ≠ хэш — plaintext не хранится
+        // Token != hash; plaintext is not stored
         $this->assertNotSame($token, $row['token_hash']);
     }
 
@@ -71,7 +71,7 @@ final class SessionServiceTest extends DatabaseTestCase
         $expiry  = \strtotime($row['expires_at']);
         $expected = \time() + 3600;
 
-        // Допуск ±5 секунд
+        // Tolerance of +/-5 seconds
         $this->assertEqualsWithDelta($expected, $expiry, 5.0);
     }
 
@@ -106,13 +106,13 @@ final class SessionServiceTest extends DatabaseTestCase
         $user = $this->createTestUser();
         $this->svc->create($user->id, '127.0.0.1', null);
 
-        // Принудительно устареть сессию
+        // Force the session to expire
         Database::getInstance()->query(
             "UPDATE sessions SET expires_at = datetime('now', '-1 hour') WHERE user_id = ?",
             [$user->id]
         );
 
-        // validate() ищет по raw-токену, а у нас только хэш — создаём ещё один и истекаем его.
+        // validate() searches by raw token, but we only have the hash; create another one and expire it.
         $token2 = $this->svc->create($user->id, '127.0.0.1', null);
         Database::getInstance()->query(
             "UPDATE sessions SET expires_at = datetime('now', '-1 hour') WHERE user_id = ?",
@@ -129,7 +129,7 @@ final class SessionServiceTest extends DatabaseTestCase
         $user  = $this->createTestUser();
         $token = $this->svc->create($user->id, '127.0.0.1', null);
 
-        // Искусственно откатить last_activity_at
+        // Artificially roll back last_activity_at
         Database::getInstance()->query(
             "UPDATE sessions SET last_activity_at = datetime('now', '-10 minutes') WHERE user_id = ?",
             [$user->id]
@@ -197,9 +197,9 @@ final class SessionServiceTest extends DatabaseTestCase
     {
         $user     = $this->createTestUser();
         $active  = $this->svc->create($user->id, '127.0.0.1', null);
-        $this->svc->create($user->id, '127.0.0.1', null); // будет истечена
+        $this->svc->create($user->id, '127.0.0.1', null); // will be expired
 
-        // Истечь вторую сессию
+        // Expire the second session
         Database::getInstance()->query(
             "UPDATE sessions SET expires_at = datetime('now', '-2 hours') WHERE user_id = ? AND rowid = (SELECT MAX(rowid) FROM sessions WHERE user_id = ?)",
             [$user->id, $user->id]

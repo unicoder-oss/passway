@@ -11,14 +11,14 @@ use Passway\Models\Organization;
 use Passway\Models\User;
 
 /**
- * Управление API-ключами и rate limiting.
+ * API key management and rate limiting.
  *
- * Формат ключа: sv_{envPrefix}_{64 random hex chars}
- * В БД хранится только SHA-256 хэш сырого ключа.
+ * Key format: sv_{envPrefix}_{64 random hex chars}
+ * Only the SHA-256 hash of the raw key is stored in the DB.
  *
- * Rate limiting (скользящее окно):
- *   - bucket 'api':  100 запросов / 60 сек
- *   - bucket 'auth':  20 запросов / 60 сек
+ * Rate limiting (sliding window):
+ *   - bucket 'api':  100 requests / 60 sec
+ *   - bucket 'auth':  20 requests / 60 sec
  */
 final class ApiKeyService
 {
@@ -36,15 +36,15 @@ final class ApiKeyService
     ) {}
 
     // ------------------------------------------------------------------ //
-    //  CRUD API-ключей                                                    //
+    //  API key CRUD                                                    //
     // ------------------------------------------------------------------ //
 
     /**
-     * Создаёт новый API-ключ.
+     * Creates a new API key.
      *
-     * @return array{key: ApiKey, raw: string}  raw — показывается ОДИН РАЗ
-     * @throws AuthException             если не admin+
-     * @throws \InvalidArgumentException при некорректных параметрах
+     * @return array{key: ApiKey, raw: string}  raw - is shown ONCE
+     * @throws AuthException             if not admin+
+     * @throws \InvalidArgumentException on invalid parameters
      */
     public function create(
         string  $name,
@@ -100,10 +100,10 @@ final class ApiKeyService
     }
 
     /**
-     * Список API-ключей организации (admin+).
+     * List organization API keys (admin+).
      *
      * @return ApiKey[]
-     * @throws AuthException если недостаточно прав
+     * @throws AuthException if permissions are insufficient
      */
     public function listForOrg(string $orgId, string $userId): array
     {
@@ -115,10 +115,10 @@ final class ApiKeyService
     }
 
     /**
-     * Получить ключ по UUID (admin+ или владелец ключа).
+     * Get a key by UUID (admin+ or key owner).
      *
-     * @throws AuthException      если нет прав
-     * @throws \RuntimeException  если не найден
+     * @throws AuthException      if permission is missing
+     * @throws \RuntimeException  if not found
      */
     public function get(string $keyUuid, string $orgId, string $userId): ApiKey
     {
@@ -135,7 +135,7 @@ final class ApiKeyService
     }
 
     /**
-     * Изменить роль API-ключа (admin+).
+     * Change API key role (admin+).
      *
      * @throws AuthException
      * @throws \InvalidArgumentException
@@ -175,10 +175,10 @@ final class ApiKeyService
     }
 
     /**
-     * Отозвать (деактивировать) API-ключ.
+     * Revoke (deactivate) API-key.
      *
-     * @throws AuthException     если нет прав
-     * @throws \RuntimeException если не найден
+     * @throws AuthException     if permission is missing
+     * @throws \RuntimeException if not found
      */
     public function revoke(string $keyUuid, string $orgId, string $userId): void
     {
@@ -208,12 +208,12 @@ final class ApiKeyService
     }
 
     // ------------------------------------------------------------------ //
-    //  Аутентификация по ключу                                            //
+    //  Key authentication                                            //
     // ------------------------------------------------------------------ //
 
     /**
-     * Проверяет сырой API-ключ и возвращает пользователя-владельца.
-     * Обновляет last_used_at при успехе.
+     * Checks the raw API key and returns the owner user.
+     * Updates last_used_at on success.
      */
     public function validate(string $rawKey): ?User
     {
@@ -312,11 +312,11 @@ final class ApiKeyService
     // ------------------------------------------------------------------ //
 
     /**
-     * Проверяет rate limit для IP-адреса и бакета.
+     * Checks rate limit for an IP address and bucket.
      *
-     * @param string $ip     IP-адрес клиента
-     * @param string $bucket 'api' или 'auth'
-     * @return bool  true — запрос разрешён, false — лимит превышен
+     * @param string $ip     Client IP address
+     * @param string $bucket 'api' or 'auth'
+     * @return bool  true - request allowed, false - limit exceeded
      */
     public function checkRateLimit(string $ip, string $bucket): bool
     {
@@ -332,7 +332,7 @@ final class ApiKeyService
         );
 
         if ($row === null) {
-            // Первый запрос с этого IP
+            // First request from this IP
             $db->insert('rate_limit_log', [
                 'ip_address'   => $ip,
                 'bucket'       => $bucket,
@@ -346,7 +346,7 @@ final class ApiKeyService
         $windowStart = strtotime((string) $row['window_start']);
 
         if ($now - $windowStart >= $windowSeconds) {
-            // Окно истекло — сбрасываем счётчик
+            // Window expired - reset the counter
             $db->update('rate_limit_log', [
                 'count'        => 1,
                 'window_start' => date('Y-m-d H:i:s', $now),
@@ -355,7 +355,7 @@ final class ApiKeyService
             return true;
         }
 
-        // В текущем окне — увеличиваем счётчик
+        // In the current window, increment the counter
         $newCount = (int) $row['count'] + 1;
         $db->update('rate_limit_log', [
             'count'      => $newCount,
@@ -370,7 +370,7 @@ final class ApiKeyService
     // ------------------------------------------------------------------ //
 
     /**
-     * @throws \RuntimeException если ключ не найден или не принадлежит организации
+     * @throws \RuntimeException if the key is not found or does not belong to the organization
      */
     private function findKeyInOrg(string $keyUuid, string $orgId): ApiKey
     {

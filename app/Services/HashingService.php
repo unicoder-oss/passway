@@ -5,36 +5,36 @@ declare(strict_types=1);
 namespace Passway\Services;
 
 /**
- * Сервис хеширования паролей и токенов.
+ * Password and token hashing service.
  *
- * Пароли: Argon2id — современный алгоритм, устойчивый к GPU-брутфорсу.
- *   - memory_cost: 64 MB (достаточно для защиты, не перегружает сервер)
- *   - time_cost:   4 итерации
- *   - threads:     1 (совместимо с однопоточными окружениями)
+ * Passwords: Argon2id - modern algorithm, resistant to GPU brute force.
+ *   - memory_cost: 64 MB (enough for protection without overloading the server)
+ *   - time_cost:   4 iterations
+ *   - threads:     1 (compatible with single-threaded environments)
  *
- * Токены (сессии, API-ключи, инвайты): SHA-256 (hex).
- *   - Быстрый поиск по индексу в БД
- *   - Защищён тем, что исходный токен — криптографически случайный (32 байта)
+ * Tokens (sessions, API keys, invites): SHA-256 (hex).
+ *   - Fast lookup by DB index
+ *   - Protected because the source token is cryptographically random (32 bytes)
  *
- * ВАЖНО: для паролей НИКОГДА не использовать SHA-256 напрямую.
- *        Только Argon2id через password_hash().
+ * IMPORTANT: for passwords NEVER do not use SHA-256 directly.
+ *        Only Argon2id through password_hash().
  */
 final class HashingService
 {
-    // Argon2id параметры (OWASP рекомендация минимум 19 MB / 2 итерации)
+    // Argon2id parameters (OWASP minimum recommendation 19 MB / 2 iterations)
     private const ARGON2_MEMORY_COST  = 65536;  // 64 MB (KiB)
-    private const ARGON2_TIME_COST    = 4;       // итерации
+    private const ARGON2_TIME_COST    = 4;       // iterations
     private const ARGON2_THREADS      = 1;
 
     // ------------------------------------------------------------------ //
-    //  Пароли (Argon2id)                                                  //
+    //  Passwords (Argon2id)                                                  //
     // ------------------------------------------------------------------ //
 
     /**
-     * Захешировать пароль пользователя.
+     * Hash the user password.
      *
-     * @param string $password Открытый пароль (будет затёрт в памяти)
-     * @return string          Hash для хранения в БД
+     * @param string $password Plaintext password (will be wiped from memory)
+     * @return string          Hash for storage in the DB
      */
     public function hashPassword(string $password): string
     {
@@ -54,9 +54,9 @@ final class HashingService
     }
 
     /**
-     * Проверить пароль против сохранённого хеша.
+     * Verify a password against the stored hash.
      *
-     * Использует timing-safe сравнение (password_verify делает это внутренне).
+     * Uses timing-safe comparison (password_verify does this internally).
      */
     public function verifyPassword(string $password, string $hash): bool
     {
@@ -66,8 +66,8 @@ final class HashingService
     }
 
     /**
-     * Проверить, нужен ли ре-хеш (если изменились параметры алгоритма).
-     * Вызывать после успешного verifyPassword — обновить хеш в БД.
+     * Check whether rehashing is needed (if algorithm parameters changed).
+     * Call after successful verifyPassword to update the hash in the DB.
      */
     public function needsRehash(string $hash): bool
     {
@@ -79,14 +79,14 @@ final class HashingService
     }
 
     // ------------------------------------------------------------------ //
-    //  Токены (SHA-256)                                                   //
+    //  Tokens (SHA-256)                                                   //
     // ------------------------------------------------------------------ //
 
     /**
-     * Захешировать сессионный токен для хранения в БД.
-     * Входной токен: 64 hex-символа (32 байта случайных данных).
+     * Hash a session token for storage in the DB.
+     * Input token: 64 hex characters (32 bytes of random data).
      *
-     * @return string SHA-256 hex (64 символа)
+     * @return string SHA-256 hex (64 characters)
      */
     public function hashToken(string $token): string
     {
@@ -94,10 +94,10 @@ final class HashingService
     }
 
     /**
-     * Захешировать API-ключ для хранения в БД.
-     * Формат ключа: sv_{64 hex}.
+     * Hash an API key for storage in the DB.
+     * Key format: sv_{64 hex}.
      *
-     * @return string SHA-256 hex (64 символа)
+     * @return string SHA-256 hex (64 characters)
      */
     public function hashApiKey(string $apiKey): string
     {
@@ -105,9 +105,9 @@ final class HashingService
     }
 
     /**
-     * Захешировать инвайт-токен для хранения в БД.
+     * Hash an invite token for storage in the DB.
      *
-     * @return string SHA-256 hex (64 символа)
+     * @return string SHA-256 hex (64 characters)
      */
     public function hashInviteToken(string $token): string
     {
@@ -115,8 +115,8 @@ final class HashingService
     }
 
     /**
-     * Timing-safe сравнение двух строк (защита от timing attacks).
-     * Использовать для сравнения хешей, не самих токенов.
+     * Timing-safe comparison of two strings (protection against timing attacks).
+     * Use to compare hashes, not the tokens themselves.
      */
     public function timingSafeEquals(string $a, string $b): bool
     {

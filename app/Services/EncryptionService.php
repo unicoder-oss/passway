@@ -8,30 +8,30 @@ use Passway\Exceptions\DecryptionException;
 use RuntimeException;
 
 /**
- * Сервис шифрования секретов.
+ * Secret encryption service.
  *
- * Алгоритм: XChaCha20-Poly1305 (IETF) — authenticated encryption (AEAD).
- * Реализован через libsodium (ext-sodium, встроен в PHP 7.2+).
+ * Algorithm: XChaCha20-Poly1305 (IETF) - authenticated encryption (AEAD).
+ * Implemented through libsodium (ext-sodium, built into PHP 7.2+).
  *
- * Ключ: 32 байта (256 бит), передаётся через переменную окружения MASTER_KEY
- *       в виде 64 hex-символов. НИКОГДА не хранится в БД.
+ * Key: 32 bytes (256 bits), passed through the environment variable MASTER_KEY
+ *       as 64 hex characters. NEVER stored in the DB.
  *
- * Nonce: 24 байта случайных данных, генерируется для каждого шифрования.
- *        Хранится рядом с зашифрованным значением (не секрет, но уникален).
+ * Nonce: 24 bytes of random data, generated for each encryption.
+ *        Stored next to the encrypted value (not secret, but unique).
  *
- * Формат хранения:
+ * Storage format:
  *   encrypted_value — base64(ciphertext + mac)
- *   nonce           — hex(24 bytes) = 48 символов
+ *   nonce           - hex(24 bytes) = 48 characters
  *
- * Additional data (AAD): опциональны, используются для привязки
- * зашифрованных данных к конкретному ресурсу (защита от replay).
+ * Additional data (AAD): optional, used to bind
+ * encrypted data to a specific resource (replay protection).
  */
 final class EncryptionService
 {
-    /** Длина ключа XChaCha20-Poly1305 IETF: 32 байта (фиксировано спецификацией) */
+    /** XChaCha20-Poly1305 IETF key length: 32 bytes (fixed by the specification) */
     private const KEY_BYTES   = 32;
 
-    /** Длина nonce XChaCha20-Poly1305 IETF: 24 байта (фиксировано спецификацией) */
+    /** Length nonce XChaCha20-Poly1305 IETF: 24 bytes (fixed by the specification) */
     private const NONCE_BYTES = 24;
 
     private string $masterKey;
@@ -47,16 +47,16 @@ final class EncryptionService
     }
 
     // ------------------------------------------------------------------ //
-    //  Шифрование / Расшифровка                                           //
+    //  Encryption / Decryption                                           //
     // ------------------------------------------------------------------ //
 
     /**
-     * Зашифровать строку.
+     * Encrypt a string.
      *
-     * @param string $plaintext   Открытый текст
-     * @param string $aad         Additional Authenticated Data (опционально).
-     *                            Например, UUID секрета — привязывает ciphertext к ресурсу.
-     * @return EncryptedData      Зашифрованные данные + nonce
+     * @param string $plaintext   Plaintext
+     * @param string $aad         Additional Authenticated Data (optional).
+     *                            For example, UUID secret - binds ciphertext to the resource.
+     * @return EncryptedData      Encrypted data plus nonce
      */
     public function encrypt(string $plaintext, string $aad = ''): EncryptedData
     {
@@ -69,7 +69,7 @@ final class EncryptionService
             $this->masterKey
         );
 
-        // Затираем plaintext в памяти (best-effort — PHP не гарантирует)
+        // Wipe plaintext from memory (best-effort - PHP does not guarantee it)
         if (\function_exists('sodium_memzero')) { \sodium_memzero($plaintext); }
 
         return new EncryptedData(
@@ -79,13 +79,13 @@ final class EncryptionService
     }
 
     /**
-     * Расшифровать строку.
+     * Decrypt a string.
      *
      * @param string $encryptedValue  base64(ciphertext + mac)
-     * @param string $nonce           hex(24 байта)
-     * @param string $aad             Те же AAD, что использовались при шифровании
-     * @return string                 Открытый текст
-     * @throws DecryptionException    Если ключ неверен или данные повреждены
+     * @param string $nonce           hex(24 bytes)
+     * @param string $aad             Same AAD used for encryption
+     * @return string                 Plaintext
+     * @throws DecryptionException    If the key is wrong or data is corrupted
      */
     public function decrypt(string $encryptedValue, string $nonce, string $aad = ''): string
     {
@@ -110,7 +110,7 @@ final class EncryptionService
         );
 
         if ($plaintext === false) {
-            // Не раскрываем причину (ключ или данные)
+            // Do not disclose the reason (key or data)
             throw new DecryptionException(
                 __('ui.backend.security.decrypt_failed')
             );
@@ -120,9 +120,9 @@ final class EncryptionService
     }
 
     /**
-     * Перешифровать с новым nonce (например, при обновлении значения секрета).
+     * Re-encrypt with a new nonce (for example, when updating a secret value).
      *
-     * @return EncryptedData Новые зашифрованные данные
+     * @return EncryptedData New encrypted data
      */
     public function reEncrypt(string $encryptedValue, string $nonce, string $aad = ''): EncryptedData
     {
@@ -133,11 +133,11 @@ final class EncryptionService
     }
 
     // ------------------------------------------------------------------ //
-    //  Вспомогательные методы                                             //
+    //  Helper methods                                             //
     // ------------------------------------------------------------------ //
 
     /**
-     * Проверить работоспособность master key (encrypt + decrypt round trip).
+     * Check master key operability (encrypt + decrypt round trip).
      */
     public function selfTest(): bool
     {
@@ -152,10 +152,10 @@ final class EncryptionService
     }
 
     /**
-     * Сгенерировать новый master key.
-     * Используется в install.php при первоначальной настройке.
+     * Generate a new master key.
+     * Used in install.php during initial setup.
      *
-     * @return string 64 hex-символа (32 байта)
+     * @return string 64 hex-characters (32 bytes)
      */
     public static function generateMasterKey(): string
     {
@@ -163,7 +163,7 @@ final class EncryptionService
     }
 
     /**
-     * Проверить корректность формата master key.
+     * Check master key format correctness.
      */
     public static function validateMasterKeyFormat(string $hex): bool
     {
@@ -171,7 +171,7 @@ final class EncryptionService
     }
 
     // ------------------------------------------------------------------ //
-    //  Загрузка ключа                                                     //
+    //  Key loading                                                     //
     // ------------------------------------------------------------------ //
 
     private function loadMasterKey(): string

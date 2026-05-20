@@ -8,7 +8,7 @@ use Passway\Core\Database;
 use Passway\Models\Secret;
 
 /**
- * Минимальный cron-like планировщик для ротации секретов.
+ * Minimal cron-like scheduler for secret rotation.
  */
 final class SchedulerService
 {

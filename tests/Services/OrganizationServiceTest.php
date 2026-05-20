@@ -12,7 +12,7 @@ use Passway\Services\OrganizationService;
 use Passway\Tests\DatabaseTestCase;
 
 /**
- * Тесты OrganizationService: создание, участники, роли, solo-режим.
+ * OrganizationService tests: creation, members, roles, solo mode.
  *
  * @requires extension pdo_sqlite
  */
@@ -25,7 +25,7 @@ final class OrganizationServiceTest extends DatabaseTestCase
         parent::setUp();
         $this->svc = new OrganizationService();
 
-        // Установить team-режим по умолчанию (solo ограничивает 1 орг)
+        // Set team mode by default (solo limits to 1 org)
         Database::getInstance()->query(
             "UPDATE system_config SET value = 'team' WHERE key = 'deploy_mode'"
         );

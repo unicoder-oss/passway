@@ -7,11 +7,11 @@ namespace Passway\Database\Migrations;
 use Passway\Database\Migration;
 
 /**
- * Миграция 002: Пользователи, сессии и passkeys (WebAuthn).
+ * Migration 002: Users, sessions, and passkeys (WebAuthn).
  *
- * Таблицы:
- *   - users       — учётные записи пользователей
- *   - sessions    — сессионные токены (хранятся как SHA-256)
+ * Tables:
+ *   - users       — user accounts
+ *   - sessions    — session tokens (stored as SHA-256)
  *   - passkeys    — WebAuthn/FIDO2 credentials
  */
 final class CreateUsersAuthTables extends Migration
@@ -25,9 +25,9 @@ final class CreateUsersAuthTables extends Migration
             "id              {$this->pkType()}",
             'uuid            VARCHAR(36) NOT NULL',
             'email           VARCHAR(255) NOT NULL',
-            // password_hash может быть NULL если пользователь использует только Passkey
+            // password_hash can be NULL if the user only uses a passkey
             'password_hash   VARCHAR(255)',
-            // TOTP secret хранится зашифрованным (XChaCha20-Poly1305)
+            // TOTP secret is stored encrypted (XChaCha20-Poly1305)
             'totp_secret     TEXT',
             'totp_nonce      VARCHAR(48)',
             "totp_enabled    {$this->boolType(false)}",
@@ -49,12 +49,12 @@ final class CreateUsersAuthTables extends Migration
         // ------------------------------------------------------------------ //
         //  sessions                                                            //
         // ------------------------------------------------------------------ //
-        // token_hash = SHA-256(raw 64-hex token), сам токен НИКОГДА не хранится
+        // token_hash = SHA-256(raw 64-hex token), the token itself is NEVER stored
         $this->createTable('sessions', [
             "id                {$this->pkType()}",
             'uuid              VARCHAR(36) NOT NULL',
             'user_id           BIGINT NOT NULL',
-            // SHA-256 от raw-токена (64 hex символа)
+            // SHA-256 of the raw token (64 hex chars)
             'token_hash        VARCHAR(64) NOT NULL',
             'ip_address        VARCHAR(45)',
             'user_agent        TEXT',
@@ -78,16 +78,16 @@ final class CreateUsersAuthTables extends Migration
             "id             {$this->pkType()}",
             'uuid           VARCHAR(36) NOT NULL',
             'user_id        BIGINT NOT NULL',
-            // credential_id — base64url-encoded ID от аутентификатора
+            // credential_id — base64url-encoded ID from the authenticator
             'credential_id  TEXT NOT NULL',
-            // Публичный ключ в формате COSE (CBOR-encoded), stored as base64
+            // Public key in COSE format (CBOR-encoded), stored as base64
             'public_key     TEXT NOT NULL',
             'sign_count     BIGINT NOT NULL DEFAULT 0',
-            // Понятное имя (например, "MacBook Touch ID")
+            // Human-readable name (for example, "MacBook Touch ID")
             'name           VARCHAR(255)',
-            // AAGUID — идентификатор модели аутентификатора
+            // AAGUID — authenticator model identifier
             'aaguid         VARCHAR(36)',
-            // JSON-массив транспортов: ["usb", "ble", "nfc", "internal"]
+            // JSON array of transports: ["usb", "ble", "nfc", "internal"]
             'transports     TEXT',
             "created_at     {$this->nowDefault()}",
             "last_used_at   {$this->tsType()}",
@@ -103,7 +103,7 @@ final class CreateUsersAuthTables extends Migration
 
     public function down(): void
     {
-        // Удаляем в обратном порядке зависимостей
+        // Drop in reverse dependency order
         $this->dropTable('passkeys');
         $this->dropTable('sessions');
         $this->dropTable('users');

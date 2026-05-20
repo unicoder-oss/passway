@@ -7,7 +7,7 @@ namespace Passway\Services;
 use Passway\Models\Secret;
 
 /**
- * Внешняя schema-driven ротация dynamic-секретов.
+ * External schema-driven rotation of dynamic secrets.
  */
 final class RotationService
 {

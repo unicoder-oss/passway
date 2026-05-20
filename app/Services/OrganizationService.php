@@ -10,27 +10,27 @@ use Passway\Models\Organization;
 use Passway\Models\OrganizationMember;
 
 /**
- * Сервис управления организациями и их участниками.
+ * Service for managing organizations and their members.
  *
- * Авторизация:
- *   owner      — всё
- *   admin      — управление участниками и инвайтами
- *   editor     — управление каталогами/секретами
- *   reader     — только чтение
+ * Authorization:
+ *   owner      - everything
+ *   admin      - member and invite management
+ *   editor     - directory/secret management
+ *   reader     - read-only
  */
 final class OrganizationService
 {
-    /** TTL инвайт-ссылки по умолчанию (1 час) */
+    /** Default invite link TTL (1 hour) */
     public const DEFAULT_INVITE_TTL = 3600;
 
     // ------------------------------------------------------------------ //
-    //  Создание организации                                               //
+    //  Organization creation                                               //
     // ------------------------------------------------------------------ //
 
     /**
-     * Создать организацию и добавить создателя как owner.
+     * Create an organization and add the creator as owner.
      *
-     * @throws \InvalidArgumentException при пустом имени
+     * @throws \InvalidArgumentException on empty name
      */
     public function create(string $name, string $ownerId): Organization
     {
@@ -66,7 +66,7 @@ final class OrganizationService
             ]);
         });
 
-        // Загружаем созданную организацию через slug (uuid ещё не знаем напрямую)
+        // Load the created organization by slug (uuid is not yet known directly)
         $org = Organization::findBySlug($slug);
         if ($org === null) {
             throw new \RuntimeException(__('ui.backend.organization.failed_load_created'));
@@ -85,7 +85,7 @@ final class OrganizationService
     }
 
     // ------------------------------------------------------------------ //
-    //  Чтение                                                             //
+    //  Reading                                                             //
     // ------------------------------------------------------------------ //
 
     /** @return Organization[] */
@@ -101,7 +101,7 @@ final class OrganizationService
     }
 
     /**
-     * Проверить, есть ли у пользователя хотя бы $minRole в организации.
+     * Check whether the user has at least $minRole in the organization.
      */
     public function hasPermission(string $orgId, string $userId, string $minRole): bool
     {
@@ -121,14 +121,14 @@ final class OrganizationService
     }
 
     // ------------------------------------------------------------------ //
-    //  Управление участниками                                             //
+    //  Member management                                             //
     // ------------------------------------------------------------------ //
 
     /**
-     * Добавить участника в организацию.
+     * Add a member to an organization.
      *
-     * @throws AuthException если requesterId не имеет прав admin+
-     * @throws \RuntimeException если пользователь уже состоит в орг.
+     * @throws AuthException if requesterId lacks admin+ permission
+     * @throws \RuntimeException if the user is already in the org
      */
     public function addMember(
         string  $orgId,
@@ -167,9 +167,9 @@ final class OrganizationService
     }
 
     /**
-     * Обновить роль участника.
+     * Update a member role.
      *
-     * @throws AuthException если нет прав или попытка изменить owner
+     * @throws AuthException if permission is missing or trying to change owner
      */
     public function updateMemberRole(
         string $orgId,
@@ -188,7 +188,7 @@ final class OrganizationService
         if ($target->role === 'owner') {
             throw new AuthException(__('ui.backend.organization.cannot_change_owner_role'));
         }
-        // Только owner может назначить admin
+        // Only owner can assign admin
         if ($newRole === 'admin' && !$this->hasPermission($orgId, $requesterId, 'owner')) {
             throw new AuthException(__('ui.backend.organization.only_owner_assign_admin'));
         }
@@ -210,9 +210,9 @@ final class OrganizationService
     }
 
     /**
-     * Удалить участника из организации.
+     * Remove a member from an organization.
      *
-     * @throws AuthException если нет прав или попытка удалить owner
+     * @throws AuthException if permission is missing or trying to remove owner
      */
     public function removeMember(
         string $orgId,
@@ -220,7 +220,7 @@ final class OrganizationService
         string $requesterId,
     ): void {
         $this->assertTeamMode('ui.backend.organization.team_mode_required');
-        // Участник может удалить себя сам (выйти из орг)
+        // A member can remove themselves (leave the org)
         $isSelf = $targetUserId === $requesterId;
 
         if (!$isSelf) {
@@ -250,9 +250,9 @@ final class OrganizationService
     }
 
     /**
-     * Передать владение организацией другому участнику.
+     * Transfer organization ownership to another member.
      *
-     * @throws AuthException если requesterId не owner
+     * @throws AuthException if requesterId is not owner
      */
     public function transferOwnership(
         string $orgId,
@@ -271,19 +271,19 @@ final class OrganizationService
         $now = now()->format('Y-m-d H:i:s');
 
         $db->transaction(function () use ($db, $orgId, $requesterId, $newOwnerId, $now): void {
-            // Понизить текущего owner до admin
+            // Demote the current owner to admin
             $db->update(
                 'organization_members',
                 ['role' => 'admin'],
                 ['organization_id' => (int) $orgId, 'user_id' => (int) $requesterId]
             );
-            // Повысить нового owner
+            // Promote the new owner
             $db->update(
                 'organization_members',
                 ['role' => 'owner'],
                 ['organization_id' => (int) $orgId, 'user_id' => (int) $newOwnerId]
             );
-            // Обновить поле owner_id в organizations
+            // Update the owner_id field in organizations
             $db->update(
                 'organizations',
                 ['owner_id' => (int) $newOwnerId, 'updated_at' => $now],
@@ -306,7 +306,7 @@ final class OrganizationService
     ) {}
 
     // ------------------------------------------------------------------ //
-    //  Вспомогательные                                                    //
+    //  Helpers                                                    //
     // ------------------------------------------------------------------ //
 
     private function generateUniqueSlug(string $name): string

@@ -5,18 +5,18 @@ declare(strict_types=1);
 namespace Passway\Core;
 
 /**
- * Обёртка над HTTP-запросом.
+ * Wrapper around the HTTP request.
  *
- * Инкапсулирует $_SERVER, $_GET, $_POST, $_COOKIE, $_FILES и тело запроса.
- * Все методы чтения возвращают null/default при отсутствии значения —
- * никогда не бросают исключений при доступе к несуществующему ключу.
+ * Encapsulates $_SERVER, $_GET, $_POST, $_COOKIE, $_FILES and the request body.
+ * All read methods return null/default when a value is missing -
+ * never throw exceptions when accessing a missing key.
  */
 final class Request
 {
-    /** @var array<string, mixed> Распарсенное JSON-тело запроса */
+    /** @var array<string, mixed> Parsed JSON request body */
     private ?array $jsonBody = null;
 
-    /** @var array<string, string> Параметры роута (:id, :slug и т.п.) */
+    /** @var array<string, string> Route parameters (:id, :slug etc.) */
     private array $routeParams = [];
 
     public function __construct(
@@ -29,7 +29,7 @@ final class Request
     ) {}
 
     // ------------------------------------------------------------------ //
-    //  Фабричный метод                                                     //
+    //  Factory method                                                     //
     // ------------------------------------------------------------------ //
 
     public static function fromGlobals(): self
@@ -45,7 +45,7 @@ final class Request
     }
 
     // ------------------------------------------------------------------ //
-    //  Метод и путь                                                        //
+    //  Method and path                                                        //
     // ------------------------------------------------------------------ //
 
     public function method(): string
@@ -54,7 +54,7 @@ final class Request
     }
 
     /**
-     * URL-путь без строки запроса и без завершающего слэша.
+     * URL path without query string and trailing slash.
      */
     public function path(): string
     {
@@ -102,7 +102,7 @@ final class Request
     // ------------------------------------------------------------------ //
 
     /**
-     * Получить параметр из GET, POST или JSON-тела (в указанном приоритете).
+     * Get a parameter from GET, POST, or the JSON body (in the specified priority).
      */
     public function input(string $key, mixed $default = null): mixed
     {
@@ -123,7 +123,7 @@ final class Request
     }
 
     /**
-     * Получить значение из распарсенного JSON-тела.
+     * Get a value from the parsed JSON body.
      */
     public function json(?string $key = null, mixed $default = null): mixed
     {
@@ -139,7 +139,7 @@ final class Request
     }
 
     /**
-     * Получить всё тело запроса как строку.
+     * Get the full request body as a string.
      */
     public function rawBody(): string
     {
@@ -147,7 +147,7 @@ final class Request
     }
 
     /**
-     * Получить несколько полей сразу.
+     * Get multiple fields at once.
      *
      * @param  string[] $keys
      * @return array<string, mixed>
@@ -162,15 +162,15 @@ final class Request
     }
 
     // ------------------------------------------------------------------ //
-    //  Заголовки                                                           //
+    //  Headers                                                           //
     // ------------------------------------------------------------------ //
 
     public function header(string $name): ?string
     {
-        // HTTP-заголовки в $_SERVER хранятся как HTTP_NAME_NAME
+        // HTTP headers in $_SERVER are stored as HTTP_NAME_NAME
         $key = 'HTTP_' . strtoupper(str_replace('-', '_', $name));
 
-        // Content-Type и Content-Length — без префикса HTTP_
+        // Content-Type and Content-Length - without the HTTP_ prefix
         if ($name === 'Content-Type') {
             $key = 'CONTENT_TYPE';
         } elseif ($name === 'Content-Length') {
@@ -200,17 +200,17 @@ final class Request
     }
 
     // ------------------------------------------------------------------ //
-    //  IP-адрес и User-Agent                                               //
+    //  IP address and User-Agent                                               //
     // ------------------------------------------------------------------ //
 
     /**
-     * Получить реальный IP-адрес клиента.
-     * Поддерживает X-Forwarded-For и X-Real-IP при работе за прокси.
-     * ВАЖНО: доверяем заголовкам прокси только если приложение явно за прокси.
+     * Get the real client IP address.
+     * Supports X-Forwarded-For and X-Real-IP behind a proxy.
+     * IMPORTANT: trust proxy headers only when the application is explicitly behind a proxy.
      */
     public function ip(): string
     {
-        // В production за прокси (nginx) доверяем X-Real-IP
+        // In production behind a proxy (nginx) trust X-Real-IP
         if (($_ENV['APP_BEHIND_PROXY'] ?? 'false') === 'true') {
             if (!empty($this->server['HTTP_X_REAL_IP'])) {
                 $ip = filter_var($this->server['HTTP_X_REAL_IP'], FILTER_VALIDATE_IP);
@@ -245,7 +245,7 @@ final class Request
     }
 
     // ------------------------------------------------------------------ //
-    //  Route параметры (устанавливаются роутером)                         //
+    //  Route parameters (set by the router)                         //
     // ------------------------------------------------------------------ //
 
     public function setRouteParams(array $params): void
@@ -265,7 +265,7 @@ final class Request
     }
 
     // ------------------------------------------------------------------ //
-    //  Приватные методы                                                    //
+    //  Private methods                                                    //
     // ------------------------------------------------------------------ //
 
     private function parseJson(): void

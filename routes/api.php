@@ -3,8 +3,8 @@
 declare(strict_types=1);
 
 /**
- * API-маршруты (/api/v1/...).
- * Все маршруты будут добавляться по мере реализации шагов.
+ * API routes (/api/v1/...).
+ * All routes will be added as the steps are implemented.
  *
  * @var \Passway\Core\Router $router
  */
@@ -29,7 +29,7 @@ use Passway\Middleware\AuthMiddleware;
 $router->group('/api/v1', function (\Passway\Core\Router $router) {
 
     // ------------------------------------------------------------------ //
-    //  Служебные                                                          //
+    //  Service                                                           //
     // ------------------------------------------------------------------ //
 
     $router->get('/', fn() => Response::json([
@@ -53,12 +53,12 @@ $router->group('/api/v1', function (\Passway\Core\Router $router) {
     });
 
     // ------------------------------------------------------------------ //
-    //  Аутентификация                                                     //
+    //  Authentication                                                    //
     // ------------------------------------------------------------------ //
 
     $router->group('/auth', function (\Passway\Core\Router $router) {
 
-        // Email + пароль
+        // Email + password
         $router->post('/login',  [LoginController::class, 'login']);
         $router->post('/logout', [LoginController::class, 'logout']);
         $router->get('/me',      [LoginController::class, 'me'], [AuthMiddleware::class]);
@@ -79,7 +79,7 @@ $router->group('/api/v1', function (\Passway\Core\Router $router) {
     });
 
     // ------------------------------------------------------------------ //
-    //  Организации (Шаг 5)                                               //
+    //  Organizations (Step 5)                                            //
     // ------------------------------------------------------------------ //
 
     $router->group('/organizations', function (\Passway\Core\Router $router) {
@@ -87,7 +87,7 @@ $router->group('/api/v1', function (\Passway\Core\Router $router) {
         $router->get('/',     [OrganizationController::class, 'list'],   [AuthMiddleware::class]);
         $router->get('/:uuid', [OrganizationController::class, 'show'],  [AuthMiddleware::class]);
 
-        // Участники
+        // Members
         $router->get('/:uuid/members',
             [OrganizationController::class, 'listMembers'], [AuthMiddleware::class]);
         $router->patch('/:uuid/members/:userUuid',
@@ -97,7 +97,7 @@ $router->group('/api/v1', function (\Passway\Core\Router $router) {
         $router->post('/:uuid/transfer',
             [OrganizationController::class, 'transferOwnership'], [AuthMiddleware::class]);
 
-        // Инвайты
+        // Invites
         $router->post('/:uuid/invites',
             [InviteController::class, 'create'], [AuthMiddleware::class]);
         $router->get('/:uuid/invites',
@@ -122,7 +122,7 @@ $router->group('/api/v1', function (\Passway\Core\Router $router) {
     });
 
     // ------------------------------------------------------------------ //
-    //  Каталоги (Шаг 6)                                                  //
+    //  Directories (Step 6)                                              //
     // ------------------------------------------------------------------ //
 
     $router->group('/organizations', function (\Passway\Core\Router $router) {
@@ -149,7 +149,7 @@ $router->group('/api/v1', function (\Passway\Core\Router $router) {
     });
 
     // ------------------------------------------------------------------ //
-    //  Группы (Шаг 8)                                                    //
+    //  Groups (Step 8)                                                   //
     // ------------------------------------------------------------------ //
 
     $router->group('/organizations', function (\Passway\Core\Router $router) {
@@ -170,7 +170,7 @@ $router->group('/api/v1', function (\Passway\Core\Router $router) {
     });
 
     // ------------------------------------------------------------------ //
-    //  Права на каталоги (Шаг 8)                                         //
+    //  Directory Permissions (Step 8)                                    //
     // ------------------------------------------------------------------ //
 
     $router->group('/organizations', function (\Passway\Core\Router $router) {
@@ -183,10 +183,10 @@ $router->group('/api/v1', function (\Passway\Core\Router $router) {
     });
 
     // ------------------------------------------------------------------ //
-    //  Система одобрений (Шаг 9)                                        //
+    //  Approval System (Step 9)                                         //
     // ------------------------------------------------------------------ //
 
-    // Создать запрос на одобрение для конкретного секрета
+    // Create an approval request for a specific secret
     $router->group('/organizations', function (\Passway\Core\Router $router) {
         $router->get('/:uuid/secrets/:secUuid/acl',
             [SecretController::class, 'acl'], [AuthMiddleware::class]);
@@ -206,7 +206,7 @@ $router->group('/api/v1', function (\Passway\Core\Router $router) {
             [ApprovalController::class, 'create'], [AuthMiddleware::class]);
     });
 
-    // Управление запросами на уровне организации
+    // Manage requests at the organization level
     $router->group('/organizations', function (\Passway\Core\Router $router) {
         $router->get('/:uuid/approvals',
             [ApprovalController::class, 'listMy'], [AuthMiddleware::class]);
@@ -232,7 +232,7 @@ $router->group('/api/v1', function (\Passway\Core\Router $router) {
     });
 
     // ------------------------------------------------------------------ //
-    //  API-ключи (Шаг 10)                                               //
+    //  API Keys (Step 10)                                               //
     // ------------------------------------------------------------------ //
 
     $router->group('/organizations', function (\Passway\Core\Router $router) {
@@ -249,7 +249,7 @@ $router->group('/api/v1', function (\Passway\Core\Router $router) {
     });
 
     // ------------------------------------------------------------------ //
-    //  Секреты (Шаг 7)                                                   //
+    //  Secrets (Step 7)                                                  //
     // ------------------------------------------------------------------ //
 
     $router->group('/organizations', function (\Passway\Core\Router $router) {

@@ -8,17 +8,17 @@ use Passway\Core\Database;
 use RuntimeException;
 
 /**
- * Запускает миграции базы данных с версионированием и поддержкой rollback.
+ * Runs database migrations with versioning and rollback support.
  *
- * Файлы миграций: database/migrations/NNN_ClassName.php
- * Порядок применения: по числовому префиксу NNN (001, 002, ...).
+ * Migration files: database/migrations/NNN_ClassName.php
+ * Application order: by numeric prefix NNN (001, 002, ...).
  *
- * Команды:
- *   php database/migrate.php up       — применить все новые миграции
- *   php database/migrate.php down     — откатить последний batch
- *   php database/migrate.php reset    — откатить ВСЕ миграции
- *   php database/migrate.php status   — показать статус
- *   php database/migrate.php fresh    — drop all tables + up (только для разработки!)
+ * Commands:
+ *   php database/migrate.php up       — apply all new migrations
+ *   php database/migrate.php down     — roll back the latest batch
+ *   php database/migrate.php reset    — roll back ALL migrations
+ *   php database/migrate.php status   — show status
+ *   php database/migrate.php fresh    — drop all tables + up (development only!)
  */
 final class MigrationRunner
 {
@@ -32,13 +32,13 @@ final class MigrationRunner
     }
 
     // ------------------------------------------------------------------ //
-    //  Публичный API                                                       //
+    //  Public API                                                        //
     // ------------------------------------------------------------------ //
 
     /**
-     * Применить все новые миграции.
+     * Apply all new migrations.
      *
-     * @return string[] Список применённых миграций
+     * @return string[] List of applied migrations
      */
     public function up(): array
     {
@@ -65,10 +65,10 @@ final class MigrationRunner
     }
 
     /**
-     * Откатить последний batch.
+     * Roll back the latest batch.
      *
-     * @param int $steps Количество батчей для отката (по умолчанию 1)
-     * @return string[] Список откатанных миграций
+     * @param int $steps Number of batches to roll back (defaults to 1)
+     * @return string[] List of rolled back migrations
      */
     public function down(int $steps = 1): array
     {
@@ -100,9 +100,9 @@ final class MigrationRunner
     }
 
     /**
-     * Откатить все миграции.
+     * Roll back all migrations.
      *
-     * @return string[] Список откатанных миграций
+     * @return string[] List of rolled back migrations
      */
     public function reset(): array
     {
@@ -112,10 +112,10 @@ final class MigrationRunner
     }
 
     /**
-     * Удалить все таблицы текущей схемы без вызова down() миграций.
+     * Drop all tables in the current schema without calling migration down() methods.
      *
-     * Используется для fresh в разработке: это надёжнее rollback всех миграций,
-     * особенно для SQLite с пересозданием таблиц и внешними ключами.
+     * Used for fresh in development: this is more reliable than rolling back all migrations,
+     * especially for SQLite with table recreation and foreign keys.
      */
     public function dropAllTables(): void
     {
@@ -143,7 +143,7 @@ final class MigrationRunner
     }
 
     /**
-     * Показать статус миграций.
+     * Show migration status.
      *
      * @return array<int, array{name: string, status: string, batch: int|null, executed_at: string|null}>
      */
@@ -169,11 +169,11 @@ final class MigrationRunner
     }
 
     // ------------------------------------------------------------------ //
-    //  Приватные методы                                                    //
+    //  Private methods                                                   //
     // ------------------------------------------------------------------ //
 
     /**
-     * Создать таблицу migrations если не существует.
+     * Create the migrations table if it does not exist.
      */
     private function ensureMigrationsTable(): void
     {
@@ -199,7 +199,7 @@ final class MigrationRunner
     }
 
     /**
-     * Получить список всех файлов миграций, отсортированных по имени.
+     * Get the list of all migration files sorted by name.
      *
      * @return array<string, string>  name => filepath
      */
@@ -208,7 +208,7 @@ final class MigrationRunner
         $files  = glob($this->migrationsPath . '/*.php') ?: [];
         $result = [];
 
-        sort($files); // Сортировка по имени файла (числовой префикс гарантирует порядок)
+        sort($files); // Sort by filename (the numeric prefix guarantees order)
 
         foreach ($files as $file) {
             $name = basename($file, '.php');
@@ -219,7 +219,7 @@ final class MigrationRunner
     }
 
     /**
-     * Получить список применённых миграций.
+     * Get the list of applied migrations.
      *
      * @return array<string, array{batch: int, executed_at: string}>
      */
@@ -237,7 +237,7 @@ final class MigrationRunner
     }
 
     /**
-     * Получить список необработанных миграций.
+     * Get the list of pending migrations.
      *
      * @return array<string, string>
      */
@@ -262,7 +262,7 @@ final class MigrationRunner
     }
 
     /**
-     * Получить записи для отката (в обратном порядке применения).
+     * Get records to roll back (in reverse application order).
      *
      * @return array<int, array{migration: string, batch: int}>
      */
@@ -291,12 +291,12 @@ final class MigrationRunner
     {
         require_once $file;
 
-        // Имя класса выводим из имени файла: "001_CreateSystemConfig" -> "CreateSystemConfig"
+        // Derive the class name from the filename: "001_CreateSystemConfig" -> "CreateSystemConfig"
         $basename  = basename($file, '.php');
         $parts     = explode('_', $basename, 2); // ['001', 'CreateSystemConfig']
         $className = isset($parts[1]) ? $parts[1] : $basename;
 
-        // Полное имя класса
+        // Fully qualified class name
         $fqcn = 'Passway\\Database\\Migrations\\' . $className;
 
         if (!class_exists($fqcn)) {

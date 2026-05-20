@@ -7,15 +7,15 @@ namespace Passway\Models;
 use Passway\Core\Database;
 
 /**
- * Тонкая модель секрета.
+ * Thin model secret.
  *
- * Структура таблицы secrets:
+ * Table structure secrets:
  *   - id, uuid, directory_id, organization_id
  *   - name, type (static|template|dynamic)
  *   - encrypted_value (XChaCha20-Poly1305, base64), nonce (hex, 48 chars)
  *   - template_id (nullable), requires_approval (bool)
  *   - rotation_integration_id, rotation_schedule, last_rotated_at
- *   - version (для истории ротаций), created_by, owner_user_id
+ *   - version (for rotation history), created_by, owner_user_id
  *   - created_at, updated_at, deleted_at (soft delete)
  */
 final class Secret
@@ -45,7 +45,7 @@ final class Secret
     ) {}
 
     // ------------------------------------------------------------------ //
-    //  Фабрика                                                            //
+    //  Factory                                                            //
     // ------------------------------------------------------------------ //
 
     /** @param array<string, mixed> $row */
@@ -86,7 +86,7 @@ final class Secret
     }
 
     // ------------------------------------------------------------------ //
-    //  Запросы                                                            //
+    //  Queries                                                            //
     // ------------------------------------------------------------------ //
 
     public static function findById(string $id): ?self
@@ -108,7 +108,7 @@ final class Secret
     }
 
     /**
-     * Все не удалённые секреты каталога (сортировка по имени).
+     * All non-deleted directory secrets (sorted by name).
      *
      * @return self[]
      */
@@ -122,7 +122,7 @@ final class Secret
     }
 
     // ------------------------------------------------------------------ //
-    //  Запись                                                             //
+    //  Writes                                                             //
     // ------------------------------------------------------------------ //
 
     /** @param array<string, mixed> $data */

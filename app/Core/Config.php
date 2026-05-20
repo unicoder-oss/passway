@@ -8,16 +8,16 @@ use Dotenv\Dotenv;
 use RuntimeException;
 
 /**
- * Загрузчик конфигурации.
+ * Configuration loader.
  *
- * Читает .env и файлы из config/, предоставляет единый
- * интерфейс get($key, $default) с точечной нотацией.
+ * Reads .env and files from config/, provides a unified
+ * interface get($key, $default) with dot notation.
  */
 final class Config
 {
     private static ?Config $instance = null;
 
-    /** @var array<string, mixed> Объединённые данные конфигурации */
+    /** @var array<string, mixed> Merged configuration data */
     private array $data = [];
 
     private function __construct()
@@ -35,27 +35,27 @@ final class Config
     }
 
     // ------------------------------------------------------------------ //
-    //  Публичный API                                                       //
+    //  Public API                                                       //
     // ------------------------------------------------------------------ //
 
     /**
-     * Получить значение конфигурации.
-     * Поддерживает точечную нотацию: 'database.host'
+     * Get a configuration value.
+     * Supports dot notation: 'database.host'
      */
     public function get(string $key, mixed $default = null): mixed
     {
-        // Сначала ищем в env (uppercase)
+        // First look in env (uppercase)
         $envKey = strtoupper(str_replace('.', '_', $key));
         if (isset($_ENV[$envKey])) {
             return $this->castValue($_ENV[$envKey]);
         }
 
-        // Затем в загруженных config-файлах
+        // Then in the loaded config files
         return $this->getNestedValue($this->data, $key, $default);
     }
 
     /**
-     * Установить значение (только в runtime, не сохраняется в файл).
+     * Set a value (runtime only, not saved to a file).
      */
     public function set(string $key, mixed $value): void
     {
@@ -63,7 +63,7 @@ final class Config
     }
 
     /**
-     * Проверить наличие ключа.
+     * Check whether a key exists.
      */
     public function has(string $key): bool
     {
@@ -71,7 +71,7 @@ final class Config
     }
 
     /**
-     * Получить все данные конфигурации.
+     * Get all configuration data.
      *
      * @return array<string, mixed>
      */
@@ -81,7 +81,7 @@ final class Config
     }
 
     // ------------------------------------------------------------------ //
-    //  Приватные методы                                                    //
+    //  Private methods                                                    //
     // ------------------------------------------------------------------ //
 
     private function loadEnv(): void
@@ -89,9 +89,9 @@ final class Config
         $root = PASSWAY_ROOT;
 
         if (!file_exists($root . '/.env')) {
-            // В production .env может отсутствовать — переменные передаются через окружение ОС
+            // In production .env may be absent; variables are passed through the OS environment
             if (file_exists($root . '/.env.example')) {
-                // Ничего не делаем — используем системные переменные окружения
+                // Do nothing - use system environment variables
                 return;
             }
             throw new RuntimeException(
@@ -102,7 +102,7 @@ final class Config
         $dotenv = Dotenv::createImmutable($root);
         $dotenv->load();
 
-        // Обязательные переменные
+        // Required variables
         $dotenv->required(['APP_ENV', 'APP_URL'])->notEmpty();
         $dotenv->required(['DB_DRIVER'])->allowedValues(['pgsql', 'sqlite']);
     }
@@ -124,7 +124,7 @@ final class Config
     }
 
     /**
-     * Получить вложенное значение через точечную нотацию.
+     * Get a nested value through dot notation.
      */
     private function getNestedValue(array $data, string $key, mixed $default): mixed
     {
@@ -142,7 +142,7 @@ final class Config
     }
 
     /**
-     * Установить вложенное значение через точечную нотацию.
+     * Set a nested value through dot notation.
      */
     private function setNestedValue(array &$data, string $key, mixed $value): void
     {
@@ -162,7 +162,7 @@ final class Config
     }
 
     /**
-     * Приводим строковые значения из .env к нативным типам PHP.
+     * Cast string values from .env to native PHP types.
      */
     private function castValue(mixed $value): mixed
     {

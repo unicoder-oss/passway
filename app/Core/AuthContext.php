@@ -9,12 +9,12 @@ use Passway\Models\ApiKey;
 use Passway\Models\User;
 
 /**
- * Статический контекст аутентификации для текущего запроса.
+ * Static authentication context for the current request.
  *
- * Заполняется AuthMiddleware до вызова контроллера.
- * Контроллеры читают текущего пользователя через AuthContext::getUser().
+ * Filled by AuthMiddleware before the controller is called.
+ * Controllers read the current user through AuthContext::getUser().
  *
- * Намеренно статический (request-scoped singleton), т.к. PHP живёт один запрос.
+ * Intentionally static (request-scoped singleton), because PHP lives for one request.
  */
 final class AuthContext
 {
@@ -22,7 +22,7 @@ final class AuthContext
     private static ?ApiKey $apiKey = null;
 
     /**
-     * Установить аутентифицированного пользователя (вызывается из AuthMiddleware).
+     * Set the authenticated user (called from AuthMiddleware).
      */
     public static function setUser(?User $user): void
     {
@@ -35,7 +35,7 @@ final class AuthContext
     }
 
     /**
-     * Получить текущего пользователя или null если не аутентифицирован.
+     * Get the current user or null if unauthenticated.
      */
     public static function getUser(): ?User
     {
@@ -48,7 +48,7 @@ final class AuthContext
     }
 
     /**
-     * Проверить, аутентифицирован ли пользователь.
+     * Check whether the user is authenticated.
      */
     public static function isAuthenticated(): bool
     {
@@ -61,8 +61,8 @@ final class AuthContext
     }
 
     /**
-     * Получить текущего пользователя или бросить AuthException.
-     * Используется в контроллерах, требующих аутентификации.
+     * Get the current user or throw AuthException.
+     * Used in controllers that require authentication.
      *
      * @throws AuthException
      */
@@ -75,7 +75,7 @@ final class AuthContext
     }
 
     /**
-     * Сброс (используется в тестах).
+     * Reset (used in tests).
      */
     public static function reset(): void
     {

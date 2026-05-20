@@ -5,12 +5,12 @@ declare(strict_types=1);
 namespace Passway\Core;
 
 /**
- * HTTP-роутер.
+ * HTTP router.
  *
- * Регистрирует маршруты, матчит входящий запрос, вызывает middleware-цепочку
- * и передаёт управление контроллеру.
+ * Registers routes, matches the incoming request, calls the middleware chain
+ * and passes control to the controller.
  *
- * Примеры:
+ * Examples:
  *   $router->get('/api/v1/secrets/:id', [SecretsController::class, 'show']);
  *   $router->group('/api/v1', function($r) {
  *       $r->middleware(ApiAuthMiddleware::class)->get('/secrets', ...);
@@ -21,10 +21,10 @@ final class Router
     /** @var array<int, array{method: string, pattern: string, handler: callable|array, middleware: string[]}> */
     private array $routes = [];
 
-    /** @var string[] Middleware для текущей группы */
+    /** @var string[] Middleware for the current group */
     private array $groupMiddleware = [];
 
-    /** @var string Префикс текущей группы */
+    /** @var string Current group prefix */
     private string $groupPrefix = '';
 
     private Container $container;
@@ -35,7 +35,7 @@ final class Router
     }
 
     // ------------------------------------------------------------------ //
-    //  Регистрация маршрутов                                               //
+    //  Route registration                                               //
     // ------------------------------------------------------------------ //
 
     public function get(string $path, callable|array $handler, array $middleware = []): void
@@ -64,7 +64,7 @@ final class Router
     }
 
     /**
-     * Группа маршрутов с общим префиксом и/или middleware.
+     * Route group with a shared prefix and/or middleware.
      */
     public function group(string $prefix, callable $callback, array $middleware = []): void
     {
@@ -81,12 +81,12 @@ final class Router
     }
 
     // ------------------------------------------------------------------ //
-    //  Диспетчеризация                                                     //
+    //  Dispatch                                                     //
     // ------------------------------------------------------------------ //
 
     /**
-     * Найти совпадение и выполнить обработчик.
-     * Возвращает Response.
+     * Find a match and execute the handler.
+     * Returns Response.
      */
     public function dispatch(Request $request): Response
     {
@@ -101,17 +101,17 @@ final class Router
                 continue;
             }
 
-            // Маршрут найден по пути, проверяем метод
+            // Route found by path; check the method
             $allowedMethods[] = $route['method'];
 
             if ($route['method'] !== $method) {
                 continue;
             }
 
-            // Устанавливаем параметры маршрута в Request
+            // Set route parameters on the Request
             $request->setRouteParams($params);
 
-            // Выполняем цепочку middleware + обработчик
+            // Run the middleware chain plus handler
             return $this->runMiddleware(
                 $request,
                 $route['middleware'],
@@ -120,7 +120,7 @@ final class Router
         }
 
         if (!empty($allowedMethods)) {
-            // Маршрут есть, но метод не поддерживается
+            // Route exists, but the method is not supported
             return Response::make(405)
                 ->withHeader('Allow', implode(', ', array_unique($allowedMethods)))
                 ->withContentType('application/json')
@@ -130,7 +130,7 @@ final class Router
                 ]));
         }
 
-        // Маршрут не найден
+        // Route not found
         if ($request->expectsJson()) {
             return Response::notFound('Route not found');
         }
@@ -141,7 +141,7 @@ final class Router
     }
 
     // ------------------------------------------------------------------ //
-    //  Приватные методы                                                    //
+    //  Private methods                                                    //
     // ------------------------------------------------------------------ //
 
     private function addRoute(string $method, string $path, callable|array $handler, array $middleware): void
@@ -155,9 +155,9 @@ final class Router
     }
 
     /**
-     * Сопоставить паттерн маршрута с реальным путём.
-     * Паттерн: /api/v1/secrets/:id/:slug
-     * Возвращает массив параметров или null если не совпало.
+     * Match the route pattern against the actual path.
+     * Pattern: /api/v1/secrets/:id/:slug
+     * Returns an array of parameters or null if it does not match.
      *
      * @return array<string, string>|null
      */
@@ -193,7 +193,7 @@ final class Router
             return null;
         }
 
-        // Возвращаем только именованные группы (параметры маршрута)
+        // Return only named groups (route parameters)
         return array_filter(
             $matches,
             fn($key) => is_string($key),
@@ -202,13 +202,13 @@ final class Router
     }
 
     /**
-     * Выполнить middleware-цепочку и вызвать конечный обработчик.
+     * Run the middleware chain and call the final handler.
      *
      * @param string[] $middlewareClasses
      */
     private function runMiddleware(Request $request, array $middlewareClasses, callable|array $handler): Response
     {
-        // Строим цепочку в обратном порядке (onion-model)
+        // Build the chain in reverse order (onion-model)
         $next = function (Request $req) use ($handler): Response {
             return $this->callHandler($handler, $req);
         };
@@ -225,8 +225,8 @@ final class Router
     }
 
     /**
-     * Вызвать обработчик маршрута.
-     * Поддерживает: callable, [ClassName::class, 'method'], [объект, 'method'].
+     * Call the route handler.
+     * Supports: callable, [ClassName::class, 'method'], [object, 'method'].
      */
     private function callHandler(callable|array $handler, Request $request): Response
     {

@@ -7,7 +7,7 @@ namespace Passway\Models;
 use Passway\Core\Database;
 
 /**
- * Конфигурация подключения сервиса ротации к организации.
+ * Rotation service connection configuration for an organization.
  */
 final class OrganizationIntegration
 {

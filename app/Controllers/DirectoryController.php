@@ -18,13 +18,13 @@ use Passway\Models\UserPermission;
 use Passway\Services\DirectoryService;
 
 /**
- * Контроллер каталогов организации.
+ * Organization directory controller.
  *
- * GET    /api/v1/organizations/:uuid/directories            — список всех (плоский)
- * POST   /api/v1/organizations/:uuid/directories            — создать
- * GET    /api/v1/organizations/:uuid/directories/:dirUuid  — детали
- * PATCH  /api/v1/organizations/:uuid/directories/:dirUuid  — переименовать / переместить
- * DELETE /api/v1/organizations/:uuid/directories/:dirUuid  — мягкое удаление
+ * GET    /api/v1/organizations/:uuid/directories            - list all (flat)
+ * POST   /api/v1/organizations/:uuid/directories            - create
+ * GET    /api/v1/organizations/:uuid/directories/:dirUuid  - details
+ * PATCH  /api/v1/organizations/:uuid/directories/:dirUuid  - rename / move
+ * DELETE /api/v1/organizations/:uuid/directories/:dirUuid  - soft delete
      * GET    /api/v1/organizations/:uuid/directories/:dirUuid/acl — exact ACL
      * PUT    /api/v1/organizations/:uuid/directories/:dirUuid/acl — replace exact ACL
      * GET    /api/v1/organizations/:uuid/directories/:dirUuid/access-policy — effective default policy
@@ -52,7 +52,7 @@ final class DirectoryController
             return Response::forbidden($e->getMessage());
         }
 
-        // Собираем карту id → uuid для быстрого разрешения parent_uuid
+        // Build an id -> uuid map for quick parent_uuid resolution
         $idToUuid = [];
         foreach ($dirs as $dir) {
             $idToUuid[$dir->id] = $dir->uuid;
@@ -128,9 +128,9 @@ final class DirectoryController
     // ------------------------------------------------------------------ //
 
     /**
-     * Переименовать и/или переместить каталог.
-     * Принимает: name (строка), parent_uuid (строка или пустая строка = корень).
-     * Хотя бы одно из полей обязательно.
+     * Rename and/or move a directory.
+     * Accepts: name (string), parent_uuid (string or empty string = root).
+     * At least one field is required.
      */
     public function update(Request $request): Response
     {
@@ -148,18 +148,18 @@ final class DirectoryController
         }
 
         try {
-            // Переименование
+            // Rename
             if ($name !== null) {
                 $this->directoryService->rename($dirUuid, $org->id, (string) $name, $user->id);
             }
 
-            // Перемещение
+            // Move
             if ($parentUuid !== null) {
                 $newParent = \is_string($parentUuid) && $parentUuid !== '' ? $parentUuid : null;
                 $this->directoryService->move($dirUuid, $org->id, $newParent, $user->id);
             }
 
-            // Перезагрузить после всех изменений
+            // Reload after all changes
             $dir = $this->directoryService->findInOrg($dirUuid, $org->id, $user->id);
         } catch (AuthException $e) {
             return Response::error($e->getMessage(), $e->getCode() ?: 403);
@@ -325,10 +325,10 @@ final class DirectoryController
     }
 
     /**
-     * Сериализовать каталог в массив для JSON-ответа.
+     * Serialize a directory to an array for the JSON response.
      *
-     * @param array<string, string> $idToUuid Карта id→uuid для быстрого разрешения parent_uuid.
-     *                                        Если не передана — выполняется дополнительный запрос.
+     * @param array<string, string> $idToUuid Map id->uuid for quick resolution parent_uuid.
+     *                                        If not provided - an additional query is performed.
      * @return array<string, mixed>
      */
     private function serializeDir(Directory $dir, array $idToUuid = []): array

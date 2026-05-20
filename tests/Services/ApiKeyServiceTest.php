@@ -12,8 +12,8 @@ use Passway\Services\OrganizationService;
 use Passway\Tests\DatabaseTestCase;
 
 /**
- * Тесты ApiKeyService: создание, листинг, отзыв API-ключей,
- * управление правами, валидация, rate limiting.
+ * ApiKeyService tests: creation, listing, API key revocation,
+ * permission management, validation, rate limiting.
  *
  * @requires extension pdo_sqlite
  */

@@ -14,19 +14,19 @@ use Passway\Services\ApiKeyService;
 use Passway\Services\SessionService;
 
 /**
- * Middleware аутентификации + rate limiting.
+ * Authentication middleware + rate limiting.
  *
- * Порядок:
- *   1. Rate limiting по IP (429 если превышен лимит)
+ * Order:
+ *   1. Rate limiting by IP (429 if the limit is exceeded)
  *   2. Cookie SESSION_COOKIE_NAME → SessionService::validate()
  *   3. Header X-Api-Key          → ApiKeyService::validate()
  *
- * Бакеты rate limiting:
- *   - 'auth' для /api/v1/auth/* (20 req/min)
- *   - 'api'  для всех остальных (100 req/min)
+ * Rate limiting buckets:
+ *   - 'auth' for /api/v1/auth/* (20 req/min)
+ *   - 'api'  for all others (100 req/min)
  *
- * При успехе: AuthContext::setUser($user)
- * При отказе: 401 Unauthorized
+ * On success: AuthContext::setUser($user)
+ * On denial: 401 Unauthorized
  */
 final class AuthMiddleware
 {
@@ -68,7 +68,7 @@ final class AuthMiddleware
                 AuthContext::setUser($user);
                 return $next($request);
             }
-            // Cookie есть, но сессия невалидна → очищаем
+            // Cookie exists, but the session is invalid -> clear it
             $this->auditService->record(
                 action: 'auth.session_fail',
                 ipAddress: $request->ip(),

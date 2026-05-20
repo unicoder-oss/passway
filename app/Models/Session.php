@@ -7,8 +7,8 @@ namespace Passway\Models;
 use Passway\Core\Database;
 
 /**
- * Тонкая модель сессии.
- * token_hash — SHA-256 от raw-токена (64 hex символа), plaintext НИКОГДА не хранится.
+ * Thin model session.
+ * token_hash - SHA-256 of the raw token (64 hex characters); plaintext is NEVER stored.
  */
 final class Session
 {
@@ -25,7 +25,7 @@ final class Session
     ) {}
 
     // ------------------------------------------------------------------ //
-    //  Фабрика из строки БД                                               //
+    //  Factory from row DB                                               //
     // ------------------------------------------------------------------ //
 
     /** @param array<string, mixed> $row */
@@ -45,7 +45,7 @@ final class Session
     }
 
     // ------------------------------------------------------------------ //
-    //  Запросы                                                            //
+    //  Queries                                                            //
     // ------------------------------------------------------------------ //
 
     public static function findByTokenHash(string $hash): ?self

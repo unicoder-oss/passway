@@ -2,24 +2,24 @@
 <?php
 
 /**
- * CLI-скрипт запуска миграций.
+ * CLI script for running migrations.
  *
- * Использование:
- *   php database/migrate.php up       — применить все новые миграции
- *   php database/migrate.php down     — откатить последний batch
- *   php database/migrate.php down 2   — откатить 2 последних batch
- *   php database/migrate.php reset    — откатить все миграции
- *   php database/migrate.php status   — показать статус
- *   php database/migrate.php fresh    — удалить все таблицы + up (ТОЛЬКО для разработки!)
+ * Usage:
+ *   php database/migrate.php up       — apply all new migrations
+ *   php database/migrate.php down     — roll back the latest batch
+ *   php database/migrate.php down 2   — roll back the last 2 batches
+ *   php database/migrate.php reset    — roll back all migrations
+ *   php database/migrate.php status   — show status
+ *   php database/migrate.php fresh    — drop all tables + up (DEVELOPMENT ONLY!)
  */
 
 declare(strict_types=1);
 
-// Определяем корень проекта
+// Define the project root
 define('PASSWAY_ROOT', dirname(__DIR__));
 define('PASSWAY_START', microtime(true));
 
-// Composer автозагрузка
+// Composer autoloading
 $autoloader = PASSWAY_ROOT . '/vendor/autoload.php';
 if (!file_exists($autoloader)) {
     fwrite(STDERR, "Error: vendor/autoload.php not found. Run: composer install\n");
@@ -27,7 +27,7 @@ if (!file_exists($autoloader)) {
 }
 require_once $autoloader;
 
-// Загружаем .env
+// Load .env
 if (file_exists(PASSWAY_ROOT . '/.env')) {
     $dotenv = Dotenv\Dotenv::createImmutable(PASSWAY_ROOT);
     $dotenv->safeLoad();
@@ -37,14 +37,14 @@ use Passway\Core\Database;
 use Passway\Database\MigrationRunner;
 
 // ------------------------------------------------------------------ //
-//  Парсинг аргументов                                                  //
+//  Argument parsing                                                   //
 // ------------------------------------------------------------------ //
 
 $command = $argv[1] ?? 'status';
 $steps   = isset($argv[2]) ? (int) $argv[2] : 1;
 
 // ------------------------------------------------------------------ //
-//  Утилиты вывода                                                      //
+//  Output utilities                                                    //
 // ------------------------------------------------------------------ //
 
 function info(string $msg): void  { echo "\033[32m{$msg}\033[0m\n"; }
@@ -53,7 +53,7 @@ function error(string $msg): void { fwrite(STDERR, "\033[31m{$msg}\033[0m\n"); }
 function line(string $msg): void  { echo $msg . "\n"; }
 
 // ------------------------------------------------------------------ //
-//  Выполнение команды                                                  //
+//  Command execution                                                   //
 // ------------------------------------------------------------------ //
 
 try {
@@ -130,7 +130,7 @@ try {
                 break;
             }
 
-            // Заголовок таблицы
+            // Table header
             line(str_repeat('-', 80));
             line(sprintf("  %-45s  %-8s  %s", 'Migration', 'Status', 'Applied At'));
             line(str_repeat('-', 80));

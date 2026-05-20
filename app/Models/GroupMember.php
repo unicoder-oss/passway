@@ -7,7 +7,7 @@ namespace Passway\Models;
 use Passway\Core\Database;
 
 /**
- * Тонкая модель участника группы.
+ * Thin model group member.
  */
 final class GroupMember
 {
@@ -20,7 +20,7 @@ final class GroupMember
     ) {}
 
     // ------------------------------------------------------------------ //
-    //  Фабрика                                                            //
+    //  Factory                                                            //
     // ------------------------------------------------------------------ //
 
     /** @param array<string, mixed> $row */
@@ -37,7 +37,7 @@ final class GroupMember
     }
 
     // ------------------------------------------------------------------ //
-    //  Запросы                                                            //
+    //  Queries                                                            //
     // ------------------------------------------------------------------ //
 
     public static function findByGroupAndUser(string $groupId, string $userId): ?self
@@ -50,7 +50,7 @@ final class GroupMember
     }
 
     /**
-     * Все участники группы.
+     * All group members.
      *
      * @return self[]
      */
@@ -64,7 +64,7 @@ final class GroupMember
     }
 
     /**
-     * Все группы, в которых состоит пользователь.
+     * All groups the user belongs to.
      *
      * @return self[]
      */
@@ -78,7 +78,7 @@ final class GroupMember
     }
 
     /**
-     * Получить ID всех групп пользователя в рамках организации.
+     * Get IDs of all user groups within an organization.
      *
      * @return string[]
      */

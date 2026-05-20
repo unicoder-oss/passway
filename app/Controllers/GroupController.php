@@ -14,15 +14,15 @@ use Passway\Models\Organization;
 use Passway\Services\GroupService;
 
 /**
- * Контроллер групп пользователей организации.
+ * Controller organization user groups.
  *
- * GET    /api/v1/organizations/:uuid/groups                           — список групп
- * POST   /api/v1/organizations/:uuid/groups                           — создать группу
- * GET    /api/v1/organizations/:uuid/groups/:grpUuid                  — показать группу
- * DELETE /api/v1/organizations/:uuid/groups/:grpUuid                  — удалить группу
- * GET    /api/v1/organizations/:uuid/groups/:grpUuid/members          — участники группы
- * POST   /api/v1/organizations/:uuid/groups/:grpUuid/members          — добавить участника
- * DELETE /api/v1/organizations/:uuid/groups/:grpUuid/members/:userUuid — удалить участника
+ * GET    /api/v1/organizations/:uuid/groups                           - list groups
+ * POST   /api/v1/organizations/:uuid/groups                           - create group
+ * GET    /api/v1/organizations/:uuid/groups/:grpUuid                  - show group
+ * DELETE /api/v1/organizations/:uuid/groups/:grpUuid                  - delete group
+ * GET    /api/v1/organizations/:uuid/groups/:grpUuid/members          - group members
+ * POST   /api/v1/organizations/:uuid/groups/:grpUuid/members          - add member
+ * DELETE /api/v1/organizations/:uuid/groups/:grpUuid/members/:userUuid - remove member
  */
 final class GroupController
 {

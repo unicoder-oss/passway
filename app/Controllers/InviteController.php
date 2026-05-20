@@ -18,13 +18,13 @@ use Passway\Services\SessionService;
 use Passway\Services\SetupService;
 
 /**
- * Контроллер инвайт-ссылок.
+ * Controller invite links.
  *
- * POST   /api/v1/organizations/:uuid/invites          — создать инвайт join_org
- * GET    /api/v1/organizations/:uuid/invites          — список активных инвайтов
- * DELETE /api/v1/organizations/:uuid/invites/:invUuid — отозвать инвайт
- * GET    /invite/:token                               — информация об инвайте (web)
- * POST   /invite/:token                               — принять инвайт (web/api)
+ * POST   /api/v1/organizations/:uuid/invites          - create invite join_org
+ * GET    /api/v1/organizations/:uuid/invites          - list active invites
+ * DELETE /api/v1/organizations/:uuid/invites/:invUuid - revoke invite
+ * GET    /invite/:token                               - invite information (web)
+ * POST   /invite/:token                               - accept invite (web/api)
  */
 final class InviteController
 {
@@ -113,7 +113,7 @@ final class InviteController
     }
 
     // ------------------------------------------------------------------ //
-    //  GET /invite/:token  (web — информация об инвайте)                  //
+    //  GET /invite/:token  (web - invite information)
     // ------------------------------------------------------------------ //
 
     public function showAccept(Request $request): Response
@@ -166,7 +166,7 @@ final class InviteController
     }
 
     // ------------------------------------------------------------------ //
-    //  POST /invite/:token  (принять инвайт)                              //
+    //  POST /invite/:token  (accept invite)
     // ------------------------------------------------------------------ //
 
     public function accept(Request $request): Response
@@ -175,7 +175,7 @@ final class InviteController
         $user  = $this->resolveInviteUser();
 
         if ($user === null) {
-            // Не аутентифицирован — редиректим на логин с return_to
+            // Unauthenticated - redirect to login with return_to
             return Response::redirect('/auth/login?return_to=' . \urlencode('/invite/' . $token));
         }
 

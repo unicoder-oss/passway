@@ -7,10 +7,10 @@ namespace Passway\Exceptions;
 use RuntimeException;
 
 /**
- * Выбрасывается когда расшифровка не удалась.
+ * Thrown when decryption fails.
  *
- * ВАЖНО: сообщение об ошибке намеренно лаконично —
- * не раскрывает причину (неверный ключ vs повреждённые данные).
- * Подробности только в audit log (никогда не в HTTP-ответе).
+ * IMPORTANT: the error message is intentionally terse -
+ * does not disclose the reason (wrong key vs corrupted data).
+ * Details only in the audit log (never in the HTTP response).
  */
 final class DecryptionException extends RuntimeException {}

@@ -7,13 +7,13 @@ namespace Passway\Models;
 use Passway\Core\Database;
 
 /**
- * Тонкая модель участника организации.
+ * Thin model organization member.
  *
- * Роли (иерархия убывает): owner | admin | editor | reader
+ * Roles (descending hierarchy): owner | admin | editor | reader
  */
 final class OrganizationMember
 {
-    /** Допустимые роли в порядке убывания привилегий */
+    /** Allowed roles in descending privilege order */
     public const ROLES = ['owner', 'admin', 'editor', 'reader'];
 
     public function __construct(
@@ -26,7 +26,7 @@ final class OrganizationMember
     ) {}
 
     // ------------------------------------------------------------------ //
-    //  Фабрика                                                            //
+    //  Factory                                                            //
     // ------------------------------------------------------------------ //
 
     /** @param array<string, mixed> $row */
@@ -44,7 +44,7 @@ final class OrganizationMember
     }
 
     // ------------------------------------------------------------------ //
-    //  Запросы                                                            //
+    //  Queries                                                            //
     // ------------------------------------------------------------------ //
 
     public static function findByOrgAndUser(string $orgId, string $userId): ?self
@@ -57,7 +57,7 @@ final class OrganizationMember
     }
 
     /**
-     * Все участники организации.
+     * All organization members.
      *
      * @return self[]
      */
@@ -71,7 +71,7 @@ final class OrganizationMember
     }
 
     /**
-     * Все организации пользователя (memberships).
+     * All user organizations (memberships).
      *
      * @return self[]
      */
@@ -85,11 +85,11 @@ final class OrganizationMember
     }
 
     // ------------------------------------------------------------------ //
-    //  Вспомогательные                                                    //
+    //  Helpers                                                    //
     // ------------------------------------------------------------------ //
 
     /**
-     * Проверить, достаточно ли привилегий (role >= minRole в иерархии).
+     * Check whether privileges are sufficient (role >= minRole in the hierarchy).
      */
     public static function roleIndex(string $role): int
     {

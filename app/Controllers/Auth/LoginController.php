@@ -13,11 +13,11 @@ use Passway\Services\SessionService;
 use Passway\Services\ViewService;
 
 /**
- * Контроллер входа/выхода.
+ * Controller login/logout.
  *
- * POST /auth/login   — email+пароль, возвращает токен или totp_required
- * GET  /auth/logout  — инвалидирует сессию, очищает cookie
- * GET  /auth/me      — текущий пользователь (требует AuthMiddleware)
+ * POST /auth/login   - email+password, returns token or totp_required
+ * GET  /auth/logout  - invalidates the session, clears the cookie
+ * GET  /auth/me      - current user (requires AuthMiddleware)
  */
 final class LoginController
 {
@@ -50,7 +50,7 @@ final class LoginController
 
     public function login(Request $request): Response
     {
-        // Проверить setup
+        // Check setup
         try {
             $this->authService->assertSetupComplete();
         } catch (AuthException $e) {
@@ -89,7 +89,7 @@ final class LoginController
             return Response::error($e->getMessage(), \in_array($code, [401, 429, 503]) ? $code : 401);
         }
 
-        // TOTP требуется — клиент перенаправит на /auth/totp/verify
+        // TOTP required - client will redirect to /auth/totp/verify
         if ($result['status'] === 'totp_required') {
             $this->storeReturnTo($returnTo);
             if (!$request->expectsJson() && !$request->isApi()) {
@@ -102,7 +102,7 @@ final class LoginController
             ]);
         }
 
-        // Успешный вход — устанавливаем cookie
+        // Successful login - set the cookie
         $this->sessionService->setCookie($result['raw_token']);
 
         $user = $result['user'];
@@ -175,7 +175,7 @@ final class LoginController
             return Response::success(['message' => __('ui.auth.logout_success')]);
         }
 
-        // Браузерный редирект на страницу входа (заглушка — будет заменена в Шаге 13)
+        // Browser redirect to the login page (placeholder - will be replaced in Step 13)
         return Response::redirect('/');
     }
 
@@ -184,8 +184,8 @@ final class LoginController
     // ------------------------------------------------------------------ //
 
     /**
-     * Информация о текущем пользователе.
-     * Требует AuthMiddleware (заполняет AuthContext).
+     * Current user information.
+     * Requires AuthMiddleware (fills AuthContext).
      */
     public function me(Request $request): Response
     {

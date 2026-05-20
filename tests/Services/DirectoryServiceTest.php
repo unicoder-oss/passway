@@ -15,7 +15,7 @@ use Passway\Services\PermissionService;
 use Passway\Tests\DatabaseTestCase;
 
 /**
- * Тесты DirectoryService: создание, список, переименование, перемещение, удаление.
+ * DirectoryService tests: creation, listing, rename, move, delete.
  *
  * @requires extension pdo_sqlite
  */
@@ -33,7 +33,7 @@ final class DirectoryServiceTest extends DatabaseTestCase
         $this->permSvc = new PermissionService($this->orgSvc, new GroupService($this->orgSvc));
         $this->svc    = new DirectoryService($this->orgSvc, $this->permSvc);
 
-        // team-режим — нет ограничений по числу организаций
+        // team mode has no limit on the number of organizations
         Database::getInstance()->query(
             "UPDATE system_config SET value = 'team' WHERE key = 'deploy_mode'"
         );
@@ -164,10 +164,10 @@ final class DirectoryServiceTest extends DatabaseTestCase
         $dirs = $this->svc->listAll($org->id, $owner->id);
 
         $this->assertCount(3, $dirs);
-        // Первые два — корневые (depth=0)
+        // The first two are root directories (depth=0)
         $this->assertSame(0, $dirs[0]->depth);
         $this->assertSame(0, $dirs[1]->depth);
-        // Третий — дочерний (depth=1)
+        // The third is a child directory (depth=1)
         $this->assertSame(1, $dirs[2]->depth);
     }
 

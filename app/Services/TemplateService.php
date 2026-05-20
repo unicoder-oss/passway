@@ -10,7 +10,7 @@ use phpseclib3\Crypt\PublicKeyLoader;
 use phpseclib3\Crypt\RSA;
 
 /**
- * Генерация значений по встроенным шаблонам секрета.
+ * Value generation from built-in secret templates.
  */
 final class TemplateService
 {
@@ -31,7 +31,7 @@ final class TemplateService
     }
 
     /**
-     * Сгенерировать значение по шаблону.
+     * Generate a value from a template.
      *
      * @param array<string, mixed> $overrides
      */

@@ -7,10 +7,10 @@ namespace Passway\Models;
 use Passway\Core\Database;
 
 /**
- * Модель API-ключа.
+ * Model API key.
  *
- * Формат ключа: sv_{envPrefix}_{64 random hex chars}
- * В БД хранится только SHA-256 хэш; сам ключ показывается ОДИН раз при создании.
+ * Key format: sv_{envPrefix}_{64 random hex chars}
+ * Only the SHA-256 hash is stored in the DB; the key itself is shown ONCE on creation.
  */
 final class ApiKey
 {
@@ -32,7 +32,7 @@ final class ApiKey
     ) {}
 
     // ------------------------------------------------------------------ //
-    //  Проверка валидности                                                //
+    //  Validity check                                                //
     // ------------------------------------------------------------------ //
 
     public function isValid(): bool
@@ -58,7 +58,7 @@ final class ApiKey
     }
 
     // ------------------------------------------------------------------ //
-    //  Поиск                                                              //
+    //  Search                                                              //
     // ------------------------------------------------------------------ //
 
     public static function findById(string $id): ?self
@@ -99,7 +99,7 @@ final class ApiKey
     }
 
     // ------------------------------------------------------------------ //
-    //  Гидрация                                                           //
+    //  Hydration                                                           //
     // ------------------------------------------------------------------ //
 
     private static function fromRow(array $row): self

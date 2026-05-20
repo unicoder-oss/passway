@@ -17,16 +17,16 @@ use Passway\Models\User;
 use Passway\Services\ApprovalService;
 
 /**
- * Контроллер системы одобрений.
+ * Approval system controller.
  *
- * POST   /api/v1/organizations/:uuid/secrets/:secUuid/approvals         — создать запрос
- * GET    /api/v1/organizations/:uuid/approvals                          — мои запросы
+ * POST   /api/v1/organizations/:uuid/secrets/:secUuid/approvals         - create request
+ * GET    /api/v1/organizations/:uuid/approvals                          - my requests
  * GET    /api/v1/organizations/:uuid/approvals/pending                  — pending (admin+)
- * GET    /api/v1/organizations/:uuid/approvals/:aprUuid                 — детали
- * POST   /api/v1/organizations/:uuid/approvals/:aprUuid/approve         — одобрить (admin+)
- * POST   /api/v1/organizations/:uuid/approvals/:aprUuid/reject          — отклонить (admin+)
- * DELETE /api/v1/organizations/:uuid/approvals/:aprUuid                 — отозвать
- * POST   /api/v1/organizations/:uuid/approvals/:aprUuid/use             — использовать токен
+ * GET    /api/v1/organizations/:uuid/approvals/:aprUuid                 - details
+ * POST   /api/v1/organizations/:uuid/approvals/:aprUuid/approve         - approve (admin+)
+ * POST   /api/v1/organizations/:uuid/approvals/:aprUuid/reject          - reject (admin+)
+ * DELETE /api/v1/organizations/:uuid/approvals/:aprUuid                 - revoke
+ * POST   /api/v1/organizations/:uuid/approvals/:aprUuid/use             - use token
  */
 final class ApprovalController
 {
@@ -82,7 +82,7 @@ final class ApprovalController
     }
 
     // ------------------------------------------------------------------ //
-    //  GET .../approvals  (мои запросы)                                  //
+    //  GET .../approvals  (my requests)                                  //
     // ------------------------------------------------------------------ //
 
     public function listMy(Request $request): Response
@@ -100,7 +100,7 @@ final class ApprovalController
     }
 
     // ------------------------------------------------------------------ //
-    //  GET .../approvals/pending  (ожидающие, для admin+)               //
+    //  GET .../approvals/pending  (pending, for admin+)               //
     // ------------------------------------------------------------------ //
 
     public function listPending(Request $request): Response
@@ -180,7 +180,7 @@ final class ApprovalController
             return Response::error($e->getMessage(), 422);
         }
 
-        // Токен возвращается ОДИН РАЗ в открытом виде
+        // The token is returned ONCE in plaintext
         return Response::success(\array_merge(
             $this->serializeRequest($approvalReq),
             ['access_token' => $token]

@@ -7,7 +7,7 @@ namespace Passway\Models;
 use Passway\Core\Database;
 
 /**
- * Тонкая модель группы пользователей внутри организации.
+ * Thin model user group within an organization.
  */
 final class Group
 {
@@ -23,7 +23,7 @@ final class Group
     ) {}
 
     // ------------------------------------------------------------------ //
-    //  Фабрика                                                            //
+    //  Factory                                                            //
     // ------------------------------------------------------------------ //
 
     /** @param array<string, mixed> $row */
@@ -44,7 +44,7 @@ final class Group
     }
 
     // ------------------------------------------------------------------ //
-    //  Запросы                                                            //
+    //  Queries                                                            //
     // ------------------------------------------------------------------ //
 
     public static function findById(string $id): ?self
@@ -66,7 +66,7 @@ final class Group
     }
 
     /**
-     * Все группы организации (по алфавиту).
+     * All organization groups (alphabetically).
      *
      * @return self[]
      */

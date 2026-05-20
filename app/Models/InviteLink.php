@@ -7,11 +7,11 @@ namespace Passway\Models;
 use Passway\Core\Database;
 
 /**
- * Тонкая модель инвайт-ссылки.
+ * Thin model invite link.
  *
- * Типы:
- *   create_org — зарегистрироваться (новый пользователь) и создать организацию
- *   join_org   — зарегистрироваться или войти и вступить в организацию
+ * Types:
+ *   create_org - register (new user) and create an organization
+ *   join_org   - register or log in and join an organization
  */
 final class InviteLink
 {
@@ -33,7 +33,7 @@ final class InviteLink
     ) {}
 
     // ------------------------------------------------------------------ //
-    //  Фабрика                                                            //
+    //  Factory                                                            //
     // ------------------------------------------------------------------ //
 
     /** @param array<string, mixed> $row */
@@ -59,7 +59,7 @@ final class InviteLink
     }
 
     // ------------------------------------------------------------------ //
-    //  Запросы                                                            //
+    //  Queries                                                            //
     // ------------------------------------------------------------------ //
 
     public static function findByToken(string $token): ?self
@@ -81,7 +81,7 @@ final class InviteLink
     }
 
     /**
-     * Активные (не истёкшие, не использованные) инвайты организации.
+     * Active (not expired, unused) organization invites.
      *
      * @return self[]
      */
@@ -98,7 +98,7 @@ final class InviteLink
     }
 
     // ------------------------------------------------------------------ //
-    //  Вспомогательные                                                    //
+    //  Helpers                                                    //
     // ------------------------------------------------------------------ //
 
     public function isExpired(): bool

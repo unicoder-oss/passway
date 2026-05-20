@@ -3,8 +3,8 @@
 declare(strict_types=1);
 
 /**
- * Глобальные вспомогательные функции.
- * Загружаются автоматически через Composer (files autoload).
+ * Global helper functions.
+ * Loaded automatically through Composer (files autoload).
  */
 
 use Passway\Core\Config;
@@ -13,7 +13,7 @@ use Passway\Services\DeployMode;
 
 if (!function_exists('config')) {
     /**
-     * Получить значение конфигурации.
+     * Get a configuration value.
      */
     function config(string $key, mixed $default = null): mixed
     {
@@ -23,7 +23,7 @@ if (!function_exists('config')) {
 
 if (!function_exists('env')) {
     /**
-     * Получить переменную окружения с fallback.
+     * Get an environment variable with fallback.
      */
     function env(string $key, mixed $default = null): mixed
     {
@@ -43,7 +43,7 @@ if (!function_exists('env')) {
 
 if (!function_exists('base_path')) {
     /**
-     * Получить абсолютный путь относительно корня проекта.
+     * Get an absolute path relative to the project root.
      */
     function base_path(string $path = ''): string
     {
@@ -100,7 +100,7 @@ if (!function_exists('is_team_mode')) {
 
 if (!function_exists('generate_uuid')) {
     /**
-     * Генерировать UUID v4.
+     * Generate UUID v4.
      */
     function generate_uuid(): string
     {
@@ -113,7 +113,7 @@ if (!function_exists('generate_uuid')) {
 
 if (!function_exists('now')) {
     /**
-     * Текущее время в UTC.
+     * Current time in UTC.
      */
     function now(): \DateTimeImmutable
     {
@@ -181,7 +181,7 @@ if (!function_exists('avatar_color_for_user')) {
 
 if (!function_exists('e')) {
     /**
-     * Экранировать HTML-спецсимволы (защита от XSS в шаблонах).
+     * Escape HTML special characters (XSS protection in templates).
      */
     function e(string $value): string
     {

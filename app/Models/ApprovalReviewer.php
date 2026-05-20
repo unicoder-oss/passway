@@ -7,11 +7,11 @@ namespace Passway\Models;
 use Passway\Core\Database;
 
 /**
- * Тонкая модель ревьювера запроса на одобрение.
+ * Thin model approval request reviewer.
  *
- * Структура таблицы approval_reviewers:
+ * Table structure approval_reviewers:
  *   - id, approval_request_id, reviewer_id
- *   - notified_at — когда было отправлено уведомление
+ *   - notified_at - when notification was sent
  *   - created_at
  */
 final class ApprovalReviewer
@@ -25,7 +25,7 @@ final class ApprovalReviewer
     ) {}
 
     // ------------------------------------------------------------------ //
-    //  Фабрика                                                            //
+    //  Factory                                                            //
     // ------------------------------------------------------------------ //
 
     /** @param array<string, mixed> $row */
@@ -42,11 +42,11 @@ final class ApprovalReviewer
     }
 
     // ------------------------------------------------------------------ //
-    //  Запросы                                                            //
+    //  Queries                                                            //
     // ------------------------------------------------------------------ //
 
     /**
-     * Все ревьюверы для данного запроса.
+     * All reviewers for this request.
      *
      * @return self[]
      */
@@ -60,7 +60,7 @@ final class ApprovalReviewer
     }
 
     /**
-     * Проверить, является ли пользователь ревьювером запроса.
+     * Check whether the user is a request reviewer.
      */
     public static function isReviewer(string $requestId, string $userId): bool
     {

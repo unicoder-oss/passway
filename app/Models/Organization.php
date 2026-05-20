@@ -7,7 +7,7 @@ namespace Passway\Models;
 use Passway\Core\Database;
 
 /**
- * Тонкая модель организации.
+ * Thin model organization.
  */
 final class Organization
 {
@@ -26,7 +26,7 @@ final class Organization
     ) {}
 
     // ------------------------------------------------------------------ //
-    //  Фабрика                                                            //
+    //  Factory                                                            //
     // ------------------------------------------------------------------ //
 
     /** @param array<string, mixed> $row */
@@ -51,7 +51,7 @@ final class Organization
     }
 
     // ------------------------------------------------------------------ //
-    //  Запросы                                                            //
+    //  Queries                                                            //
     // ------------------------------------------------------------------ //
 
     public static function findById(string $id): ?self
@@ -82,7 +82,7 @@ final class Organization
     }
 
     /**
-     * Все (не удалённые) организации пользователя через organization_members.
+     * All (non-deleted) user organizations through organization_members.
      *
      * @return self[]
      */
@@ -98,7 +98,7 @@ final class Organization
         return \array_map(fn($r) => self::fromRow($r), $rows);
     }
 
-    /** Количество активных организаций (для solo-режима). */
+    /** Number of active organizations (for solo mode). */
     public static function count(): int
     {
         return (int) Database::getInstance()->fetchColumn(
@@ -107,7 +107,7 @@ final class Organization
     }
 
     // ------------------------------------------------------------------ //
-    //  Запись                                                             //
+    //  Writes                                                             //
     // ------------------------------------------------------------------ //
 
     /** @param array<string, mixed> $data */

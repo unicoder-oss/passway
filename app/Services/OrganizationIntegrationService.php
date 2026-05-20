@@ -10,7 +10,7 @@ use Passway\Models\OrganizationIntegration;
 use Passway\Models\RotationService;
 
 /**
- * Управление привязками rotation services к организациям.
+ * Manage bindings rotation services to organizations.
  */
 final class OrganizationIntegrationService
 {

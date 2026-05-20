@@ -7,16 +7,16 @@ namespace Passway\Models;
 use Passway\Core\Database;
 
 /**
- * Тонкая модель запроса на одобрение доступа к секрету.
+ * Thin model for a secret access approval request.
  *
- * Структура таблицы approval_requests:
+ * Table structure approval_requests:
  *   - id, uuid, secret_id, requested_by
  *   - request_type (read|write|delete)
- *   - reason (текст причины запроса)
+ *   - reason (request reason text)
  *   - status (pending|approved|rejected|expired|revoked)
  *   - approved_by, rejection_reason
- *   - expires_at — дедлайн для ответа ревьювера; после одобрения — TTL токена
- *   - access_token_hash — SHA-256 хэш одноразового токена (NULL после использования)
+ *   - expires_at - deadline for reviewer response; after approval - token TTL
+ *   - access_token_hash - SHA-256 hash of the one-time token (NULL after use)
  *   - created_at, resolved_at
  */
 final class ApprovalRequest
@@ -46,7 +46,7 @@ final class ApprovalRequest
     ) {}
 
     // ------------------------------------------------------------------ //
-    //  Фабрика                                                            //
+    //  Factory                                                            //
     // ------------------------------------------------------------------ //
 
     /** @param array<string, mixed> $row */
@@ -81,7 +81,7 @@ final class ApprovalRequest
     }
 
     // ------------------------------------------------------------------ //
-    //  Запросы                                                            //
+    //  Queries                                                            //
     // ------------------------------------------------------------------ //
 
     public static function findById(string $id): ?self
@@ -103,7 +103,7 @@ final class ApprovalRequest
     }
 
     /**
-     * Все запросы, созданные пользователем (новейшие первыми).
+     * All requests created by the user (newest first).
      *
      * @return self[]
      */
@@ -125,7 +125,7 @@ final class ApprovalRequest
     }
 
     /**
-     * Ожидающие одобрения запросы, где пользователь является ревьювером.
+     * Pending approval requests, where the user is a reviewer.
      *
      * @return self[]
      */
@@ -142,7 +142,7 @@ final class ApprovalRequest
     }
 
     /**
-     * Проверить, есть ли pending-запрос от пользователя для данного секрета и типа.
+     * Check whether the user has a pending request for this secret and type.
      */
     public static function hasPending(string $secretId, string $userId, string $requestType): bool
     {
@@ -182,7 +182,7 @@ final class ApprovalRequest
     }
 
     // ------------------------------------------------------------------ //
-    //  Запись                                                             //
+    //  Writes                                                             //
     // ------------------------------------------------------------------ //
 
     /** @param array<string, mixed> $data */
