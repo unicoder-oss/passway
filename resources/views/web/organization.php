@@ -1766,6 +1766,22 @@ require base_path('resources/views/partials/auth_topbar.php');
             templateValueMode = 'generated';
             void refreshTemplatePreview(true, null, true, false);
         });
+        wizardForm.addEventListener('keydown', (event) => {
+            if (event.key !== 'Enter') {
+                return;
+            }
+
+            const target = event.target;
+            if (!(target instanceof HTMLElement)) {
+                return;
+            }
+
+            if (target.tagName === 'TEXTAREA' || target.tagName === 'BUTTON') {
+                return;
+            }
+
+            event.preventDefault();
+        });
         wizardForm.addEventListener('submit', (event) => {
             if (isTemplateSelected() && (!templateValueValid || previewDisplay.value.trim() === '')) {
                 event.preventDefault();

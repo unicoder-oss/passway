@@ -2239,6 +2239,9 @@ final class WebController
             $pendingApprovalRequest = $this->approvalService->findPendingReadForUser($secret->id, $user->id);
         }
 
+        $canWriteSecret = $secret->ownerUserId === $user->id
+            || $this->permissionService->can('write', $user->id, 'secret', $secret->id, $org->id);
+
         return $this->html($this->view->render('web/secret_show', [
             'title' => __('ui.titles.secret_details'),
             'user' => $user,
@@ -2264,7 +2267,7 @@ final class WebController
                 : [],
             'canDirectReadSecret' => $canDirectRead,
             'pendingApprovalRequest' => $pendingApprovalRequest,
-            'canWriteSecret' => $this->permissionService->can('write', $user->id, 'secret', $secret->id, $org->id),
+            'canWriteSecret' => $canWriteSecret,
             'canManageSecretAcl' => $secret->ownerUserId === $user->id,
             'error' => $request->query('error'),
         ]));

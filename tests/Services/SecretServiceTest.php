@@ -380,6 +380,54 @@ final class SecretServiceTest extends DatabaseTestCase
         $this->assertSame('new', $value);
     }
 
+    public function test_secret_owner_can_write_even_with_default_write_deny(): void
+    {
+        $owner = $this->createTestUser();
+        $org = $this->orgSvc->create('Org', $owner->id);
+        $dir = $this->dirSvc->create($org->id, null, 'Dir', $owner->id);
+        $secret = $this->svc->create(
+            $org->id,
+            $dir->uuid,
+            'Secret',
+            'static',
+            'old',
+            $owner->id,
+            null,
+            null,
+            'inherit',
+            'deny'
+        );
+
+        $this->svc->update($secret->uuid, $org->id, $owner->id, 'Renamed', 'new');
+
+        ['secret' => $updated, 'value' => $value] = $this->svc->get($secret->uuid, $org->id, $owner->id);
+        $this->assertSame('Renamed', $updated->name);
+        $this->assertSame('new', $value);
+    }
+
+    public function test_secret_owner_can_delete_even_with_default_write_deny(): void
+    {
+        $owner = $this->createTestUser();
+        $org = $this->orgSvc->create('Org', $owner->id);
+        $dir = $this->dirSvc->create($org->id, null, 'Dir', $owner->id);
+        $secret = $this->svc->create(
+            $org->id,
+            $dir->uuid,
+            'Secret',
+            'static',
+            'value',
+            $owner->id,
+            null,
+            null,
+            'inherit',
+            'deny'
+        );
+
+        $this->svc->delete($secret->uuid, $org->id, $owner->id);
+
+        $this->assertNull(Secret::findByUuid($secret->uuid));
+    }
+
     public function test_transfer_ownership_updates_secret_owner(): void
     {
         $owner = $this->createTestUser();
