@@ -1,11 +1,8 @@
 <?php
-$topbarTitle = __('ui.home.signed_in_as', ['email' => (string) $user->email]);
-$topbarLinks = [];
-if ($currentOrg) {
-    $topbarLinks[] = ['href' => '/organizations/' . $currentOrg->uuid, 'label' => __('ui.app.manage_org')];
-}
-$topbarLinks[] = ['href' => '/rotation-services', 'label' => __('ui.home.rotation_services')];
-$topbarLinks[] = ['href' => '/auth/logout', 'label' => __('ui.app.logout')];
+$topbarTitle = '';
+$topbarLinks = [
+    ['href' => '/rotation-services', 'label' => __('ui.home.rotation_services')],
+];
 require base_path('resources/views/partials/auth_topbar.php');
 ?>
 
@@ -35,7 +32,7 @@ require base_path('resources/views/partials/auth_topbar.php');
                 <form method="POST" action="/organization-invites" class="grid" style="gap:.75rem;">
                     <div>
                         <label for="org-invite-ttl"><?= e(__('ui.home.organization_invite_ttl')) ?></label>
-                        <input id="org-invite-ttl" type="number" name="ttl" value="3600" min="60" max="604800">
+                        <input id="org-invite-ttl" type="number" name="ttl" value="1" min="1" max="168">
                     </div>
                     <button type="submit"><?= e(__('ui.home.create_organization_invite')) ?></button>
                 </form>
@@ -67,9 +64,6 @@ require base_path('resources/views/partials/auth_topbar.php');
                     <div class="muted"><?= e(__('ui.home.secrets_total', ['count' => (string) $card['secrets']])) ?></div>
                     <div class="muted"><?= e(__('ui.home.members_total', ['count' => (string) $card['members']])) ?></div>
                 </div>
-                <?php if ($currentOrg && $currentOrg->uuid === $organization->uuid): ?>
-                    <div class="pill"><?= e(__('ui.home.current_organization')) ?></div>
-                <?php endif; ?>
             </a>
         <?php endforeach; ?>
     </div>

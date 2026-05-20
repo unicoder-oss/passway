@@ -186,26 +186,18 @@ final class SetupController
             <meta name="viewport" content="width=device-width, initial-scale=1.0">
             <title>{$title}</title>
             <style>
-                *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
-                body { font-family: system-ui, sans-serif; background: #f4f5f7; display: flex;
-                       align-items: center; justify-content: center; min-height: 100vh; padding: 1rem; }
-                .card { background: #fff; border-radius: 8px; box-shadow: 0 2px 16px rgba(0,0,0,.1);
-                        padding: 2.5rem; width: 100%; max-width: 440px; }
-                h1 { font-size: 1.5rem; margin-bottom: .25rem; color: #111; }
-                p.subtitle { color: #666; font-size: .9rem; margin-bottom: 1.75rem; }
-                .error { background: #fff0f0; color: #c00; border: 1px solid #f5c6c6;
-                         border-radius: 4px; padding: .75rem 1rem; margin-bottom: 1.25rem;
-                         font-size: .9rem; }
-                label { display: block; font-size: .875rem; font-weight: 500; color: #333;
-                        margin-bottom: .3rem; margin-top: 1rem; }
-                input, select { width: 100%; padding: .625rem .75rem; border: 1px solid #d0d5dd;
-                                border-radius: 6px; font-size: .9375rem; outline: none; }
-                input:focus, select:focus { border-color: #4f46e5; box-shadow: 0 0 0 3px rgba(79,70,229,.15); }
-                button { margin-top: 1.75rem; width: 100%; padding: .75rem; background: #4f46e5;
-                         color: #fff; border: none; border-radius: 6px; font-size: 1rem;
-                         font-weight: 600; cursor: pointer; }
-                button:hover { background: #4338ca; }
-                .hint { font-size: .8rem; color: #888; margin-top: .3rem; }
+                :root { color-scheme: light dark; --bg:#f5f5f5; --fg:#161616; --muted:#606060; --panel:#fff; --border:#d0d0d0; --error-bg:#f5e6e6; --error-border:#c79494; --error-fg:#5f1e1e; --button:#4b4b4b; }
+                @media (prefers-color-scheme: dark) { :root { --bg:#111111; --fg:#f3f3f3; --muted:#a4a4a4; --panel:#1a1a1a; --border:#393939; --error-bg:#351b1b; --error-border:#6a2d2d; --error-fg:#f1cdcd; --button:#d6d6d6; } }
+                * { box-sizing: border-box; }
+                body { margin: 0; font-family: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace; background: var(--bg); color: var(--fg); display: flex; align-items: center; justify-content: center; min-height: 100vh; padding: 1rem; }
+                .card { background: var(--panel); border: 1px solid var(--border); padding: 2rem; width: 100%; max-width: 520px; }
+                h1 { margin: 0 0 .35rem; font-size: 1.6rem; }
+                p.subtitle { margin: 0 0 1.5rem; color: var(--muted); }
+                .error { border: 1px solid var(--error-border); background: var(--error-bg); color: var(--error-fg); padding: .9rem 1rem; margin-bottom: 1rem; }
+                label { display: block; margin-top: 1rem; margin-bottom: .35rem; color: var(--muted); }
+                input, select { width: 100%; border: 1px solid var(--border); background: var(--panel); color: var(--fg); padding: .8rem .9rem; font: inherit; }
+                button { margin-top: 1.5rem; width: 100%; border: 1px solid var(--button); background: var(--button); color: var(--bg); padding: .8rem 1rem; font: inherit; cursor: pointer; }
+                .hint { font-size: .85rem; color: var(--muted); margin-top: .35rem; }
             </style>
         </head>
         <body>

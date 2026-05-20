@@ -134,6 +134,12 @@ final class InviteController
                 ->withBody($this->renderCreateOrgEntry($invite));
         }
 
+        if (!AuthContext::isAuthenticated()) {
+            return Response::make(200)
+                ->withContentType('text/html; charset=utf-8')
+                ->withBody($this->renderJoinOrgEntry($invite, $org));
+        }
+
         return Response::make(200)
             ->withContentType('text/html; charset=utf-8')
             ->withBody($this->renderAcceptForm($invite, $org));
@@ -190,7 +196,7 @@ final class InviteController
             return $user;
         }
 
-        $invite = $this->requireCreateOrgInvite($token);
+        $invite = $this->requireWebInvite($token);
         if (!$invite instanceof InviteLink) {
             return $invite;
         }
@@ -205,7 +211,14 @@ final class InviteController
         $token = (string) $request->routeParam('token');
 
         if (AuthContext::isAuthenticated()) {
-            return Response::redirect('/invite/' . $token . '/create-organization');
+            $invite = $this->requireWebInvite($token);
+            if (!$invite instanceof InviteLink) {
+                return $invite;
+            }
+
+            return Response::redirect($invite->type === InviteLink::TYPE_CREATE_ORG
+                ? '/invite/' . $token . '/create-organization'
+                : '/invite/' . $token);
         }
 
         $invite = $this->requireCreateOrgInvite($token);
@@ -227,7 +240,14 @@ final class InviteController
         $token = (string) $request->routeParam('token');
 
         if (AuthContext::isAuthenticated()) {
-            return Response::redirect('/invite/' . $token . '/create-organization');
+            $invite = $this->requireWebInvite($token);
+            if (!$invite instanceof InviteLink) {
+                return $invite;
+            }
+
+            return Response::redirect($invite->type === InviteLink::TYPE_CREATE_ORG
+                ? '/invite/' . $token . '/create-organization'
+                : '/invite/' . $token);
         }
 
         $invite = $this->requireCreateOrgInvite($token);
@@ -274,7 +294,9 @@ final class InviteController
             return Response::redirect('/invite/' . $token . '/register?error=' . \urlencode($e->getMessage()) . '&email=' . \urlencode($email));
         }
 
-        return Response::redirect('/invite/' . $token . '/create-organization');
+        return Response::redirect($invite->type === InviteLink::TYPE_CREATE_ORG
+            ? '/invite/' . $token . '/create-organization'
+            : '/invite/' . $token);
     }
 
     public function createOrganizationFromInvite(Request $request): Response
@@ -394,20 +416,14 @@ final class InviteController
             <meta name="viewport" content="width=device-width, initial-scale=1.0">
             <title>{$title}</title>
             <style>
-                body { font-family: system-ui, sans-serif; background: #f4f5f7;
-                       display: flex; align-items: center; justify-content: center;
-                       min-height: 100vh; padding: 1rem; }
-                .card { background: #fff; border-radius: 8px; box-shadow: 0 2px 16px rgba(0,0,0,.1);
-                        padding: 2.5rem; width: 100%; max-width: 400px; text-align: center; }
-                h1 { font-size: 1.4rem; margin-bottom: .5rem; }
-                p  { color: #555; margin-bottom: 1.5rem; }
-                .badge { display: inline-block; padding: .25rem .75rem; border-radius: 99px;
-                         background: #e0f2fe; color: #0369a1; font-size: .85rem; font-weight: 600;
-                         margin-bottom: 1.5rem; }
-                button { width: 100%; padding: .75rem; background: #4f46e5; color: #fff;
-                         border: none; border-radius: 6px; font-size: 1rem; font-weight: 600;
-                         cursor: pointer; }
-                button:hover { background: #4338ca; }
+                :root { color-scheme: light dark; --bg:#f5f5f5; --fg:#161616; --muted:#606060; --panel:#fff; --border:#d0d0d0; --button:#4b4b4b; }
+                @media (prefers-color-scheme: dark) { :root { --bg:#111111; --fg:#f3f3f3; --muted:#a4a4a4; --panel:#1a1a1a; --border:#393939; --button:#d6d6d6; } }
+                body { font-family: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace; background: var(--bg); color: var(--fg); display: flex; align-items: center; justify-content: center; min-height: 100vh; padding: 1rem; }
+                .card { background: var(--panel); border: 1px solid var(--border); padding: 2rem; width: 100%; max-width: 420px; text-align: center; }
+                h1 { margin: 0 0 .75rem; font-size: 1.5rem; }
+                p { color: var(--muted); margin: 0 0 1.25rem; }
+                .badge { display: inline-block; padding: .35rem .75rem; border: 1px solid var(--border); background: var(--panel); font-size: .85rem; font-weight: 600; margin-bottom: 1.25rem; }
+                button { width: 100%; border: 1px solid var(--button); background: var(--button); color: var(--bg); padding: .8rem 1rem; font: inherit; cursor: pointer; }
             </style>
         </head>
         <body>
@@ -448,10 +464,12 @@ final class InviteController
             <meta name="viewport" content="width=device-width, initial-scale=1.0">
             <title>{$title}</title>
             <style>
-                body { font-family: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace; background: #f5f5f5; color: #161616; display: flex; align-items: center; justify-content: center; min-height: 100vh; padding: 1rem; }
-                .card { background: #fff; border: 1px solid #d0d0d0; padding: 2rem; width: 100%; max-width: 520px; }
+                :root { color-scheme: light dark; --bg:#f5f5f5; --fg:#161616; --muted:#606060; --panel:#fff; --border:#d0d0d0; --button:#4b4b4b; }
+                @media (prefers-color-scheme: dark) { :root { --bg:#111111; --fg:#f3f3f3; --muted:#a4a4a4; --panel:#1a1a1a; --border:#393939; --button:#d6d6d6; } }
+                body { font-family: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace; background: var(--bg); color: var(--fg); display: flex; align-items: center; justify-content: center; min-height: 100vh; padding: 1rem; }
+                .card { background: var(--panel); border: 1px solid var(--border); padding: 2rem; width: 100%; max-width: 520px; }
                 h1 { margin: 0 0 .75rem; font-size: 1.5rem; }
-                p { margin: 0 0 1.25rem; color: #606060; }
+                p { margin: 0 0 1.25rem; color: var(--muted); }
                 label { display: block; margin-bottom: .4rem; color: #606060; }
                 input { width: 100%; border: 1px solid #d0d0d0; padding: .8rem .9rem; font: inherit; box-sizing: border-box; }
                 button { width: 100%; border: 1px solid #4b4b4b; background: #4b4b4b; color: #fff; padding: .8rem 1rem; font: inherit; cursor: pointer; margin-top: 1rem; }
@@ -676,10 +694,56 @@ final class InviteController
             <meta name="viewport" content="width=device-width, initial-scale=1.0">
             <title>{$title}</title>
             <style>
-                body { font-family: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace; background: #f5f5f5; color: #161616; display: flex; align-items: center; justify-content: center; min-height: 100vh; padding: 1rem; }
-                .card { background: #fff; border: 1px solid #d0d0d0; padding: 2rem; width: 100%; max-width: 520px; }
+                :root { color-scheme: light dark; --bg:#f5f5f5; --fg:#161616; --muted:#606060; --panel:#fff; --border:#d0d0d0; --button:#4b4b4b; }
+                @media (prefers-color-scheme: dark) { :root { --bg:#111111; --fg:#f3f3f3; --muted:#a4a4a4; --panel:#1a1a1a; --border:#393939; --button:#d6d6d6; } }
+                body { font-family: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace; background: var(--bg); color: var(--fg); display: flex; align-items: center; justify-content: center; min-height: 100vh; padding: 1rem; }
+                .card { background: var(--panel); border: 1px solid var(--border); padding: 2rem; width: 100%; max-width: 520px; }
                 h1 { margin: 0 0 .75rem; font-size: 1.5rem; }
-                p { margin: 0 0 1.25rem; color: #606060; }
+                p { margin: 0 0 1.25rem; color: var(--muted); }
+                .actions { display: grid; gap: .75rem; }
+                .button { display: inline-flex; align-items: center; justify-content: center; border: 1px solid #4b4b4b; background: #4b4b4b; color: #fff; padding: .8rem 1rem; text-decoration: none; }
+                .button.secondary { background: #ededed; color: #161616; border-color: #d0d0d0; }
+            </style>
+        </head>
+        <body>
+            <div class="card">
+                <h1>{$heading}</h1>
+                <p>{$subtitle}</p>
+                <div class="actions">
+                    <a class="button" href="{$loginHref}">{$loginLabel}</a>
+                    <a class="button secondary" href="{$registerHref}">{$registerLabel}</a>
+                </div>
+            </div>
+        </body>
+        </html>
+        HTML;
+    }
+
+    private function renderJoinOrgEntry(InviteLink $invite, ?Organization $org): string
+    {
+        $locale = e(app_locale());
+        $title = e(__('ui.titles.accept_invite'));
+        $heading = e(__('ui.invite.heading'));
+        $subtitle = e(__('ui.invite.join_org_invite_subtitle', ['organization' => $org?->name ?? __('ui.invite.new_organization')]));
+        $loginLabel = e(__('ui.invite.sign_in_to_continue'));
+        $registerLabel = e(__('ui.invite.register_to_continue'));
+        $loginHref = e('/auth/login?return_to=' . \urlencode('/invite/' . $invite->token));
+        $registerHref = e('/invite/' . $invite->token . '/register');
+
+        return <<<HTML
+        <!DOCTYPE html>
+        <html lang="{$locale}">
+        <head>
+            <meta charset="UTF-8">
+            <meta name="viewport" content="width=device-width, initial-scale=1.0">
+            <title>{$title}</title>
+            <style>
+                :root { color-scheme: light dark; --bg:#f5f5f5; --fg:#161616; --muted:#606060; --panel:#fff; --border:#d0d0d0; --button:#4b4b4b; }
+                @media (prefers-color-scheme: dark) { :root { --bg:#111111; --fg:#f3f3f3; --muted:#a4a4a4; --panel:#1a1a1a; --border:#393939; --button:#d6d6d6; } }
+                body { font-family: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace; background: var(--bg); color: var(--fg); display: flex; align-items: center; justify-content: center; min-height: 100vh; padding: 1rem; }
+                .card { background: var(--panel); border: 1px solid var(--border); padding: 2rem; width: 100%; max-width: 520px; }
+                h1 { margin: 0 0 .75rem; font-size: 1.5rem; }
+                p { margin: 0 0 1.25rem; color: var(--muted); }
                 .actions { display: grid; gap: .75rem; }
                 .button { display: inline-flex; align-items: center; justify-content: center; border: 1px solid #4b4b4b; background: #4b4b4b; color: #fff; padding: .8rem 1rem; text-decoration: none; }
                 .button.secondary { background: #ededed; color: #161616; border-color: #d0d0d0; }
@@ -766,5 +830,16 @@ final class InviteController
           <a href="/">{$homeLabel}</a>
         </body></html>
         HTML;
+    }
+
+    private function requireWebInvite(string $token): InviteLink|Response
+    {
+        try {
+            return $this->inviteService->findValid($token);
+        } catch (AuthException $e) {
+            return Response::make(400)
+                ->withContentType('text/html; charset=utf-8')
+                ->withBody($this->renderError($e->getMessage()));
+        }
     }
 }

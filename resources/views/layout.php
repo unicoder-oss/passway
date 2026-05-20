@@ -74,6 +74,19 @@
             border: 1px solid var(--border);
             background: var(--panel);
         }
+        .profile-menu { position: relative; }
+        .profile-menu summary { list-style: none; }
+        .profile-menu summary::-webkit-details-marker { display: none; }
+        .profile-menu-panel {
+            position: absolute;
+            right: 0;
+            top: calc(100% + .5rem);
+            min-width: 180px;
+            padding: .75rem;
+            display: grid;
+            gap: .5rem;
+            z-index: 20;
+        }
         .avatar-square {
             display: inline-flex;
             align-items: center;

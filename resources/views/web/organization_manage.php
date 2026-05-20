@@ -55,8 +55,8 @@ require base_path('resources/views/partials/auth_topbar.php');
                     </select>
                 </div>
                 <div>
-                    <label for="invite-ttl"><?= e(__('ui.organization_manage.ttl_seconds')) ?></label>
-                    <input id="invite-ttl" type="number" name="ttl" value="3600" min="60" max="604800">
+                    <label for="invite-ttl"><?= e(__('ui.organization_manage.ttl_hours')) ?></label>
+                    <input id="invite-ttl" type="number" name="ttl" value="1" min="1" max="168">
                 </div>
                 <button type="submit"><?= e(__('ui.organization_manage.create_invite_link')) ?></button>
             </form>

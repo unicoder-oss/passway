@@ -15,15 +15,22 @@ $profileAvatarInitial = avatar_initial($profileDisplayName);
     </div>
     <div class="topnav">
         <?php foreach ($topbarLinks as $link): ?>
+            <?php if (((string) ($link['href'] ?? '')) === '/auth/logout') { continue; } ?>
             <a class="button secondary" href="<?= e((string) ($link['href'] ?? '/')) ?>"><?= e((string) ($link['label'] ?? '')) ?></a>
         <?php endforeach; ?>
-        <a class="profile-link" href="/profile">
-            <span><?= e($profileDisplayName) ?></span>
-            <?php if ($profileAvatarPath !== ''): ?>
-                <img class="avatar-square avatar-image" src="<?= e($profileAvatarPath) ?>" alt="<?= e($profileDisplayName) ?>" width="32" height="32">
-            <?php else: ?>
-                <span class="avatar-square" style="background: <?= e($profileAvatarColor) ?>;"><?= e($profileAvatarInitial) ?></span>
-            <?php endif; ?>
-        </a>
+        <details class="profile-menu">
+            <summary class="profile-link">
+                <span><?= e($profileDisplayName) ?></span>
+                <?php if ($profileAvatarPath !== ''): ?>
+                    <img class="avatar-square avatar-image" src="<?= e($profileAvatarPath) ?>" alt="<?= e($profileDisplayName) ?>" width="32" height="32">
+                <?php else: ?>
+                    <span class="avatar-square" style="background: <?= e($profileAvatarColor) ?>;"><?= e($profileAvatarInitial) ?></span>
+                <?php endif; ?>
+            </summary>
+            <div class="profile-menu-panel panel">
+                <a class="button secondary" href="/profile"><?= e(__('ui.home.profile')) ?></a>
+                <a class="button secondary" href="/auth/logout"><?= e(__('ui.app.logout')) ?></a>
+            </div>
+        </details>
     </div>
 </div>

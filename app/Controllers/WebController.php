@@ -74,10 +74,11 @@ final class WebController
             return Response::redirect('/?error=' . \urlencode(__('ui.messages.access_denied')));
         }
 
-        $ttlSeconds = (int) ($request->input('ttl') ?? OrganizationService::DEFAULT_INVITE_TTL);
-        if ($ttlSeconds < 60 || $ttlSeconds > 7 * 86400) {
-            $ttlSeconds = OrganizationService::DEFAULT_INVITE_TTL;
+        $ttlHours = (int) ($request->input('ttl') ?? 1);
+        if ($ttlHours < 1 || $ttlHours > 168) {
+            $ttlHours = 1;
         }
+        $ttlSeconds = $ttlHours * 3600;
 
         try {
             $invite = $this->inviteService->createOrgInvite($user->id, $ttlSeconds);
@@ -269,7 +270,11 @@ final class WebController
         $user = AuthContext::requireUser();
         $org = $this->findOrgOrFail($request);
         $role = \trim((string) ($request->input('role') ?? 'user'));
-        $ttl = (int) ($request->input('ttl') ?? OrganizationService::DEFAULT_INVITE_TTL);
+        $ttlHours = (int) ($request->input('ttl') ?? 1);
+        if ($ttlHours < 1 || $ttlHours > 168) {
+            $ttlHours = 1;
+        }
+        $ttl = $ttlHours * 3600;
 
         try {
             $this->inviteService->createJoinOrgInvite($org->id, $role, $user->id, $ttl);
