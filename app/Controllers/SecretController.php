@@ -77,11 +77,11 @@ final class SecretController
             : null;
 
         if ($name === '') {
-            return Response::validationError(['name' => ['Name is required.']]);
+            return Response::validationError(['name' => [__('ui.backend.common.name_required')]]);
         }
         if (!\in_array($type, SecretService::VALID_TYPES, true)) {
             return Response::validationError(['type' => [
-                'Invalid type. Allowed: ' . \implode(', ', SecretService::VALID_TYPES) . '.',
+                __('ui.backend.secret.type_required', ['allowed' => \implode(', ', SecretService::VALID_TYPES)]),
             ]]);
         }
 
@@ -133,7 +133,7 @@ final class SecretController
         } catch (AuthException $e) {
             return Response::forbidden($e->getMessage());
         } catch (DecryptionException $e) {
-            return Response::error('Failed to decrypt secret.', 500);
+            return Response::error(__('ui.backend.common.secret_decrypt_failed'), 500);
         } catch (\RuntimeException $e) {
             return Response::notFound($e->getMessage());
         }
@@ -158,7 +158,7 @@ final class SecretController
 
         if ($newName === null && $newValue === null && $rotationIntegrationUuid === null && $rotationSchedule === null) {
             return Response::validationError([
-                'name' => ['At least one of name or value must be provided.'],
+                'name' => [__('ui.backend.secret.update_requires_field')],
             ]);
         }
 
@@ -264,7 +264,7 @@ final class SecretController
         $uuid = $request->routeParam('uuid');
         $org  = Organization::findByUuid((string) $uuid);
         if ($org === null) {
-            throw new \RuntimeException('Organization not found.');
+            throw new \RuntimeException(__('ui.backend.common.organization_not_found'));
         }
         return $org;
     }

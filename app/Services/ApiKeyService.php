@@ -55,17 +55,17 @@ final class ApiKeyService
         ?string $expiresAt   = null,
     ): array {
         if (trim($name) === '') {
-            throw new \InvalidArgumentException('Name is required.');
+            throw new \InvalidArgumentException(__('ui.backend.apikey.name_required'));
         }
 
         if (!in_array($environment, ApiKey::VALID_ENVIRONMENTS, true)) {
             throw new \InvalidArgumentException(
-                'Invalid environment. Allowed: ' . implode(', ', ApiKey::VALID_ENVIRONMENTS) . '.'
+                __('ui.backend.apikey.invalid_environment', ['allowed' => implode(', ', ApiKey::VALID_ENVIRONMENTS)])
             );
         }
 
         if (!$this->organizationService->hasPermission($orgId, $userId, 'admin')) {
-            throw new AuthException('Only admin or above can create API keys.', 403);
+            throw new AuthException(__('ui.backend.apikey.requires_admin_create'), 403);
         }
 
         $envPrefix = ApiKey::ENV_PREFIXES[$environment];
@@ -90,7 +90,7 @@ final class ApiKeyService
 
         $apiKey = ApiKey::findById($id);
         if ($apiKey === null) {
-            throw new \RuntimeException('Failed to retrieve created API key.');
+            throw new \RuntimeException(__('ui.backend.apikey.failed_load_created_key'));
         }
 
         $this->getAuditService()->record(
@@ -115,7 +115,7 @@ final class ApiKeyService
     public function listForOrg(string $orgId, string $userId): array
     {
         if (!$this->organizationService->hasPermission($orgId, $userId, 'admin')) {
-            throw new AuthException('Only admin or above can list API keys.', 403);
+            throw new AuthException(__('ui.backend.apikey.requires_admin_list'), 403);
         }
 
         return ApiKey::findByOrgId($orgId);
@@ -135,7 +135,7 @@ final class ApiKeyService
         $isOwner = $apiKey->userId === $userId;
 
         if (!$isAdmin && !$isOwner) {
-            throw new AuthException('Access denied.', 403);
+            throw new AuthException(__('ui.backend.apikey.access_denied'), 403);
         }
 
         return $apiKey;
@@ -155,7 +155,7 @@ final class ApiKeyService
         $isOwner = $apiKey->userId === $userId;
 
         if (!$isAdmin && !$isOwner) {
-            throw new AuthException('Only admin or the key owner can revoke an API key.', 403);
+            throw new AuthException(__('ui.backend.apikey.revoke_requires_admin_or_owner'), 403);
         }
 
         Database::getInstance()->update(
@@ -195,18 +195,18 @@ final class ApiKeyService
     ): ApiKeyPermission {
         if (!in_array($resourceType, ApiKeyPermission::VALID_RESOURCE_TYPES, true)) {
             throw new \InvalidArgumentException(
-                'Invalid resource_type. Allowed: ' . implode(', ', ApiKeyPermission::VALID_RESOURCE_TYPES) . '.'
+                __('ui.backend.apikey.invalid_resource_type', ['allowed' => implode(', ', ApiKeyPermission::VALID_RESOURCE_TYPES)])
             );
         }
 
         if (!in_array($permission, ApiKeyPermission::VALID_PERMISSIONS, true)) {
             throw new \InvalidArgumentException(
-                'Invalid permission. Allowed: ' . implode(', ', ApiKeyPermission::VALID_PERMISSIONS) . '.'
+                __('ui.backend.apikey.invalid_permission', ['allowed' => implode(', ', ApiKeyPermission::VALID_PERMISSIONS)])
             );
         }
 
         if (!$this->organizationService->hasPermission($orgId, $userId, 'admin')) {
-            throw new AuthException('Only admin or above can manage API key permissions.', 403);
+            throw new AuthException(__('ui.backend.apikey.requires_admin_permissions'), 403);
         }
 
         $apiKey = $this->findKeyInOrg($keyUuid, $orgId);
@@ -224,7 +224,7 @@ final class ApiKeyService
         );
 
         if ($existing !== null) {
-            throw new \RuntimeException('Permission already exists.');
+            throw new \RuntimeException(__('ui.backend.apikey.permission_exists'));
         }
 
         $id = $db->insert('api_key_permissions', [
@@ -250,7 +250,7 @@ final class ApiKeyService
             }
         }
 
-        throw new \RuntimeException('Failed to retrieve created permission.');
+        throw new \RuntimeException(__('ui.backend.apikey.failed_load_created_permission'));
     }
 
     /**
@@ -267,7 +267,7 @@ final class ApiKeyService
         $isOwner = $apiKey->userId === $userId;
 
         if (!$isAdmin && !$isOwner) {
-            throw new AuthException('Access denied.', 403);
+            throw new AuthException(__('ui.backend.apikey.access_denied'), 403);
         }
 
         return ApiKeyPermission::findByKeyId($apiKey->id);
@@ -286,7 +286,7 @@ final class ApiKeyService
         string $userId,
     ): void {
         if (!$this->organizationService->hasPermission($orgId, $userId, 'admin')) {
-            throw new AuthException('Only admin or above can manage API key permissions.', 403);
+            throw new AuthException(__('ui.backend.apikey.requires_admin_permissions'), 403);
         }
 
         $apiKey = $this->findKeyInOrg($keyUuid, $orgId);
@@ -298,7 +298,7 @@ final class ApiKeyService
         );
 
         if ($row === null) {
-            throw new \RuntimeException('Permission not found.');
+            throw new \RuntimeException(__('ui.backend.apikey.permission_not_found'));
         }
 
         $db->delete('api_key_permissions', ['id' => $permId]);
@@ -452,7 +452,7 @@ final class ApiKeyService
         $apiKey = ApiKey::findByUuid($keyUuid);
 
         if ($apiKey === null || $apiKey->organizationId !== $orgId) {
-            throw new \RuntimeException('API key not found.');
+            throw new \RuntimeException(__('ui.backend.apikey.key_not_found'));
         }
 
         return $apiKey;

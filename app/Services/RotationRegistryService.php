@@ -34,7 +34,7 @@ final class RotationRegistryService
     public function get(string $uuid): RotationService
     {
         return RotationService::findByUuid($uuid)
-            ?? throw new \RuntimeException('Rotation service not found.');
+            ?? throw new \RuntimeException(__('ui.backend.rotation.service_not_found'));
     }
 
     public function create(string $name, string $url, string $userId): RotationService
@@ -173,7 +173,7 @@ final class RotationRegistryService
         );
 
         if ((string) $firstUserId !== $userId) {
-            throw new AuthException('Only the setup administrator can manage rotation services.', 403);
+            throw new AuthException(__('ui.backend.rotation.requires_setup_admin'), 403);
         }
     }
 
@@ -181,10 +181,10 @@ final class RotationRegistryService
     {
         $name = \trim($name);
         if ($name === '') {
-            throw new \InvalidArgumentException('Rotation service name cannot be empty.');
+            throw new \InvalidArgumentException(__('ui.backend.rotation.name_empty'));
         }
         if (\strlen($name) > 255) {
-            throw new \InvalidArgumentException('Rotation service name is too long (max 255 characters).');
+            throw new \InvalidArgumentException(__('ui.backend.rotation.name_too_long'));
         }
 
         return $name;
@@ -194,7 +194,7 @@ final class RotationRegistryService
     {
         $url = \rtrim(\trim($url), '/');
         if ($url === '' || !\filter_var($url, FILTER_VALIDATE_URL)) {
-            throw new \InvalidArgumentException('Rotation service URL must be a valid absolute URL.');
+            throw new \InvalidArgumentException(__('ui.backend.rotation.invalid_url'));
         }
 
         return $url;

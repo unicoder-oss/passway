@@ -1,11 +1,11 @@
 <div class="topbar">
     <div>
-        <div class="brand">Passway</div>
-        <div class="muted" style="margin-top:.35rem;">API keys for <?= e($organization->name) ?></div>
+        <div class="brand"><?= e(__('ui.app.name')) ?></div>
+        <div class="muted" style="margin-top:.35rem;"><?= e(__('ui.api_keys.for_org', ['organization' => $organization->name])) ?></div>
     </div>
     <div class="topnav">
-        <a class="button secondary" href="/organizations/<?= e($organization->uuid) ?>/manage">Back to Management</a>
-        <a class="button secondary" href="/auth/logout">Logout</a>
+        <a class="button secondary" href="/organizations/<?= e($organization->uuid) ?>/manage"><?= e(__('ui.app.back_to_management')) ?></a>
+        <a class="button secondary" href="/auth/logout"><?= e(__('ui.app.logout')) ?></a>
     </div>
 </div>
 
@@ -14,57 +14,57 @@
 
 <?php if (!empty($createdRawKey)): ?>
     <div class="success" style="margin-bottom:1rem;">
-        <div style="font-weight:700; margin-bottom:.4rem;">Copy this API key now</div>
+        <div style="font-weight:700; margin-bottom:.4rem;"><?= e(__('ui.api_keys.copy_now')) ?></div>
         <input class="mono" value="<?= e((string) $createdRawKey) ?>" readonly>
     </div>
 <?php endif; ?>
 
 <div class="grid grid-2" style="align-items:start; padding-bottom:2rem;">
     <section class="panel" style="padding:1.5rem;">
-        <h2 style="margin:0 0 1rem;">Create API Key</h2>
+        <h2 style="margin:0 0 1rem;"><?= e(__('ui.api_keys.create')) ?></h2>
         <form method="POST" action="/organizations/<?= e($organization->uuid) ?>/api-keys" class="grid" style="gap:.75rem;">
             <div>
-                <label for="key-name">Name</label>
-                <input id="key-name" name="name" placeholder="CI deployment" required>
+                <label for="key-name"><?= e(__('ui.api_keys.name')) ?></label>
+                <input id="key-name" name="name" placeholder="<?= e(__('ui.api_keys.name_placeholder')) ?>" required>
             </div>
             <div>
-                <label for="key-environment">Environment</label>
+                <label for="key-environment"><?= e(__('ui.api_keys.environment')) ?></label>
                 <select id="key-environment" name="environment">
-                    <option value="production">production</option>
-                    <option value="staging">staging</option>
-                    <option value="development">development</option>
+                    <option value="production"><?= e(__('ui.api_keys.environments.production')) ?></option>
+                    <option value="staging"><?= e(__('ui.api_keys.environments.staging')) ?></option>
+                    <option value="development"><?= e(__('ui.api_keys.environments.development')) ?></option>
                 </select>
             </div>
             <div>
-                <label for="key-expires">Expires at (optional)</label>
+                <label for="key-expires"><?= e(__('ui.api_keys.expires_at_optional')) ?></label>
                 <input id="key-expires" name="expires_at" placeholder="2026-12-31 23:59:59">
             </div>
-            <button type="submit">Create API Key</button>
+            <button type="submit"><?= e(__('ui.api_keys.create')) ?></button>
         </form>
     </section>
 
     <section class="panel" style="padding:1.5rem;">
-        <h2 style="margin:0 0 1rem;">Existing Keys</h2>
+        <h2 style="margin:0 0 1rem;"><?= e(__('ui.api_keys.existing')) ?></h2>
         <div class="grid" style="gap:.75rem;">
             <?php foreach ($keys as $key): ?>
                 <div class="panel" style="padding:1rem; background:rgba(15,23,42,.55); display:grid; gap:.75rem;">
                     <div>
                         <div style="font-weight:700;"><?= e($key->name) ?></div>
-                        <div class="muted" style="font-size:.92rem;">Prefix <?= e($key->keyPrefix) ?> · <?= e($key->environment) ?> · <?= $key->isActive ? 'active' : 'revoked' ?></div>
-                        <div class="muted" style="font-size:.92rem;">Created <?= e($key->createdAt) ?><?= $key->expiresAt ? ' · Expires ' . e($key->expiresAt) : '' ?></div>
-                        <div class="muted" style="font-size:.92rem;">Last used <?= e((string) ($key->lastUsedAt ?? 'never')) ?></div>
+                        <div class="muted" style="font-size:.92rem;"><?= e(__('ui.api_keys.prefix', ['prefix' => $key->keyPrefix])) ?> · <?= e(__('ui.api_keys.environments.' . $key->environment)) ?> · <?= e($key->isActive ? __('ui.api_key_permissions.status_active') : __('ui.api_key_permissions.status_revoked')) ?></div>
+                        <div class="muted" style="font-size:.92rem;"><?= e(__('ui.api_keys.created', ['created_at' => $key->createdAt])) ?><?= $key->expiresAt ? e(__('ui.api_keys.expires_suffix', ['date' => $key->expiresAt])) : '' ?></div>
+                        <div class="muted" style="font-size:.92rem;"><?= e(__('ui.api_keys.last_used', ['date' => (string) ($key->lastUsedAt ?? __('ui.app.never'))])) ?></div>
                     </div>
                     <div class="actions">
-                        <a class="button secondary" href="/organizations/<?= e($organization->uuid) ?>/api-keys/<?= e($key->uuid) ?>/permissions">Permissions</a>
+                        <a class="button secondary" href="/organizations/<?= e($organization->uuid) ?>/api-keys/<?= e($key->uuid) ?>/permissions"><?= e(__('ui.api_keys.permissions')) ?></a>
                         <?php if ($key->isActive): ?>
                             <form method="POST" action="/organizations/<?= e($organization->uuid) ?>/api-keys/<?= e($key->uuid) ?>/revoke">
-                                <button type="submit" class="danger">Revoke Key</button>
+                                <button type="submit" class="danger"><?= e(__('ui.api_keys.revoke_key')) ?></button>
                             </form>
                         <?php endif; ?>
                     </div>
                 </div>
             <?php endforeach; ?>
-            <?php if ($keys === []): ?><div class="muted">No API keys yet.</div><?php endif; ?>
+            <?php if ($keys === []): ?><div class="muted"><?= e(__('ui.api_keys.no_keys')) ?></div><?php endif; ?>
         </div>
     </section>
 </div>

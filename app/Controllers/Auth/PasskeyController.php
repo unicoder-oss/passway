@@ -65,7 +65,7 @@ final class PasskeyController
 
         $credentialData = $request->json('credential');
         if (!\is_array($credentialData)) {
-            return Response::validationError(['credential' => ['Invalid credential data']]);
+            return Response::validationError(['credential' => [__('ui.backend.passkey.invalid_credential_data')]]);
         }
 
         $name = \trim((string) ($request->input('name') ?? 'Passkey'));
@@ -129,7 +129,7 @@ final class PasskeyController
     {
         $credentialData = $request->json('credential');
         if (!\is_array($credentialData)) {
-            return Response::validationError(['credential' => ['Invalid credential data']]);
+            return Response::validationError(['credential' => [__('ui.backend.passkey.invalid_credential_data')]]);
         }
 
         try {
@@ -139,7 +139,7 @@ final class PasskeyController
         }
 
         if (!$user->isActive) {
-            return Response::error('Account is inactive', 403);
+            return Response::error(__('ui.backend.passkey.account_inactive'), 403);
         }
 
         $rawToken = $this->sessionService->create($user->id, $request->ip(), $request->header('User-Agent'));

@@ -67,20 +67,20 @@ final class RotationService
     {
         $secret = Secret::findByUuid($secretUuid);
         if ($secret === null || $secret->organizationId !== $orgId) {
-            throw new \RuntimeException('Secret not found.');
+            throw new \RuntimeException(__('ui.backend.secret.not_found'));
         }
 
         if ($secret->type !== 'template') {
-            throw new \RuntimeException('Only template secrets can be rotated by the local scheduler.');
+            throw new \RuntimeException(__('ui.backend.rotation_runtime.template_only_scheduler'));
         }
 
         if ($secret->templateId === null) {
-            throw new \RuntimeException('Template secret is missing template_id.');
+            throw new \RuntimeException(__('ui.backend.rotation_runtime.template_missing_id'));
         }
 
         $template = \Passway\Models\Template::findById($secret->templateId);
         if ($template === null) {
-            throw new \RuntimeException('Template not found.');
+            throw new \RuntimeException(__('ui.backend.template.not_found'));
         }
 
         $value = $this->templateService->generate($template->uuid, $orgId);
@@ -99,33 +99,33 @@ final class RotationService
         ['secret' => $secret, 'value' => $currentValue] = $this->secretService->getForRotation($secretUuid, $orgId);
 
         if ($secret->type !== 'dynamic') {
-            throw new \RuntimeException('Only dynamic secrets can use external rotation services.');
+            throw new \RuntimeException(__('ui.backend.rotation_runtime.dynamic_only_external'));
         }
         if ($secret->rotationIntegrationId === null) {
-            throw new \RuntimeException('Dynamic secret is missing rotation integration.');
+            throw new \RuntimeException(__('ui.backend.rotation_runtime.dynamic_missing_integration'));
         }
 
         $integration = \Passway\Models\OrganizationIntegration::findById($secret->rotationIntegrationId)
-            ?? throw new \RuntimeException('Rotation integration not found.');
+            ?? throw new \RuntimeException(__('ui.backend.secret.rotation_integration_not_found'));
         $service = \Passway\Models\RotationService::findById($integration->rotationServiceId)
-            ?? throw new \RuntimeException('Rotation service not found.');
+            ?? throw new \RuntimeException(__('ui.backend.rotation.service_not_found'));
         $credentials = $this->integrationService->getDecryptedCredentials($integration->id);
 
         try {
             if (!$this->httpClient->validate($service->url, $credentials, $secret, $currentValue)) {
-                throw new \RuntimeException('Current secret value failed external validation before rotation.');
+                throw new \RuntimeException(__('ui.backend.rotation_runtime.validation_before_failed'));
             }
 
             $newValue = $this->httpClient->rotate($service->url, $credentials, $secret, $currentValue);
 
             if ($this->httpClient->validate($service->url, $credentials, $secret, $currentValue)) {
                 $this->httpClient->rollback($service->url, $credentials, $secret, $newValue, $currentValue);
-                throw new \RuntimeException('Old secret value is still valid after rotation.');
+                throw new \RuntimeException(__('ui.backend.rotation_runtime.old_value_still_valid'));
             }
 
             if (!$this->httpClient->validate($service->url, $credentials, $secret, $newValue)) {
                 $this->httpClient->rollback($service->url, $credentials, $secret, $newValue, $currentValue);
-                throw new \RuntimeException('New secret value failed external validation after rotation.');
+                throw new \RuntimeException(__('ui.backend.rotation_runtime.new_value_invalid'));
             }
 
             return $this->secretService->rotateValue(
@@ -145,13 +145,13 @@ final class RotationService
     {
         $secret = \Passway\Models\Secret::findByUuid($secretUuid);
         if ($secret === null || $secret->organizationId !== $orgId) {
-            throw new \RuntimeException('Secret not found.');
+            throw new \RuntimeException(__('ui.backend.secret.not_found'));
         }
 
         return match ($secret->type) {
             'template' => $this->rotateTemplateSecret($secretUuid, $orgId),
             'dynamic'  => $this->rotateDynamicSecret($secretUuid, $orgId),
-            default    => throw new \RuntimeException('Only template and dynamic secrets can be rotated manually.'),
+            default    => throw new \RuntimeException(__('ui.backend.rotation_runtime.manual_only_template_dynamic')),
         };
     }
 }

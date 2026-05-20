@@ -45,10 +45,10 @@ final class GroupService
 
         $name = \trim($name);
         if ($name === '') {
-            throw new \InvalidArgumentException('Group name cannot be empty.');
+            throw new \InvalidArgumentException(__('ui.backend.group.name_empty'));
         }
         if (\strlen($name) > 255) {
-            throw new \InvalidArgumentException('Group name is too long (max 255 characters).');
+            throw new \InvalidArgumentException(__('ui.backend.group.name_too_long'));
         }
 
         $count = (int) Database::getInstance()->fetchColumn(
@@ -56,7 +56,7 @@ final class GroupService
             [(int) $orgId, $name]
         );
         if ($count > 0) {
-            throw new \RuntimeException('A group with this name already exists in the organization.');
+            throw new \RuntimeException(__('ui.backend.group.duplicate_name'));
         }
 
         $uuid = generate_uuid();
@@ -73,7 +73,7 @@ final class GroupService
         ]);
 
         $group = Group::findByUuid($uuid)
-            ?? throw new \RuntimeException('Failed to load created group.');
+            ?? throw new \RuntimeException(__('ui.backend.group.failed_load_created'));
 
         $this->getAuditService()->record(
             action: 'group.create',
@@ -110,7 +110,7 @@ final class GroupService
         $this->assertHasPermission($orgId, $userId, 'observer');
         $group = Group::findByUuid($groupUuid);
         if ($group === null || $group->organizationId !== $orgId) {
-            throw new \RuntimeException('Group not found.');
+            throw new \RuntimeException(__('ui.backend.group.not_found'));
         }
         return $group;
     }
@@ -128,7 +128,7 @@ final class GroupService
         $this->assertHasPermission($orgId, $userId, 'admin');
         $group = Group::findByUuid($groupUuid);
         if ($group === null || $group->organizationId !== $orgId) {
-            throw new \RuntimeException('Group not found.');
+            throw new \RuntimeException(__('ui.backend.group.not_found'));
         }
         Database::getInstance()->delete('groups', ['id' => (int) $group->id]);
 
@@ -162,15 +162,15 @@ final class GroupService
 
         $group = Group::findByUuid($groupUuid);
         if ($group === null || $group->organizationId !== $orgId) {
-            throw new \RuntimeException('Group not found.');
+            throw new \RuntimeException(__('ui.backend.group.not_found'));
         }
 
         if (OrganizationMember::findByOrgAndUser($orgId, $targetUserId) === null) {
-            throw new \RuntimeException('User is not a member of the organization.');
+            throw new \RuntimeException(__('ui.backend.common.user_not_member_org'));
         }
 
         if (GroupMember::findByGroupAndUser($group->id, $targetUserId) !== null) {
-            throw new \RuntimeException('User is already a member of this group.');
+            throw new \RuntimeException(__('ui.backend.group.already_member'));
         }
 
         Database::getInstance()->insert('group_members', [
@@ -181,7 +181,7 @@ final class GroupService
         ]);
 
         $member = GroupMember::findByGroupAndUser($group->id, $targetUserId)
-            ?? throw new \RuntimeException('Failed to load created group member.');
+            ?? throw new \RuntimeException(__('ui.backend.group.failed_load_created_member'));
 
         $this->getAuditService()->record(
             action: 'group.member_add',
@@ -212,11 +212,11 @@ final class GroupService
 
         $group = Group::findByUuid($groupUuid);
         if ($group === null || $group->organizationId !== $orgId) {
-            throw new \RuntimeException('Group not found.');
+            throw new \RuntimeException(__('ui.backend.group.not_found'));
         }
 
         if (GroupMember::findByGroupAndUser($group->id, $targetUserId) === null) {
-            throw new \RuntimeException('User is not a member of this group.');
+            throw new \RuntimeException(__('ui.backend.group.user_not_member_group'));
         }
 
         Database::getInstance()->delete('group_members', [
@@ -245,7 +245,7 @@ final class GroupService
         $this->assertHasPermission($orgId, $userId, 'observer');
         $group = Group::findByUuid($groupUuid);
         if ($group === null || $group->organizationId !== $orgId) {
-            throw new \RuntimeException('Group not found.');
+            throw new \RuntimeException(__('ui.backend.group.not_found'));
         }
         return GroupMember::findByGroupId($group->id);
     }
@@ -268,7 +268,7 @@ final class GroupService
     {
         if (!$this->organizationService->hasPermission($orgId, $userId, $minRole)) {
             throw new AuthException(
-                \sprintf("Requires '%s' role in this organization.", $minRole),
+                __('ui.backend.group.requires_role', ['role' => $minRole]),
                 403
             );
         }

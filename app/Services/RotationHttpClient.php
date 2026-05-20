@@ -36,7 +36,7 @@ final class RotationHttpClient
         $response = $this->request('GET', $this->endpoint($baseUrl, '/spec'));
 
         if ($response['status'] < 200 || $response['status'] >= 300) {
-            throw new \RuntimeException('Rotation service /spec request failed.');
+            throw new \RuntimeException(__('ui.backend.rotation_runtime.spec_failed'));
         }
 
         return $response['body'];
@@ -58,7 +58,7 @@ final class RotationHttpClient
         ]);
 
         if ($response['status'] < 200 || $response['status'] >= 300) {
-            throw new \RuntimeException('Rotation service /validate request failed.');
+            throw new \RuntimeException(__('ui.backend.rotation_runtime.validate_failed'));
         }
 
         return (bool) ($response['body']['valid'] ?? false);
@@ -80,7 +80,7 @@ final class RotationHttpClient
         ]);
 
         if ($response['status'] < 200 || $response['status'] >= 300) {
-            throw new \RuntimeException('Rotation service /rotate request failed.');
+            throw new \RuntimeException(__('ui.backend.rotation_runtime.rotate_failed'));
         }
 
         $newValue = $response['body']['value']
@@ -89,7 +89,7 @@ final class RotationHttpClient
             ?? null;
 
         if (!\is_string($newValue) || $newValue === '') {
-            throw new \RuntimeException('Rotation service /rotate did not return a rotated secret value.');
+            throw new \RuntimeException(__('ui.backend.rotation_runtime.rotate_missing_value'));
         }
 
         return $newValue;
@@ -133,7 +133,7 @@ final class RotationHttpClient
 
         $ch = \curl_init($url);
         if ($ch === false) {
-            throw new \RuntimeException('Failed to initialize cURL.');
+            throw new \RuntimeException(__('ui.backend.rotation_runtime.curl_init_failed'));
         }
 
         $headers = ['Accept: application/json'];
@@ -149,7 +149,7 @@ final class RotationHttpClient
         if ($payload !== null) {
             $json = \json_encode($payload, \JSON_UNESCAPED_SLASHES);
             if ($json === false) {
-                throw new \RuntimeException('Failed to encode HTTP payload as JSON.');
+                throw new \RuntimeException(__('ui.backend.rotation_runtime.http_payload_encode_failed'));
             }
 
             \curl_setopt($ch, CURLOPT_POSTFIELDS, $json);
@@ -163,7 +163,7 @@ final class RotationHttpClient
         if ($rawBody === false) {
             $error = \curl_error($ch);
             \curl_close($ch);
-            throw new \RuntimeException('Rotation HTTP request failed: ' . $error);
+            throw new \RuntimeException(__('ui.backend.rotation_runtime.http_request_failed', ['error' => $error]));
         }
 
         $status = (int) \curl_getinfo($ch, CURLINFO_RESPONSE_CODE);

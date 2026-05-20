@@ -88,3 +88,100 @@ if (!function_exists('e')) {
         return htmlspecialchars($value, ENT_QUOTES | ENT_SUBSTITUTE, 'UTF-8');
     }
 }
+
+if (!function_exists('app_fallback_locale')) {
+    function app_fallback_locale(): string
+    {
+        return 'en';
+    }
+}
+
+if (!function_exists('app_locale')) {
+    function app_locale(): string
+    {
+        $locale = strtolower(trim((string) env('APP_LOCALE', app_fallback_locale())));
+        $locale = preg_replace('/[^a-z0-9_-]/', '', $locale);
+
+        return $locale !== '' ? $locale : app_fallback_locale();
+    }
+}
+
+if (!function_exists('translation_lookup')) {
+    /**
+     * @param array<string, mixed> $translations
+     * @param string[] $segments
+     */
+    function translation_lookup(array $translations, array $segments): mixed
+    {
+        $value = $translations;
+
+        foreach ($segments as $segment) {
+            if (!is_array($value) || !array_key_exists($segment, $value)) {
+                return null;
+            }
+
+            $value = $value[$segment];
+        }
+
+        return $value;
+    }
+}
+
+if (!function_exists('translation_file')) {
+    /** @return array<string, mixed> */
+    function translation_file(string $locale, string $file): array
+    {
+        static $cache = [];
+
+        $cacheKey = $locale . ':' . $file;
+        if (isset($cache[$cacheKey])) {
+            return $cache[$cacheKey];
+        }
+
+        $path = base_path('resources/lang/' . $locale . '/' . $file . '.php');
+        if (!file_exists($path)) {
+            return $cache[$cacheKey] = [];
+        }
+
+        $translations = require $path;
+
+        return $cache[$cacheKey] = is_array($translations) ? $translations : [];
+    }
+}
+
+if (!function_exists('trans')) {
+    /** @param array<string, scalar|null> $replace */
+    function trans(string $key, array $replace = []): string
+    {
+        $segments = explode('.', $key);
+        $file = array_shift($segments);
+
+        if ($file === null || $file === '') {
+            return $key;
+        }
+
+        $value = translation_lookup(translation_file(app_locale(), $file), $segments);
+        if ($value === null && app_locale() !== app_fallback_locale()) {
+            $value = translation_lookup(translation_file(app_fallback_locale(), $file), $segments);
+        }
+
+        if (!is_string($value) && !is_numeric($value)) {
+            return $key;
+        }
+
+        $translation = (string) $value;
+        foreach ($replace as $name => $replacement) {
+            $translation = str_replace(':' . $name, (string) ($replacement ?? ''), $translation);
+        }
+
+        return $translation;
+    }
+}
+
+if (!function_exists('__')) {
+    /** @param array<string, scalar|null> $replace */
+    function __(string $key, array $replace = []): string
+    {
+        return trans($key, $replace);
+    }
+}

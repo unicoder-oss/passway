@@ -48,7 +48,7 @@ final class ApprovalController
 
         if (!\in_array($requestType, ApprovalRequest::VALID_REQUEST_TYPES, true)) {
             return Response::validationError(['request_type' => [
-                'Invalid request type. Allowed: ' . \implode(', ', ApprovalRequest::VALID_REQUEST_TYPES) . '.',
+                __('ui.backend.approval.invalid_request_type', ['allowed' => \implode(', ', ApprovalRequest::VALID_REQUEST_TYPES)]),
             ]]);
         }
 
@@ -217,7 +217,7 @@ final class ApprovalController
 
         $token = \trim((string) ($request->input('token') ?? ''));
         if ($token === '') {
-            return Response::validationError(['token' => ['Token is required.']]);
+            return Response::validationError(['token' => [__('ui.backend.common.token_required')]]);
         }
 
         try {
@@ -241,7 +241,7 @@ final class ApprovalController
         $uuid = $request->routeParam('uuid');
         $org  = Organization::findByUuid((string) $uuid);
         if ($org === null) {
-            throw new \RuntimeException('Organization not found.');
+            throw new \RuntimeException(__('ui.backend.common.organization_not_found'));
         }
         return $org;
     }

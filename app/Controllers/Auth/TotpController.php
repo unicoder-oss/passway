@@ -36,7 +36,7 @@ final class TotpController
         return Response::make(200)
             ->withContentType('text/html; charset=utf-8')
             ->withBody($this->viewService->render('auth/totp', [
-                'title' => 'Passway Two-Factor Verification',
+                'title' => __('ui.titles.totp_verify'),
                 'error' => $request->query('error'),
             ]));
     }
@@ -58,11 +58,11 @@ final class TotpController
                 return Response::make(422)
                     ->withContentType('text/html; charset=utf-8')
                     ->withBody($this->viewService->render('auth/totp', [
-                        'title' => 'Passway Two-Factor Verification',
-                        'error' => 'TOTP code is required',
+                        'title' => __('ui.titles.totp_verify'),
+                        'error' => __('ui.auth.totp.code_required'),
                     ]));
             }
-            return Response::validationError(['code' => ['TOTP code is required']]);
+            return Response::validationError(['code' => [__('ui.auth.totp.code_required')]]);
         }
 
         // Получить user_id из pending-сессии
@@ -77,7 +77,7 @@ final class TotpController
 
         $user = User::findById((int) $userId);
         if ($user === null || !$user->totpEnabled || $user->totpSecret === null || $user->totpNonce === null) {
-            return Response::error('TOTP not configured for this user', 400);
+            return Response::error(__('ui.auth.totp.not_configured'), 400);
         }
 
         // Верифицировать код
@@ -88,7 +88,7 @@ final class TotpController
                 code:            $code,
             );
         } catch (\Passway\Exceptions\DecryptionException) {
-            return Response::error('Failed to verify TOTP code', 500);
+            return Response::error(__('ui.auth.totp.verify_failed'), 500);
         }
 
         if (!$valid) {
@@ -96,11 +96,11 @@ final class TotpController
                 return Response::make(401)
                     ->withContentType('text/html; charset=utf-8')
                     ->withBody($this->viewService->render('auth/totp', [
-                        'title' => 'Passway Two-Factor Verification',
-                        'error' => 'Invalid TOTP code',
+                        'title' => __('ui.titles.totp_verify'),
+                        'error' => __('ui.auth.totp.invalid_code'),
                     ]));
             }
-            return Response::error('Invalid TOTP code', 401);
+            return Response::error(__('ui.auth.totp.invalid_code'), 401);
         }
 
         // Завершить вход
@@ -143,7 +143,7 @@ final class TotpController
         $user = AuthContext::requireUser();
 
         if ($user->totpEnabled) {
-            return Response::error('TOTP is already enabled', 400);
+            return Response::error(__('ui.auth.totp.already_enabled'), 400);
         }
 
         // Генерируем новый secret (raw, для QR) и шифруем для хранения в session
@@ -163,7 +163,7 @@ final class TotpController
         return Response::success([
             'qr_code_uri' => $qrCodeUri,
             'manual_entry_key' => $data['raw_secret'], // для ручного ввода
-            'message' => 'Scan the QR code with your authenticator app, then call POST /auth/totp/enable with a code to confirm.',
+            'message' => __('ui.auth.totp.setup_scan_message'),
         ]);
     }
 
@@ -182,12 +182,12 @@ final class TotpController
         $user = AuthContext::requireUser();
 
         if ($user->totpEnabled) {
-            return Response::error('TOTP is already enabled', 400);
+            return Response::error(__('ui.auth.totp.already_enabled'), 400);
         }
 
         $code = \trim((string) ($request->input('code') ?? ''));
         if ($code === '') {
-            return Response::validationError(['code' => ['TOTP code is required']]);
+            return Response::validationError(['code' => [__('ui.auth.totp.code_required')]]);
         }
 
         // Получить pending secret из session
@@ -198,7 +198,7 @@ final class TotpController
 
         if ($setup === null || $setup['expires'] < \time()) {
             unset($_SESSION['totp_setup']);
-            return Response::error('TOTP setup session expired. Please restart setup.', 400);
+            return Response::error(__('ui.auth.totp.setup_expired'), 400);
         }
 
         // Верифицировать код против pending secret
@@ -209,11 +209,11 @@ final class TotpController
                 code:            $code,
             );
         } catch (\Passway\Exceptions\DecryptionException) {
-            return Response::error('Internal error verifying TOTP code', 500);
+            return Response::error(__('ui.auth.totp.internal_verify_error'), 500);
         }
 
         if (!$valid) {
-            return Response::error('Invalid TOTP code. Please check your authenticator app time.', 401);
+            return Response::error(__('ui.auth.totp.invalid_code_with_time_hint'), 401);
         }
 
         // Сохранить в БД и включить TOTP
@@ -228,7 +228,7 @@ final class TotpController
 
         $this->authService->writeAuditLog($user->id, 'auth.totp_enabled', $request->ip(), null, true);
 
-        return Response::success(['message' => 'Two-factor authentication has been enabled.']);
+        return Response::success(['message' => __('ui.auth.totp.enabled_success')]);
     }
 
     // ------------------------------------------------------------------ //
@@ -246,16 +246,16 @@ final class TotpController
         $user = AuthContext::requireUser();
 
         if (!$user->totpEnabled) {
-            return Response::error('TOTP is not enabled', 400);
+            return Response::error(__('ui.auth.totp.not_enabled'), 400);
         }
 
         $password = (string) ($request->input('password') ?? '');
         if ($password === '') {
-            return Response::validationError(['password' => ['Password is required to disable TOTP']]);
+            return Response::validationError(['password' => [__('ui.auth.totp.disable_password_required')]]);
         }
 
         if ($user->passwordHash === null) {
-            return Response::error('Cannot disable TOTP without a password set', 400);
+            return Response::error(__('ui.auth.totp.disable_password_not_set'), 400);
         }
 
         // Verify password using HashingService — получим из контейнера
@@ -263,7 +263,7 @@ final class TotpController
             ->make(\Passway\Services\HashingService::class);
 
         if (!$hashingService->verifyPassword($password, $user->passwordHash)) {
-            return Response::error('Incorrect password', 401);
+            return Response::error(__('ui.profile.error_incorrect_password'), 401);
         }
 
         $user->update([
@@ -275,6 +275,6 @@ final class TotpController
 
         $this->authService->writeAuditLog($user->id, 'auth.totp_disabled', $request->ip(), null, true);
 
-        return Response::success(['message' => 'Two-factor authentication has been disabled.']);
+        return Response::success(['message' => __('ui.auth.totp.disabled_success')]);
     }
 }

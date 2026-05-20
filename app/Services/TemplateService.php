@@ -28,11 +28,11 @@ final class TemplateService
     {
         $template = Template::findByUuid($templateUuid);
         if ($template === null) {
-            throw new \RuntimeException('Template not found.');
+            throw new \RuntimeException(__('ui.backend.template.not_found'));
         }
 
         if ($template->organizationId !== null && $orgId !== null && $template->organizationId !== $orgId) {
-            throw new \RuntimeException('Template does not belong to this organization.');
+            throw new \RuntimeException(__('ui.backend.template.wrong_org'));
         }
 
         $config = \array_replace($template->config(), $overrides);
@@ -40,7 +40,7 @@ final class TemplateService
         return match ($template->type) {
             'password' => $this->generatePassword($config),
             'ssh_key'  => $this->generateSshKeyPair($config),
-            default    => throw new \InvalidArgumentException('Unsupported template type: ' . $template->type),
+            default    => throw new \InvalidArgumentException(__('ui.backend.template.unsupported_type', ['type' => $template->type])),
         };
     }
 
@@ -56,7 +56,7 @@ final class TemplateService
         $specialChars = (string) ($config['special_chars'] ?? '!@#$%^&*()-_=+[]{}|;:,.<>?');
 
         if ($minLength < 8 || $maxLength > 128 || $minLength > $maxLength) {
-            throw new \InvalidArgumentException('Password template length must be between 8 and 128 characters.');
+            throw new \InvalidArgumentException(__('ui.backend.template.password_length'));
         }
 
         $charsets = [];
@@ -71,13 +71,13 @@ final class TemplateService
         }
         if ($useSpecial) {
             if ($specialChars === '') {
-                throw new \InvalidArgumentException('special_chars cannot be empty when use_special is enabled.');
+                throw new \InvalidArgumentException(__('ui.backend.template.special_chars_empty'));
             }
             $charsets[] = $specialChars;
         }
 
         if ($charsets === []) {
-            throw new \InvalidArgumentException('At least one character set must be enabled.');
+            throw new \InvalidArgumentException(__('ui.backend.template.charset_required'));
         }
 
         $length = $minLength === $maxLength ? $minLength : \random_int($minLength, $maxLength);
@@ -109,14 +109,14 @@ final class TemplateService
         if ($algorithm === 'rsa') {
             $bits = (int) ($config['bits'] ?? 4096);
             if (!\in_array($bits, [2048, 4096], true)) {
-                throw new \InvalidArgumentException('RSA template bits must be 2048 or 4096.');
+                throw new \InvalidArgumentException(__('ui.backend.template.rsa_bits_invalid'));
             }
 
             $privateKey = RSA::createKey($bits);
         } elseif ($algorithm === 'ed25519') {
             $privateKey = EC::createKey('Ed25519');
         } else {
-            throw new \InvalidArgumentException('Unsupported SSH key algorithm: ' . $algorithm);
+            throw new \InvalidArgumentException(__('ui.backend.template.ssh_algorithm_invalid', ['algorithm' => $algorithm]));
         }
 
         $publicKey = $privateKey->getPublicKey();
@@ -127,6 +127,6 @@ final class TemplateService
             'algorithm'   => $algorithm,
             'comment'     => $comment,
         ], \JSON_UNESCAPED_SLASHES)
-            ?: throw new \RuntimeException('Failed to encode SSH key pair as JSON.');
+            ?: throw new \RuntimeException(__('ui.backend.template.ssh_encode_failed'));
     }
 }

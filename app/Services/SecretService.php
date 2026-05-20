@@ -75,14 +75,14 @@ final class SecretService
     ): Secret {
         $name = \trim($name);
         if ($name === '') {
-            throw new \InvalidArgumentException('Secret name cannot be empty.');
+            throw new \InvalidArgumentException(__('ui.backend.secret.name_empty'));
         }
         if (\strlen($name) > 255) {
-            throw new \InvalidArgumentException('Secret name is too long (max 255 characters).');
+            throw new \InvalidArgumentException(__('ui.backend.secret.name_too_long'));
         }
         if (!\in_array($type, self::VALID_TYPES, true)) {
             throw new \InvalidArgumentException(
-                'Invalid secret type. Allowed: ' . \implode(', ', self::VALID_TYPES) . '.'
+                __('ui.backend.secret.invalid_type', ['allowed' => \implode(', ', self::VALID_TYPES)])
             );
         }
 
@@ -114,7 +114,7 @@ final class SecretService
         ]);
 
         $secret = Secret::findByUuid($uuid)
-            ?? throw new \RuntimeException('Failed to load created secret.');
+            ?? throw new \RuntimeException(__('ui.backend.secret.failed_load_created'));
 
         $this->getAuditService()->record(
             action: 'secret.create',
@@ -145,18 +145,18 @@ final class SecretService
     ): Secret {
         $template = Template::findByUuid($templateUuid);
         if ($template === null) {
-            throw new \RuntimeException('Template not found.');
+            throw new \RuntimeException(__('ui.backend.secret.template_not_found'));
         }
         if ($template->organizationId !== null && $template->organizationId !== $orgId) {
-            throw new \RuntimeException('Template does not belong to this organization.');
+            throw new \RuntimeException(__('ui.backend.secret.template_wrong_org'));
         }
 
         $name = \trim($name);
         if ($name === '') {
-            throw new \InvalidArgumentException('Secret name cannot be empty.');
+            throw new \InvalidArgumentException(__('ui.backend.secret.name_empty'));
         }
         if (\strlen($name) > 255) {
-            throw new \InvalidArgumentException('Secret name is too long (max 255 characters).');
+            throw new \InvalidArgumentException(__('ui.backend.secret.name_too_long'));
         }
 
         $value = $this->getTemplateService()->generate($templateUuid, $orgId, $overrides);
@@ -189,7 +189,7 @@ final class SecretService
         ]);
 
         $secret = Secret::findByUuid($uuid)
-            ?? throw new \RuntimeException('Failed to load created secret.');
+            ?? throw new \RuntimeException(__('ui.backend.secret.failed_load_created'));
 
         $this->getAuditService()->record(
             action: 'secret.create',
@@ -242,7 +242,7 @@ final class SecretService
             && !$this->organizationService->hasPermission($orgId, $userId, 'moderator')
         ) {
             throw new AuthException(
-                'This secret requires approval. Submit an approval request and use the one-time token to access it.',
+                __('ui.backend.secret.requires_approval'),
                 403
             );
         }
@@ -306,10 +306,10 @@ final class SecretService
         if ($newName !== null) {
             $newName = \trim($newName);
             if ($newName === '') {
-                throw new \InvalidArgumentException('Secret name cannot be empty.');
+                throw new \InvalidArgumentException(__('ui.backend.secret.name_empty'));
             }
             if (\strlen($newName) > 255) {
-                throw new \InvalidArgumentException('Secret name is too long (max 255 characters).');
+                throw new \InvalidArgumentException(__('ui.backend.secret.name_too_long'));
             }
             // Проверить уникальность, исключая текущий секрет
             $this->assertNameUnique($secret->directoryId, $newName, $secret->id);
@@ -329,7 +329,7 @@ final class SecretService
         $secret->update($data);
 
         $updated = Secret::findByUuid($secretUuid)
-            ?? throw new \RuntimeException('Failed to reload secret after update.');
+            ?? throw new \RuntimeException(__('ui.backend.secret.failed_reload_after_update'));
 
         $this->getAuditService()->record(
             action: 'secret.update',
@@ -381,7 +381,7 @@ final class SecretService
         string $rotationType = 'scheduled',
     ): Secret {
         if (!\in_array($rotationType, ['scheduled', 'api', 'manual'], true)) {
-            throw new \InvalidArgumentException('Invalid rotation type.');
+            throw new \InvalidArgumentException(__('ui.backend.secret.invalid_rotation_type'));
         }
 
         $secret = $this->findSecretInOrg($secretUuid, $orgId);
@@ -399,7 +399,7 @@ final class SecretService
         ]);
 
         $updated = Secret::findByUuid($secretUuid)
-            ?? throw new \RuntimeException('Failed to reload rotated secret.');
+            ?? throw new \RuntimeException(__('ui.backend.secret.failed_reload_rotated'));
 
         $this->getAuditService()->record(
             action: 'rotation.secret_rotated',
@@ -436,7 +436,7 @@ final class SecretService
         ]);
 
         return Secret::findByUuid($secretUuid)
-            ?? throw new \RuntimeException('Failed to reload secret after rotation config update.');
+            ?? throw new \RuntimeException(__('ui.backend.secret.failed_reload_after_rotation_config'));
     }
 
     /** @return array{secret: Secret, value: string} */
@@ -485,7 +485,7 @@ final class SecretService
     {
         $dir = Directory::findByUuid($dirUuid);
         if ($dir === null || $dir->organizationId !== $orgId) {
-            throw new \RuntimeException('Directory not found.');
+            throw new \RuntimeException(__('ui.backend.directory.not_found'));
         }
         return $dir;
     }
@@ -497,7 +497,7 @@ final class SecretService
     {
         $secret = Secret::findByUuid($secretUuid);
         if ($secret === null || $secret->organizationId !== $orgId) {
-            throw new \RuntimeException('Secret not found.');
+            throw new \RuntimeException(__('ui.backend.secret.not_found'));
         }
         return $secret;
     }
@@ -518,7 +518,7 @@ final class SecretService
 
         $count = (int) Database::getInstance()->fetchColumn($sql, $params);
         if ($count > 0) {
-            throw new \RuntimeException('A secret with this name already exists in the directory.');
+            throw new \RuntimeException(__('ui.backend.secret.duplicate_name'));
         }
     }
 
@@ -581,7 +581,7 @@ final class SecretService
     ): void {
         if (!$this->permissionService->can($permission, $userId, $resourceType, $resourceId, $orgId)) {
             throw new AuthException(
-                \sprintf("Access denied: '%s' permission required.", $permission),
+                __('ui.backend.secret.access_permission_required', ['permission' => $permission]),
                 403
             );
         }
@@ -605,10 +605,10 @@ final class SecretService
 
         $integration = OrganizationIntegration::findByUuid(\trim($integrationUuid));
         if ($integration === null || $integration->organizationId !== $orgId) {
-            throw new \RuntimeException('Rotation integration not found.');
+            throw new \RuntimeException(__('ui.backend.secret.rotation_integration_not_found'));
         }
         if (!$integration->isActive) {
-            throw new \RuntimeException('Rotation integration is inactive.');
+            throw new \RuntimeException(__('ui.backend.secret.rotation_integration_inactive'));
         }
 
         return $integration->id;
@@ -627,7 +627,7 @@ final class SecretService
 
         $parts = \preg_split('/\s+/', $rotationSchedule) ?: [];
         if (\count($parts) !== 5) {
-            throw new \InvalidArgumentException('Rotation schedule must be a 5-field cron expression.');
+            throw new \InvalidArgumentException(__('ui.backend.secret.rotation_schedule_invalid'));
         }
 
         return \implode(' ', $parts);

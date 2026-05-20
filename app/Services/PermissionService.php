@@ -100,22 +100,22 @@ final class PermissionService
         string  $orgId,
     ): UserPermission {
         if (!$this->organizationService->hasPermission($orgId, $grantedBy, 'admin')) {
-            throw new AuthException("Requires 'admin' role to grant permissions.", 403);
+            throw new AuthException(__('ui.backend.permission.requires_admin_grant'), 403);
         }
 
         if (!\in_array($subjectType, UserPermission::VALID_SUBJECT_TYPES, true)) {
             throw new \InvalidArgumentException(
-                'Invalid subject_type. Allowed: ' . \implode(', ', UserPermission::VALID_SUBJECT_TYPES)
+                __('ui.backend.permission.invalid_subject_type', ['allowed' => \implode(', ', UserPermission::VALID_SUBJECT_TYPES)])
             );
         }
         if (!\in_array($resourceType, UserPermission::VALID_RESOURCE_TYPES, true)) {
             throw new \InvalidArgumentException(
-                'Invalid resource_type. Allowed: ' . \implode(', ', UserPermission::VALID_RESOURCE_TYPES)
+                __('ui.backend.permission.invalid_resource_type', ['allowed' => \implode(', ', UserPermission::VALID_RESOURCE_TYPES)])
             );
         }
         if (!\in_array($permission, UserPermission::VALID_PERMISSIONS, true)) {
             throw new \InvalidArgumentException(
-                'Invalid permission. Allowed: ' . \implode(', ', UserPermission::VALID_PERMISSIONS)
+                __('ui.backend.permission.invalid_permission', ['allowed' => \implode(', ', UserPermission::VALID_PERMISSIONS)])
             );
         }
 
@@ -140,7 +140,7 @@ final class PermissionService
             ], ['id' => (int) $found->id]);
 
             $perm = UserPermission::findById($found->id)
-                ?? throw new \RuntimeException('Failed to reload permission after update.');
+                ?? throw new \RuntimeException(__('ui.backend.permission.failed_reload_after_update'));
 
             $this->getAuditService()->record(
                 action: 'permission.grant',
@@ -167,7 +167,7 @@ final class PermissionService
         ]);
 
         $perm = UserPermission::findById((string) $id)
-            ?? throw new \RuntimeException('Failed to load created permission.');
+            ?? throw new \RuntimeException(__('ui.backend.permission.failed_load_created'));
 
         $this->getAuditService()->record(
             action: 'permission.grant',
@@ -190,11 +190,11 @@ final class PermissionService
     public function revoke(string $permId, string $requesterId, string $orgId): void
     {
         if (!$this->organizationService->hasPermission($orgId, $requesterId, 'admin')) {
-            throw new AuthException("Requires 'admin' role to revoke permissions.", 403);
+            throw new AuthException(__('ui.backend.permission.requires_admin_revoke'), 403);
         }
 
         if (UserPermission::findById($permId) === null) {
-            throw new \RuntimeException('Permission not found.');
+            throw new \RuntimeException(__('ui.backend.permission.not_found'));
         }
 
         Database::getInstance()->delete('user_permissions', ['id' => (int) $permId]);
@@ -217,7 +217,7 @@ final class PermissionService
     public function listForDirectory(string $dirId, string $requesterId, string $orgId): array
     {
         if (!$this->organizationService->hasPermission($orgId, $requesterId, 'admin')) {
-            throw new AuthException("Requires 'admin' role to view permissions.", 403);
+            throw new AuthException(__('ui.backend.permission.requires_admin_view'), 403);
         }
         return UserPermission::findForResource('directory', $dirId);
     }

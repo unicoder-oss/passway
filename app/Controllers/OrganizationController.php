@@ -40,7 +40,7 @@ final class OrganizationController
         $name = \trim((string) ($request->input('name') ?? ''));
 
         if ($name === '') {
-            return Response::validationError(['name' => ['Name is required.']]);
+            return Response::validationError(['name' => [__('ui.backend.common.name_required')]]);
         }
 
         try {
@@ -79,7 +79,7 @@ final class OrganizationController
         $org  = $this->findOrgOrFail($request);
 
         if (!$this->organizationService->hasPermission($org->id, $user->id, 'observer')) {
-            return Response::forbidden('You are not a member of this organization.');
+            return Response::forbidden(__('ui.backend.organization.not_member'));
         }
 
         $role = $this->organizationService->getMemberRole($org->id, $user->id);
@@ -100,7 +100,7 @@ final class OrganizationController
         $org     = $this->findOrgOrFail($request);
 
         if (!$this->organizationService->hasPermission($org->id, $user->id, 'observer')) {
-            return Response::forbidden('You are not a member of this organization.');
+            return Response::forbidden(__('ui.backend.organization.not_member'));
         }
 
         $members = $this->organizationService->listMembers($org->id);
@@ -123,7 +123,7 @@ final class OrganizationController
 
         $newRole = \trim((string) ($request->input('role') ?? ''));
         if ($newRole === '') {
-            return Response::validationError(['role' => ['Role is required.']]);
+            return Response::validationError(['role' => [__('ui.backend.common.role_required')]]);
         }
 
         try {
@@ -173,12 +173,12 @@ final class OrganizationController
         $newOwnerUuid = \trim((string) ($request->input('user_uuid') ?? ''));
 
         if ($newOwnerUuid === '') {
-            return Response::validationError(['user_uuid' => ['user_uuid is required.']]);
+            return Response::validationError(['user_uuid' => [__('ui.backend.group.user_uuid_required')]]);
         }
 
         $newOwner = User::findByUuid($newOwnerUuid);
         if ($newOwner === null) {
-            return Response::notFound('User not found.');
+            return Response::notFound(__('ui.backend.common.user_not_found'));
         }
 
         try {
@@ -202,7 +202,7 @@ final class OrganizationController
         $org  = Organization::findByUuid((string) $uuid);
         if ($org === null) {
             // Бросаем 404 — перехватится в Application::handleException()
-            throw new \RuntimeException('Organization not found.');
+            throw new \RuntimeException(__('ui.backend.common.organization_not_found'));
         }
         return $org;
     }
@@ -212,11 +212,11 @@ final class OrganizationController
         $userUuid = $request->routeParam('userUuid');
         $user     = User::findByUuid((string) $userUuid);
         if ($user === null) {
-            throw new \RuntimeException('User not found.');
+            throw new \RuntimeException(__('ui.backend.common.user_not_found'));
         }
         $member = OrganizationMember::findByOrgAndUser($orgId, $user->id);
         if ($member === null) {
-            throw new \RuntimeException('User is not a member of this organization.');
+            throw new \RuntimeException(__('ui.backend.common.user_not_member_org'));
         }
         return $user;
     }

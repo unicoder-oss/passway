@@ -66,7 +66,7 @@ final class PermissionController
         // Resolve subject UUID → numeric ID
         $subjectId = $this->resolveSubjectId($subjectType, $subjectUuid);
         if ($subjectId === null) {
-            return Response::notFound('Subject not found.');
+            return Response::notFound(__('ui.backend.common.subject_not_found'));
         }
 
         try {
@@ -122,7 +122,7 @@ final class PermissionController
         $uuid = $request->routeParam('uuid');
         $org  = Organization::findByUuid((string) $uuid);
         if ($org === null) {
-            throw new \RuntimeException('Organization not found.');
+            throw new \RuntimeException(__('ui.backend.common.organization_not_found'));
         }
         return $org;
     }
@@ -132,7 +132,7 @@ final class PermissionController
         $dirUuid = (string) $request->routeParam('dirUuid');
         $dir     = Directory::findByUuid($dirUuid);
         if ($dir === null || $dir->organizationId !== $org->id) {
-            throw new \RuntimeException('Directory not found.');
+            throw new \RuntimeException(__('ui.backend.directory.not_found'));
         }
         return $dir;
     }

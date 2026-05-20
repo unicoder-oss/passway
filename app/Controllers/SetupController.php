@@ -71,7 +71,7 @@ final class SetupController
         ];
 
         if ($token === '') {
-            $errors[] = 'Setup token is required.';
+            $errors[] = __('ui.setup.token_required');
         }
 
         try {
@@ -87,7 +87,7 @@ final class SetupController
         }
 
         if ($password !== $passConf) {
-            $errors[] = 'Passwords do not match.';
+            $errors[] = __('ui.setup.passwords_do_not_match');
         }
 
         try {
@@ -109,7 +109,7 @@ final class SetupController
         }
 
         // Успех — перенаправить на страницу входа
-        return Response::redirect('/auth/login?success=' . \urlencode('Setup complete. You can now sign in.'));
+        return Response::redirect('/auth/login?success=' . \urlencode(__('ui.auth.login.success_setup_complete')));
     }
 
     // ------------------------------------------------------------------ //
@@ -146,27 +146,45 @@ final class SetupController
                 $items .= '<li>' . e($error) . '</li>';
             }
 
-            $errorHtml = '<div class="error"><strong style="display:block; margin-bottom:.45rem;">Please fix the following:</strong><ul style="margin:0; padding-left:1.2rem; display:grid; gap:.35rem;">' . $items . '</ul></div>';
+            $errorHtml = '<div class="error"><strong style="display:block; margin-bottom:.45rem;">' . e(__('ui.setup.fix_following')) . '</strong><ul style="margin:0; padding-left:1.2rem; display:grid; gap:.35rem;">' . $items . '</ul></div>';
         }
 
         $setupToken = e((string) ($old['setup_token'] ?? ''));
         $email = e((string) ($old['email'] ?? ''));
         $selectedMode = (string) ($old['deploy_mode'] ?? 'solo');
+        $locale = e(app_locale());
+        $title = e(__('ui.titles.setup'));
+        $heading = e(__('ui.setup.heading'));
+        $subtitle = e(__('ui.setup.subtitle'));
+        $tokenLabel = e(__('ui.setup.token'));
+        $tokenPlaceholder = e(__('ui.setup.token_placeholder'));
+        $tokenHint = e(__('ui.setup.token_hint'));
+        $adminEmailLabel = e(__('ui.setup.admin_email'));
+        $adminPasswordLabel = e(__('ui.setup.admin_password'));
+        $passwordPlaceholder = e(__('ui.setup.password_placeholder'));
+        $confirmPasswordLabel = e(__('ui.setup.confirm_password'));
+        $confirmPasswordPlaceholder = e(__('ui.setup.confirm_password_placeholder'));
+        $deployModeLabel = e(__('ui.setup.deploy_mode'));
+        $soloLabel = e(__('ui.setup.mode_solo'));
+        $soloHint = e(__('ui.setup.mode_solo_hint'));
+        $teamLabel = e(__('ui.setup.mode_team'));
+        $teamHint = e(__('ui.setup.mode_team_hint'));
+        $submitLabel = e(__('ui.setup.submit'));
 
         $modeOptions = '';
         foreach (SetupService::DEPLOY_MODES as $mode) {
-            $label       = \ucfirst($mode);
+            $label = $mode === 'team' ? __('ui.setup.mode_team') : __('ui.setup.mode_solo');
             $selected = $selectedMode === $mode ? ' selected' : '';
             $modeOptions .= "<option value=\"{$mode}\"{$selected}>{$label}</option>";
         }
 
         return <<<HTML
         <!DOCTYPE html>
-        <html lang="en">
+        <html lang="{$locale}">
         <head>
             <meta charset="UTF-8">
             <meta name="viewport" content="width=device-width, initial-scale=1.0">
-            <title>Passway — Initial Setup</title>
+            <title>{$title}</title>
             <style>
                 *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
                 body { font-family: system-ui, sans-serif; background: #f4f5f7; display: flex;
@@ -192,40 +210,40 @@ final class SetupController
         </head>
         <body>
             <div class="card">
-                <h1>Passway Setup</h1>
-                <p class="subtitle">Configure your secrets management instance.</p>
+                <h1>{$heading}</h1>
+                <p class="subtitle">{$subtitle}</p>
                 {$errorHtml}
                 <form method="POST" action="/setup">
-                     <label for="setup_token">Setup Token</label>
+                     <label for="setup_token">{$tokenLabel}</label>
                      <input type="text" id="setup_token" name="setup_token"
                             value="{$setupToken}"
-                            placeholder="Paste the token from storage/setup_token.txt"
+                            placeholder="{$tokenPlaceholder}"
                             required autocomplete="off">
-                    <p class="hint">Found in <code>storage/setup_token.txt</code> or server stdout.</p>
+                    <p class="hint">{$tokenHint}</p>
 
-                     <label for="email">Admin Email</label>
+                     <label for="email">{$adminEmailLabel}</label>
                      <input type="email" id="email" name="email"
                             value="{$email}"
                             placeholder="admin@example.com" required autocomplete="email">
 
-                    <label for="password">Admin Password</label>
+                    <label for="password">{$adminPasswordLabel}</label>
                     <input type="password" id="password" name="password"
-                           placeholder="Min. 8 characters, letter + digit" required autocomplete="new-password">
+                           placeholder="{$passwordPlaceholder}" required autocomplete="new-password">
 
-                    <label for="password_confirm">Confirm Password</label>
+                    <label for="password_confirm">{$confirmPasswordLabel}</label>
                     <input type="password" id="password_confirm" name="password_confirm"
-                           placeholder="Repeat password" required autocomplete="new-password">
+                           placeholder="{$confirmPasswordPlaceholder}" required autocomplete="new-password">
 
-                    <label for="deploy_mode">Deploy Mode</label>
+                    <label for="deploy_mode">{$deployModeLabel}</label>
                     <select id="deploy_mode" name="deploy_mode">
                         {$modeOptions}
                     </select>
                     <p class="hint">
-                        <strong>Solo</strong> — single user. &nbsp;
-                        <strong>Team</strong> — multiple users with organisations.
+                        <strong>{$soloLabel}</strong> - {$soloHint} &nbsp;
+                        <strong>{$teamLabel}</strong> - {$teamHint}
                     </p>
 
-                    <button type="submit">Complete Setup</button>
+                    <button type="submit">{$submitLabel}</button>
                 </form>
             </div>
         </body>

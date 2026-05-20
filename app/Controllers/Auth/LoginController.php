@@ -36,7 +36,7 @@ final class LoginController
         return Response::make(200)
             ->withContentType('text/html; charset=utf-8')
             ->withBody($this->viewService->render('auth/login', [
-                'title' => 'Passway Login',
+                'title' => __('ui.titles.login'),
                 'error' => $request->query('error'),
                 'success' => $request->query('success'),
                 'email' => $request->query('email', ''),
@@ -79,7 +79,7 @@ final class LoginController
                 return Response::make(\in_array($code, [401, 429, 503], true) ? $code : 401)
                     ->withContentType('text/html; charset=utf-8')
                     ->withBody($this->viewService->render('auth/login', [
-                        'title' => 'Passway Login',
+                        'title' => __('ui.titles.login'),
                         'error' => $e->getMessage(),
                         'email' => $email,
                     ]));
@@ -95,7 +95,7 @@ final class LoginController
             return Response::json([
                 'success' => true,
                 'status'  => 'totp_required',
-                'message' => 'Please provide your TOTP code.',
+                'message' => __('ui.auth.totp.provide_code'),
             ]);
         }
 
@@ -145,7 +145,7 @@ final class LoginController
         $this->sessionService->clearCookie();
 
         if ($request->expectsJson()) {
-            return Response::success(['message' => 'Logged out successfully']);
+            return Response::success(['message' => __('ui.auth.logout_success')]);
         }
 
         // Браузерный редирект на страницу входа (заглушка — будет заменена в Шаге 13)

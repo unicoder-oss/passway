@@ -63,7 +63,7 @@ final class AuthService
                 'email'  => $email,
                 'reason' => 'user_not_found',
             ]);
-            throw new AuthException('Invalid email or password');
+            throw new AuthException(__('ui.backend.auth.invalid_credentials'));
         }
 
         // 4. Проверить активность аккаунта
@@ -72,7 +72,7 @@ final class AuthService
             $this->writeAuditLog($user->id, 'auth.login_fail', $ip, $userAgent, false, [
                 'reason' => 'account_inactive',
             ]);
-            throw new AuthException('Account is inactive');
+            throw new AuthException(__('ui.backend.auth.account_inactive'));
         }
 
         // 5. Проверить пароль
@@ -81,7 +81,7 @@ final class AuthService
             $this->writeAuditLog($user->id, 'auth.login_fail', $ip, $userAgent, false, [
                 'reason' => 'wrong_password',
             ]);
-            throw new AuthException('Invalid email or password');
+            throw new AuthException(__('ui.backend.auth.invalid_credentials'));
         }
 
         // 6. Перехешировать пароль если параметры изменились
@@ -149,13 +149,13 @@ final class AuthService
 
         if ($pending === null || $pending['expires'] < \time()) {
             unset($_SESSION['totp_pending']);
-            throw new AuthException('TOTP session expired. Please log in again.');
+            throw new AuthException(__('ui.backend.auth.totp_session_expired'));
         }
 
         $user = User::findById((int) $pending['user_id']);
         if ($user === null || !$user->isActive) {
             unset($_SESSION['totp_pending']);
-            throw new AuthException('User not found or inactive');
+            throw new AuthException(__('ui.backend.auth.user_not_found_or_inactive'));
         }
 
         unset($_SESSION['totp_pending']);
@@ -190,7 +190,7 @@ final class AuthService
 
         if ($pending === null || $pending['expires'] < \time()) {
             unset($_SESSION['totp_pending']);
-            throw new AuthException('TOTP session expired. Please log in again.');
+            throw new AuthException(__('ui.backend.auth.totp_session_expired'));
         }
 
         return (string) $pending['user_id'];
@@ -211,7 +211,7 @@ final class AuthService
         );
 
         if ($value !== '1') {
-            throw new AuthException('Setup not complete. Please run /setup first.', 503);
+            throw new AuthException(__('ui.backend.auth.setup_incomplete'), 503);
         }
     }
 
@@ -248,7 +248,7 @@ final class AuthService
 
         if ((int) $row['count'] >= self::RATE_LIMIT_MAX) {
             throw new AuthException(
-                'Too many failed login attempts. Please try again in 15 minutes.',
+                __('ui.backend.auth.rate_limited'),
                 429
             );
         }

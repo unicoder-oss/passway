@@ -155,7 +155,7 @@ final class AuditService
     private function assertCanView(string $orgId, string $userId): void
     {
         if ($this->organizationService === null || !$this->organizationService->hasPermission($orgId, $userId, 'admin')) {
-            throw new AuthException('Only admin or above can view audit logs.', 403);
+            throw new AuthException(__('ui.backend.audit.requires_admin_view'), 403);
         }
     }
 }

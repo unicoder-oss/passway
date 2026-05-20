@@ -50,12 +50,12 @@ final class InviteService
 
         // Только admin+ может создавать инвайты
         if (!$this->organizationService->hasPermission($orgId, $createdBy, 'admin')) {
-            throw new AuthException("Requires 'admin' role to create invites.", 403);
+            throw new AuthException(__('ui.backend.invite.requires_admin_create'), 403);
         }
 
         // Только owner может создать инвайт с ролью admin
         if ($role === 'admin' && !$this->organizationService->hasPermission($orgId, $createdBy, 'owner')) {
-            throw new AuthException("Only the owner can create admin invites.", 403);
+            throw new AuthException(__('ui.backend.invite.only_owner_create_admin'), 403);
         }
 
         return $this->insertInvite(
@@ -81,7 +81,7 @@ final class InviteService
             "SELECT value FROM system_config WHERE key = 'deploy_mode'"
         );
         if ($deployMode === 'solo') {
-            throw new \RuntimeException('create_org invites are not available in solo mode.');
+            throw new \RuntimeException(__('ui.backend.invite.create_org_not_in_solo'));
         }
 
         return $this->insertInvite(
@@ -107,13 +107,13 @@ final class InviteService
         $invite = InviteLink::findByToken($token);
 
         if ($invite === null) {
-            throw new AuthException('Invite link not found.');
+            throw new AuthException(__('ui.backend.invite.link_not_found'));
         }
         if ($invite->isExpired()) {
-            throw new AuthException('Invite link has expired.');
+            throw new AuthException(__('ui.backend.invite.link_expired'));
         }
         if ($invite->isUsed()) {
-            throw new AuthException('Invite link has already been used.');
+            throw new AuthException(__('ui.backend.invite.link_already_used'));
         }
 
         return $invite;
@@ -145,15 +145,15 @@ final class InviteService
         $invite = $this->findValid($token);
 
         if ($invite->type !== InviteLink::TYPE_JOIN_ORG) {
-            throw new AuthException('This invite is not for joining an organization.');
+            throw new AuthException(__('ui.backend.invite.wrong_type_join_org'));
         }
         if ($invite->organizationId === null) {
-            throw new \RuntimeException('Invite is missing organization reference.');
+            throw new \RuntimeException(__('ui.backend.invite.missing_org_reference'));
         }
 
         $org = Organization::findById($invite->organizationId);
         if ($org === null || !$org->isActive) {
-            throw new \RuntimeException('Organization not found or inactive.');
+            throw new \RuntimeException(__('ui.backend.invite.org_not_found_or_inactive'));
         }
 
         Database::getInstance()->transaction(function () use ($invite, $org, $acceptorUserId): void {
@@ -192,16 +192,16 @@ final class InviteService
     {
         $invite = InviteLink::findByUuid($inviteUuid);
         if ($invite === null) {
-            throw new \RuntimeException('Invite not found.');
+            throw new \RuntimeException(__('ui.backend.invite.invite_not_found'));
         }
         if ($invite->isUsed()) {
-            throw new \RuntimeException('Cannot revoke an already used invite.');
+            throw new \RuntimeException(__('ui.backend.invite.cannot_revoke_used'));
         }
 
         // Проверка прав: только admin+ орг. или создатель инвайта
         if ($invite->organizationId !== null) {
             if (!$this->organizationService->hasPermission($invite->organizationId, $requesterId, 'admin')) {
-                throw new AuthException("Requires 'admin' role to revoke invites.", 403);
+                throw new AuthException(__('ui.backend.invite.requires_admin_revoke'), 403);
             }
         }
 
@@ -251,7 +251,7 @@ final class InviteService
         ]);
 
         $invite = InviteLink::findByToken($token)
-            ?? throw new \RuntimeException('Failed to load created invite.');
+            ?? throw new \RuntimeException(__('ui.backend.invite.failed_load_created'));
 
         $this->getAuditService()->record(
             action: 'invite.create',
@@ -290,7 +290,7 @@ final class InviteService
         );
         if (!\in_array($role, $allowed, true)) {
             throw new \InvalidArgumentException(
-                'Invalid role for invite. Allowed: ' . \implode(', ', $allowed)
+                __('ui.backend.invite.invalid_role', ['allowed' => \implode(', ', $allowed)])
             );
         }
     }

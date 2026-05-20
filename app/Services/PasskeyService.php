@@ -142,7 +142,7 @@ final class PasskeyService
         unset($_SESSION['webauthn_reg_options'], $_SESSION['webauthn_reg_user_id']);
 
         if ($serialized === null) {
-            throw new AuthException('Registration session expired. Please start registration again.');
+            throw new AuthException(__('ui.backend.passkey.registration_session_expired'));
         }
 
         /** @var PublicKeyCredentialCreationOptions $creationOptions */
@@ -152,7 +152,7 @@ final class PasskeyService
             $publicKeyCredential = $this->loader->loadArray($credentialResponse);
 
             if (!$publicKeyCredential->response instanceof \Webauthn\AuthenticatorAttestationResponse) {
-                throw new AuthException('Invalid response type for registration');
+                throw new AuthException(__('ui.backend.passkey.invalid_registration_response_type'));
             }
 
             // Передаём hostname вместо PSR-7 request (поддерживается с 4.5)
@@ -162,7 +162,7 @@ final class PasskeyService
                 request:                               $this->rpId,
             );
         } catch (AuthenticatorResponseVerificationException | InvalidDataException $e) {
-            throw new AuthException('Passkey registration failed: ' . $e->getMessage());
+            throw new AuthException(__('ui.backend.passkey.registration_failed', ['message' => $e->getMessage()]));
         }
 
         return $this->storeCredential($user, $credentialSource, $name);
@@ -225,7 +225,7 @@ final class PasskeyService
         unset($_SESSION['webauthn_auth_options']);
 
         if ($serialized === null) {
-            throw new AuthException('Authentication session expired. Please try again.');
+            throw new AuthException(__('ui.backend.passkey.authentication_session_expired'));
         }
 
         /** @var PublicKeyCredentialRequestOptions $requestOptions */
@@ -235,7 +235,7 @@ final class PasskeyService
             $publicKeyCredential = $this->loader->loadArray($credentialResponse);
 
             if (!$publicKeyCredential->response instanceof \Webauthn\AuthenticatorAssertionResponse) {
-                throw new AuthException('Invalid response type for authentication');
+                throw new AuthException(__('ui.backend.passkey.invalid_authentication_response_type'));
             }
 
             // Достать credential_id из ответа (base64url encoded в rawId)
@@ -244,19 +244,19 @@ final class PasskeyService
             // Найти ключ в БД
             $passkey = Passkey::findByCredentialId($credentialId);
             if ($passkey === null) {
-                throw new AuthException('Passkey not found');
+                throw new AuthException(__('ui.backend.passkey.not_found'));
             }
 
             // Найти пользователя
             $user = User::findById((int) $passkey->userId);
             if ($user === null || !$user->isActive) {
-                throw new AuthException('User not found or inactive');
+                throw new AuthException(__('ui.backend.passkey.user_not_found_or_inactive'));
             }
 
             // Загрузить PublicKeyCredentialSource из JSON
             $credentialSourceData = \json_decode($passkey->publicKey, true);
             if (!\is_array($credentialSourceData)) {
-                throw new AuthException('Invalid credential data in database');
+                throw new AuthException(__('ui.backend.passkey.invalid_credential_data'));
             }
             $credentialSource = PublicKeyCredentialSource::createFromArray($credentialSourceData);
 
@@ -269,7 +269,7 @@ final class PasskeyService
                 userHandle:                          $user->uuid,
             );
         } catch (AuthenticatorResponseVerificationException | InvalidDataException $e) {
-            throw new AuthException('Passkey authentication failed: ' . $e->getMessage());
+            throw new AuthException(__('ui.backend.passkey.authentication_failed', ['message' => $e->getMessage()]));
         }
 
         // Обновить sign_count и last_used_at
@@ -310,7 +310,7 @@ final class PasskeyService
 
         $passkey = Passkey::findByCredentialId($credentialId);
         if ($passkey === null) {
-            throw new \RuntimeException('Failed to load stored passkey');
+            throw new \RuntimeException(__('ui.backend.passkey.failed_load_stored'));
         }
 
         return $passkey;

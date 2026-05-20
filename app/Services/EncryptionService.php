@@ -91,7 +91,7 @@ final class EncryptionService
     {
         $ciphertext = base64_decode($encryptedValue, strict: true);
         if ($ciphertext === false) {
-            throw new DecryptionException('Invalid base64 encoding of encrypted value.');
+            throw new DecryptionException(__('ui.backend.security.invalid_encrypted_base64'));
         }
 
         $expectedHexLen = self::NONCE_BYTES * 2; // 48
@@ -112,7 +112,7 @@ final class EncryptionService
         if ($plaintext === false) {
             // Не раскрываем причину (ключ или данные)
             throw new DecryptionException(
-                'Decryption failed: authentication tag mismatch or invalid key.'
+                __('ui.backend.security.decrypt_failed')
             );
         }
 
@@ -186,13 +186,13 @@ final class EncryptionService
 
         if (!self::validateMasterKeyFormat($hex)) {
             throw new RuntimeException(
-                'MASTER_KEY must be exactly 64 hex characters (32 bytes).'
+                __('ui.backend.security.master_key_length')
             );
         }
 
         $key = hex2bin($hex);
         if ($key === false || \strlen($key) !== self::KEY_BYTES) {
-            throw new RuntimeException('Failed to decode MASTER_KEY from hex.');
+            throw new RuntimeException(__('ui.backend.security.master_key_decode_failed'));
         }
 
         return $key;

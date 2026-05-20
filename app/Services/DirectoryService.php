@@ -58,21 +58,21 @@ final class DirectoryService
     ): Directory {
         $name = \trim($name);
         if ($name === '') {
-            throw new \InvalidArgumentException('Directory name cannot be empty.');
+            throw new \InvalidArgumentException(__('ui.backend.directory.name_empty'));
         }
         if (\strlen($name) > 255) {
-            throw new \InvalidArgumentException('Directory name is too long (max 255 characters).');
+            throw new \InvalidArgumentException(__('ui.backend.directory.name_too_long'));
         }
 
         $parent = null;
         if ($parentUuid !== null) {
             $parent = Directory::findByUuid($parentUuid);
             if ($parent === null || $parent->organizationId !== $orgId) {
-                throw new \RuntimeException('Parent directory not found.');
+                throw new \RuntimeException(__('ui.backend.directory.parent_not_found'));
             }
             if ($parent->depth >= self::MAX_DEPTH) {
                 throw new \RuntimeException(
-                    \sprintf('Maximum directory depth (%d levels) reached.', self::MAX_DEPTH + 1)
+                    __('ui.backend.directory.max_depth_reached', ['levels' => (string) (self::MAX_DEPTH + 1)])
                 );
             }
             // Проверить право на создание вложенных каталогов в родителе
@@ -100,7 +100,7 @@ final class DirectoryService
         ]);
 
         return Directory::findByUuid($uuid)
-            ?? throw new \RuntimeException('Failed to load created directory.');
+            ?? throw new \RuntimeException(__('ui.backend.directory.failed_load_created'));
     }
 
     // ------------------------------------------------------------------ //
@@ -134,7 +134,7 @@ final class DirectoryService
         if ($parentUuid !== null) {
             $parent = Directory::findByUuid($parentUuid);
             if ($parent === null || $parent->organizationId !== $orgId) {
-                throw new \RuntimeException('Parent directory not found.');
+                throw new \RuntimeException(__('ui.backend.directory.parent_not_found'));
             }
             $parentId = $parent->id;
         }
@@ -152,7 +152,7 @@ final class DirectoryService
     {
         $dir = Directory::findByUuid($dirUuid);
         if ($dir === null || $dir->organizationId !== $orgId) {
-            throw new \RuntimeException('Directory not found.');
+            throw new \RuntimeException(__('ui.backend.directory.not_found'));
         }
 
         $this->assertCan('read', $userId, 'directory', $dir->id, $orgId);
@@ -179,15 +179,15 @@ final class DirectoryService
     ): Directory {
         $newName = \trim($newName);
         if ($newName === '') {
-            throw new \InvalidArgumentException('Directory name cannot be empty.');
+            throw new \InvalidArgumentException(__('ui.backend.directory.name_empty'));
         }
         if (\strlen($newName) > 255) {
-            throw new \InvalidArgumentException('Directory name is too long (max 255 characters).');
+            throw new \InvalidArgumentException(__('ui.backend.directory.name_too_long'));
         }
 
         $dir = Directory::findByUuid($dirUuid);
         if ($dir === null || $dir->organizationId !== $orgId) {
-            throw new \RuntimeException('Directory not found.');
+            throw new \RuntimeException(__('ui.backend.directory.not_found'));
         }
 
         $this->assertCan('write', $userId, 'directory', $dir->id, $orgId);
@@ -195,7 +195,7 @@ final class DirectoryService
         $dir->update(['name' => $newName, 'updated_at' => now()->format('Y-m-d H:i:s')]);
 
         return Directory::findByUuid($dirUuid)
-            ?? throw new \RuntimeException('Failed to reload directory after rename.');
+            ?? throw new \RuntimeException(__('ui.backend.directory.failed_reload_after_rename'));
     }
 
     // ------------------------------------------------------------------ //
@@ -218,7 +218,7 @@ final class DirectoryService
     ): void {
         $dir = Directory::findByUuid($dirUuid);
         if ($dir === null || $dir->organizationId !== $orgId) {
-            throw new \RuntimeException('Directory not found.');
+            throw new \RuntimeException(__('ui.backend.directory.not_found'));
         }
 
         $this->assertCan('write', $userId, 'directory', $dir->id, $orgId);
@@ -228,18 +228,18 @@ final class DirectoryService
         if ($newParentUuid !== null) {
             $newParent = Directory::findByUuid($newParentUuid);
             if ($newParent === null || $newParent->organizationId !== $orgId) {
-                throw new \RuntimeException('New parent directory not found.');
+                throw new \RuntimeException(__('ui.backend.directory.new_parent_not_found'));
             }
             // Защита от кольцевых ссылок
             if ($newParent->uuid === $dir->uuid) {
-                throw new \RuntimeException('Cannot move a directory into itself.');
+                throw new \RuntimeException(__('ui.backend.directory.cannot_move_into_self'));
             }
             if (\str_starts_with($newParent->path . '/', $dir->path . '/')) {
-                throw new \RuntimeException('Cannot move a directory into its own descendant.');
+                throw new \RuntimeException(__('ui.backend.directory.cannot_move_into_descendant'));
             }
             if ($newParent->depth >= self::MAX_DEPTH) {
                 throw new \RuntimeException(
-                    \sprintf('Maximum directory depth (%d levels) reached.', self::MAX_DEPTH + 1)
+                    __('ui.backend.directory.max_depth_reached', ['levels' => (string) (self::MAX_DEPTH + 1)])
                 );
             }
         }
@@ -295,7 +295,7 @@ final class DirectoryService
     {
         $dir = Directory::findByUuid($dirUuid);
         if ($dir === null || $dir->organizationId !== $orgId) {
-            throw new \RuntimeException('Directory not found.');
+            throw new \RuntimeException(__('ui.backend.directory.not_found'));
         }
 
         $this->assertCan('delete', $userId, 'directory', $dir->id, $orgId);
@@ -324,7 +324,7 @@ final class DirectoryService
     {
         if (!$this->organizationService->hasPermission($orgId, $userId, $minRole)) {
             throw new AuthException(
-                \sprintf("Requires '%s' role in this organization.", $minRole),
+                __('ui.backend.directory.requires_role', ['role' => $minRole]),
                 403
             );
         }
@@ -342,7 +342,7 @@ final class DirectoryService
     ): void {
         if (!$this->permissionService->can($permission, $userId, $resourceType, $resourceId, $orgId)) {
             throw new AuthException(
-                \sprintf("Access denied: '%s' permission required.", $permission),
+                __('ui.backend.directory.access_permission_required', ['permission' => $permission]),
                 403
             );
         }

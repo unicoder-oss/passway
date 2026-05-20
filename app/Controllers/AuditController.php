@@ -56,7 +56,7 @@ final class AuditController
     {
         $org = Organization::findByUuid((string) $request->routeParam('uuid'));
         if ($org === null) {
-            throw new \RuntimeException('Organization not found.');
+            throw new \RuntimeException(__('ui.backend.common.organization_not_found'));
         }
 
         return $org;

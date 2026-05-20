@@ -61,7 +61,7 @@ final class OrganizationIntegrationController
         $credentials = $request->input('credentials');
 
         if (!\is_array($credentials)) {
-            return Response::validationError(['credentials' => ['credentials must be an object.']]);
+            return Response::validationError(['credentials' => [__('ui.backend.common.credentials_object_required')]]);
         }
 
         try {
@@ -84,7 +84,7 @@ final class OrganizationIntegrationController
         $credentials = $request->input('credentials');
 
         if ($credentials !== null && !\is_array($credentials)) {
-            return Response::validationError(['credentials' => ['credentials must be an object.']]);
+            return Response::validationError(['credentials' => [__('ui.backend.common.credentials_object_required')]]);
         }
 
         try {
@@ -127,7 +127,7 @@ final class OrganizationIntegrationController
     {
         $org = Organization::findByUuid((string) $request->routeParam('uuid'));
         if ($org === null) {
-            throw new \RuntimeException('Organization not found.');
+            throw new \RuntimeException(__('ui.backend.common.organization_not_found'));
         }
 
         return $org;

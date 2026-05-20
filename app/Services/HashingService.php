@@ -45,7 +45,7 @@ final class HashingService
         ]);
 
         if ($hash === false) {
-            throw new \RuntimeException('password_hash() failed: Argon2id not available.');
+            throw new \RuntimeException(__('ui.backend.security.argon_unavailable'));
         }
 
         if (\function_exists('sodium_memzero')) { \sodium_memzero($password); }

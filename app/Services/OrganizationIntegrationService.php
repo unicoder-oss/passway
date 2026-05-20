@@ -32,10 +32,10 @@ final class OrganizationIntegrationService
         $this->assertAdmin($orgId, $userId);
 
         $integration = OrganizationIntegration::findByUuid($uuid)
-            ?? throw new \RuntimeException('Integration not found.');
+            ?? throw new \RuntimeException(__('ui.backend.integration.not_found'));
 
         if ($integration->organizationId !== $orgId) {
-            throw new \RuntimeException('Integration not found.');
+            throw new \RuntimeException(__('ui.backend.integration.not_found'));
         }
 
         return $integration;
@@ -55,10 +55,10 @@ final class OrganizationIntegrationService
         $name = $this->normalizeName($name);
 
         $service = RotationService::findByUuid($rotationServiceUuid)
-            ?? throw new \RuntimeException('Rotation service not found.');
+            ?? throw new \RuntimeException(__('ui.backend.integration.service_not_found'));
 
         if (!$service->isActive || !$service->isVerified) {
-            throw new \RuntimeException('Rotation service must be active and verified before use.');
+            throw new \RuntimeException(__('ui.backend.integration.service_must_be_active_verified'));
         }
 
         $uuid = generate_uuid();
@@ -156,10 +156,10 @@ final class OrganizationIntegrationService
     public function getDecryptedCredentials(string $integrationId): array
     {
         $integration = OrganizationIntegration::findById($integrationId)
-            ?? throw new \RuntimeException('Integration not found.');
+            ?? throw new \RuntimeException(__('ui.backend.integration.not_found'));
 
         if (!$integration->isActive) {
-            throw new \RuntimeException('Integration is inactive.');
+            throw new \RuntimeException(__('ui.backend.integration.inactive'));
         }
 
         if ($integration->encryptedCredentials === null || $integration->credentialsNonce === null) {
@@ -179,7 +179,7 @@ final class OrganizationIntegrationService
     private function assertAdmin(string $orgId, string $userId): void
     {
         if (!$this->organizationService->hasPermission($orgId, $userId, 'admin')) {
-            throw new AuthException('Only admin or above can manage organization integrations.', 403);
+            throw new AuthException(__('ui.backend.integration.requires_admin_manage'), 403);
         }
     }
 
@@ -187,10 +187,10 @@ final class OrganizationIntegrationService
     {
         $name = \trim($name);
         if ($name === '') {
-            throw new \InvalidArgumentException('Integration name cannot be empty.');
+            throw new \InvalidArgumentException(__('ui.backend.integration.name_empty'));
         }
         if (\strlen($name) > 255) {
-            throw new \InvalidArgumentException('Integration name is too long (max 255 characters).');
+            throw new \InvalidArgumentException(__('ui.backend.integration.name_too_long'));
         }
 
         return $name;
@@ -201,7 +201,7 @@ final class OrganizationIntegrationService
     {
         $json = \json_encode($credentials, \JSON_UNESCAPED_SLASHES);
         if ($json === false) {
-            throw new \RuntimeException('Failed to encode integration credentials as JSON.');
+            throw new \RuntimeException(__('ui.backend.integration.encode_credentials_failed'));
         }
 
         return $json;

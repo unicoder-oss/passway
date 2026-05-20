@@ -62,7 +62,7 @@ final class GroupController
             ? (string) $request->input('description') : null;
 
         if ($name === '') {
-            return Response::validationError(['name' => ['Name is required.']]);
+            return Response::validationError(['name' => [__('ui.backend.common.name_required')]]);
         }
 
         try {
@@ -153,12 +153,12 @@ final class GroupController
 
         $userUuid = \trim((string) ($request->input('user_uuid') ?? ''));
         if ($userUuid === '') {
-            return Response::validationError(['user_uuid' => ['user_uuid is required.']]);
+            return Response::validationError(['user_uuid' => [__('ui.backend.group.user_uuid_required')]]);
         }
 
         $targetUser = \Passway\Models\User::findByUuid($userUuid);
         if ($targetUser === null) {
-            return Response::notFound('User not found.');
+            return Response::notFound(__('ui.backend.common.user_not_found'));
         }
 
         try {
@@ -185,7 +185,7 @@ final class GroupController
 
         $targetUser = \Passway\Models\User::findByUuid($userUuid);
         if ($targetUser === null) {
-            return Response::notFound('User not found.');
+            return Response::notFound(__('ui.backend.common.user_not_found'));
         }
 
         try {
@@ -208,7 +208,7 @@ final class GroupController
         $uuid = $request->routeParam('uuid');
         $org  = Organization::findByUuid((string) $uuid);
         if ($org === null) {
-            throw new \RuntimeException('Organization not found.');
+            throw new \RuntimeException(__('ui.backend.common.organization_not_found'));
         }
         return $org;
     }

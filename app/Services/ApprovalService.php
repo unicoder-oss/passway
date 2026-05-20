@@ -65,26 +65,26 @@ final class ApprovalService
     ): ApprovalRequest {
         if (!\in_array($requestType, ApprovalRequest::VALID_REQUEST_TYPES, true)) {
             throw new \InvalidArgumentException(
-                'Invalid request type. Allowed: ' . \implode(', ', ApprovalRequest::VALID_REQUEST_TYPES) . '.'
+                __('ui.backend.approval.invalid_request_type', ['allowed' => \implode(', ', ApprovalRequest::VALID_REQUEST_TYPES)])
             );
         }
 
         // Пользователь должен быть членом организации
         if ($this->organizationService->getMemberRole($orgId, $userId) === null) {
-            throw new AuthException('You are not a member of this organization.', 403);
+            throw new AuthException(__('ui.backend.organization.not_member'), 403);
         }
 
         $secret = $this->findSecretInOrg($secretUuid, $orgId);
 
         if (!$secret->requiresApproval) {
             throw new \InvalidArgumentException(
-                'This secret does not require approval. Access it directly.'
+                __('ui.backend.approval.secret_direct_access')
             );
         }
 
         if (ApprovalRequest::hasPending($secret->id, $userId, $requestType)) {
             throw new \RuntimeException(
-                'You already have a pending approval request for this secret and request type.'
+                __('ui.backend.approval.pending_exists')
             );
         }
 
@@ -120,7 +120,7 @@ final class ApprovalService
         });
 
         $request = ApprovalRequest::findByUuid($uuid)
-            ?? throw new \RuntimeException('Failed to load created approval request.');
+            ?? throw new \RuntimeException(__('ui.backend.approval.failed_load_created'));
 
         $this->getAuditService()->record(
             action: 'approval.request_create',
@@ -148,7 +148,7 @@ final class ApprovalService
     public function listMy(string $userId, string $orgId): array
     {
         if ($this->organizationService->getMemberRole($orgId, $userId) === null) {
-            throw new AuthException('You are not a member of this organization.', 403);
+            throw new AuthException(__('ui.backend.organization.not_member'), 403);
         }
 
         // Фильтруем по секретам, принадлежащим организации
@@ -201,7 +201,7 @@ final class ApprovalService
         $isAdmin     = $this->organizationService->hasPermission($orgId, $userId, 'admin');
 
         if (!$isRequester && !$isAdmin) {
-            throw new AuthException('Access denied: you can only view your own approval requests.', 403);
+            throw new AuthException(__('ui.backend.approval.view_own_only'), 403);
         }
 
         return $approvalReq;
@@ -229,12 +229,12 @@ final class ApprovalService
         $approvalReq = $this->findRequestInOrg($requestUuid, $orgId);
 
         if ($approvalReq->requestedBy === $reviewerId) {
-            throw new AuthException('You cannot approve your own approval request.', 403);
+            throw new AuthException(__('ui.backend.approval.cannot_approve_own'), 403);
         }
 
         if ($approvalReq->status !== 'pending') {
             throw new \RuntimeException(
-                \sprintf("Cannot approve: request is '%s', not 'pending'.", $approvalReq->status)
+                __('ui.backend.approval.cannot_approve_status', ['status' => $approvalReq->status])
             );
         }
 
@@ -255,7 +255,7 @@ final class ApprovalService
         ]);
 
         $updated = ApprovalRequest::findByUuid($requestUuid)
-            ?? throw new \RuntimeException('Failed to reload approval request after approval.');
+            ?? throw new \RuntimeException(__('ui.backend.approval.failed_reload_after_approve'));
 
         $this->getAuditService()->record(
             action: 'approval.request_approve',
@@ -288,7 +288,7 @@ final class ApprovalService
 
         if ($approvalReq->status !== 'pending') {
             throw new \RuntimeException(
-                \sprintf("Cannot reject: request is '%s', not 'pending'.", $approvalReq->status)
+                __('ui.backend.approval.cannot_reject_status', ['status' => $approvalReq->status])
             );
         }
 
@@ -301,7 +301,7 @@ final class ApprovalService
         ]);
 
         $updated = ApprovalRequest::findByUuid($requestUuid)
-            ?? throw new \RuntimeException('Failed to reload approval request after rejection.');
+            ?? throw new \RuntimeException(__('ui.backend.approval.failed_reload_after_reject'));
 
         $this->getAuditService()->record(
             action: 'approval.request_reject',
@@ -334,14 +334,14 @@ final class ApprovalService
         $isRequester = $approvalReq->requestedBy === $userId;
 
         if (!$isAdmin && !$isRequester) {
-            throw new AuthException('Access denied: you cannot revoke this approval request.', 403);
+            throw new AuthException(__('ui.backend.approval.cannot_revoke_request'), 403);
         }
 
         $revokableStatuses = $isAdmin ? ['pending', 'approved'] : ['pending'];
 
         if (!\in_array($approvalReq->status, $revokableStatuses, true)) {
             throw new \RuntimeException(
-                \sprintf("Cannot revoke: request is '%s'.", $approvalReq->status)
+                __('ui.backend.approval.cannot_revoke_status', ['status' => $approvalReq->status])
             );
         }
 
@@ -383,18 +383,18 @@ final class ApprovalService
         $approvalReq = $this->findRequestInOrg($requestUuid, $orgId);
 
         if ($approvalReq->requestedBy !== $userId) {
-            throw new AuthException('Access denied: you are not the requester.', 403);
+            throw new AuthException(__('ui.backend.approval.not_requester'), 403);
         }
 
         if ($approvalReq->status !== 'approved') {
             throw new AuthException(
-                \sprintf("Token is not valid: request status is '%s'.", $approvalReq->status),
+                __('ui.backend.approval.token_invalid_status', ['status' => $approvalReq->status]),
                 403
             );
         }
 
         if ($approvalReq->accessTokenHash === null) {
-            throw new AuthException('Token has already been used.', 403);
+            throw new AuthException(__('ui.backend.approval.token_already_used'), 403);
         }
 
         // Проверить срок действия токена
@@ -402,18 +402,18 @@ final class ApprovalService
         if ($expiresAt <= now()) {
             // Автоматически перевести в expired
             $approvalReq->update(['status' => 'expired']);
-            throw new AuthException('Token has expired.', 403);
+            throw new AuthException(__('ui.backend.approval.token_expired'), 403);
         }
 
         // Проверить хэш токена
         $providedHash = \hash('sha256', $token);
         if (!\hash_equals($approvalReq->accessTokenHash, $providedHash)) {
-            throw new AuthException('Invalid token.', 403);
+            throw new AuthException(__('ui.backend.approval.token_invalid'), 403);
         }
 
         // Токен валиден — получить секрет
         $secret = Secret::findById($approvalReq->secretId)
-            ?? throw new \RuntimeException('Secret not found.');
+            ?? throw new \RuntimeException(__('ui.backend.secret.not_found'));
 
         $value = $this->encryptionService->decrypt(
             $secret->encryptedValue,
@@ -469,7 +469,7 @@ final class ApprovalService
     {
         $secret = Secret::findByUuid($secretUuid);
         if ($secret === null || $secret->organizationId !== $orgId) {
-            throw new \RuntimeException('Secret not found.');
+            throw new \RuntimeException(__('ui.backend.secret.not_found'));
         }
         return $secret;
     }
@@ -481,13 +481,13 @@ final class ApprovalService
     {
         $req = ApprovalRequest::findByUuid($requestUuid);
         if ($req === null) {
-            throw new \RuntimeException('Approval request not found.');
+            throw new \RuntimeException(__('ui.backend.approval.request_not_found'));
         }
 
         // Проверить что секрет принадлежит организации
         $secret = Secret::findById($req->secretId);
         if ($secret === null || $secret->organizationId !== $orgId) {
-            throw new \RuntimeException('Approval request not found.');
+            throw new \RuntimeException(__('ui.backend.approval.request_not_found'));
         }
 
         return $req;
@@ -500,7 +500,7 @@ final class ApprovalService
     {
         if (!$this->organizationService->hasPermission($orgId, $userId, $minRole)) {
             throw new AuthException(
-                \sprintf("Access denied: '%s' role required.", $minRole),
+                __('ui.backend.approval.requires_role', ['role' => $minRole]),
                 403
             );
         }

@@ -143,12 +143,12 @@ final class SetupService
     ): User {
         // 1. Нельзя повторить setup
         if ($this->isSetupComplete()) {
-            throw new AuthException('Setup is already complete.');
+            throw new AuthException(__('ui.backend.setup.already_complete'));
         }
 
         // 2. Проверить токен
         if (!$this->verifySetupToken($setupToken)) {
-            throw new AuthException('Invalid setup token.');
+            throw new AuthException(__('ui.backend.setup.invalid_token'));
         }
 
         // 3. Валидация входных данных
@@ -196,7 +196,7 @@ final class SetupService
 
         $user = User::findByEmail($email);
         if ($user === null) {
-            throw new \RuntimeException('Failed to create admin user.');
+            throw new \RuntimeException(__('ui.backend.setup.failed_create_admin'));
         }
 
         return $user;
@@ -212,7 +212,7 @@ final class SetupService
     public function validateEmail(string $email): void
     {
         if (!\filter_var($email, FILTER_VALIDATE_EMAIL)) {
-            throw new \InvalidArgumentException('Invalid email address.');
+            throw new \InvalidArgumentException(__('ui.backend.setup.invalid_email'));
         }
     }
 
@@ -224,13 +224,13 @@ final class SetupService
     public function validatePassword(string $password): void
     {
         if (\strlen($password) < 8) {
-            throw new \InvalidArgumentException('Password must be at least 8 characters.');
+            throw new \InvalidArgumentException(__('ui.backend.setup.password_min_length'));
         }
         if (!\preg_match('/[a-zA-Z]/', $password)) {
-            throw new \InvalidArgumentException('Password must contain at least one letter.');
+            throw new \InvalidArgumentException(__('ui.backend.setup.password_requires_letter'));
         }
         if (!\preg_match('/[0-9]/', $password)) {
-            throw new \InvalidArgumentException('Password must contain at least one digit.');
+            throw new \InvalidArgumentException(__('ui.backend.setup.password_requires_digit'));
         }
     }
 
@@ -241,7 +241,7 @@ final class SetupService
     {
         if (!\in_array($mode, self::DEPLOY_MODES, true)) {
             throw new \InvalidArgumentException(
-                'Invalid deploy mode. Allowed: ' . \implode(', ', self::DEPLOY_MODES)
+                __('ui.backend.setup.invalid_deploy_mode', ['allowed' => \implode(', ', self::DEPLOY_MODES)])
             );
         }
     }

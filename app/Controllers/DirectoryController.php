@@ -67,7 +67,7 @@ final class DirectoryController
         $parentUuid = \is_string($parentUuid) && $parentUuid !== '' ? $parentUuid : null;
 
         if ($name === '') {
-            return Response::validationError(['name' => ['Name is required.']]);
+            return Response::validationError(['name' => [__('ui.backend.common.name_required')]]);
         }
 
         try {
@@ -124,7 +124,7 @@ final class DirectoryController
 
         if ($name === null && $parentUuid === null) {
             return Response::validationError([
-                'name' => ['At least one of name or parent_uuid must be provided.'],
+                'name' => [__('ui.backend.directory.at_least_one_name_or_parent')],
             ]);
         }
 
@@ -183,7 +183,7 @@ final class DirectoryController
         $uuid = $request->routeParam('uuid');
         $org  = Organization::findByUuid((string) $uuid);
         if ($org === null) {
-            throw new \RuntimeException('Organization not found.');
+            throw new \RuntimeException(__('ui.backend.common.organization_not_found'));
         }
         return $org;
     }

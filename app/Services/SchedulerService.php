@@ -74,7 +74,7 @@ final class SchedulerService
     {
         $parts = \preg_split('/\s+/', \trim($expression)) ?: [];
         if (\count($parts) !== 5) {
-            throw new \InvalidArgumentException('Cron expression must have 5 fields.');
+            throw new \InvalidArgumentException(__('ui.backend.scheduler.cron_fields'));
         }
 
         return \array_values($parts);
@@ -92,7 +92,7 @@ final class SchedulerService
                 [$base, $stepRaw] = \explode('/', $segment, 2);
                 $step = (int) $stepRaw;
                 if ($step <= 0) {
-                    throw new \InvalidArgumentException('Cron step must be greater than zero.');
+                    throw new \InvalidArgumentException(__('ui.backend.scheduler.cron_step_positive'));
                 }
 
                 if ($base === '*') {

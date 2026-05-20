@@ -38,10 +38,10 @@ final class OrganizationService
     {
         $name = \trim($name);
         if ($name === '') {
-            throw new \InvalidArgumentException('Organization name cannot be empty.');
+            throw new \InvalidArgumentException(__('ui.backend.organization.name_empty'));
         }
         if (\strlen($name) > 255) {
-            throw new \InvalidArgumentException('Organization name is too long (max 255 characters).');
+            throw new \InvalidArgumentException(__('ui.backend.organization.name_too_long'));
         }
 
         // solo-режим: только одна организация
@@ -49,7 +49,7 @@ final class OrganizationService
             "SELECT value FROM system_config WHERE key = 'deploy_mode'"
         );
         if ($deployMode === 'solo' && Organization::count() > 0) {
-            throw new \RuntimeException('Solo mode allows only one organization.');
+            throw new \RuntimeException(__('ui.backend.organization.solo_one_only'));
         }
 
         $slug = $this->generateUniqueSlug($name);
@@ -79,7 +79,7 @@ final class OrganizationService
         // Загружаем созданную организацию через slug (uuid ещё не знаем напрямую)
         $org = Organization::findBySlug($slug);
         if ($org === null) {
-            throw new \RuntimeException('Failed to load created organization.');
+            throw new \RuntimeException(__('ui.backend.organization.failed_load_created'));
         }
 
         $this->getAuditService()->record(
@@ -149,7 +149,7 @@ final class OrganizationService
         $this->assertValidRole($role);
 
         if (OrganizationMember::findByOrgAndUser($orgId, $userId) !== null) {
-            throw new \RuntimeException('User is already a member of this organization.');
+            throw new \RuntimeException(__('ui.backend.organization.already_member'));
         }
 
         $now = now()->format('Y-m-d H:i:s');
@@ -162,7 +162,7 @@ final class OrganizationService
         ]);
 
         $member = OrganizationMember::findByOrgAndUser($orgId, $userId)
-            ?? throw new \RuntimeException('Failed to load created member.');
+            ?? throw new \RuntimeException(__('ui.backend.organization.failed_load_member'));
 
         $this->getAuditService()->record(
             action: 'org.member_add',
@@ -192,14 +192,14 @@ final class OrganizationService
 
         $target = OrganizationMember::findByOrgAndUser($orgId, $targetUserId);
         if ($target === null) {
-            throw new \RuntimeException('Member not found.');
+            throw new \RuntimeException(__('ui.backend.organization.member_not_found'));
         }
         if ($target->role === 'owner') {
-            throw new AuthException('Cannot change the role of the organization owner.');
+            throw new AuthException(__('ui.backend.organization.cannot_change_owner_role'));
         }
         // Только owner может назначить admin
         if ($newRole === 'admin' && !$this->hasPermission($orgId, $requesterId, 'owner')) {
-            throw new AuthException('Only the owner can assign the admin role.');
+            throw new AuthException(__('ui.backend.organization.only_owner_assign_admin'));
         }
 
         Database::getInstance()->update(
@@ -237,10 +237,10 @@ final class OrganizationService
 
         $target = OrganizationMember::findByOrgAndUser($orgId, $targetUserId);
         if ($target === null) {
-            throw new \RuntimeException('Member not found.');
+            throw new \RuntimeException(__('ui.backend.organization.member_not_found'));
         }
         if ($target->role === 'owner') {
-            throw new AuthException('Cannot remove the organization owner. Transfer ownership first.');
+            throw new AuthException(__('ui.backend.organization.cannot_remove_owner'));
         }
 
         Database::getInstance()->delete(
@@ -271,7 +271,7 @@ final class OrganizationService
 
         $newOwner = OrganizationMember::findByOrgAndUser($orgId, $newOwnerId);
         if ($newOwner === null) {
-            throw new \RuntimeException('New owner must be a member of the organization.');
+            throw new \RuntimeException(__('ui.backend.organization.new_owner_must_be_member'));
         }
 
         $db  = Database::getInstance();
@@ -339,7 +339,7 @@ final class OrganizationService
     {
         if (!$this->hasPermission($orgId, $userId, $minRole)) {
             throw new AuthException(
-                \sprintf("Requires '%s' role in this organization.", $minRole),
+                __('ui.backend.organization.requires_role', ['role' => $minRole]),
                 403
             );
         }
@@ -352,7 +352,7 @@ final class OrganizationService
     {
         if (!\in_array($role, OrganizationMember::ROLES, true)) {
             throw new \InvalidArgumentException(
-                'Invalid role. Allowed: ' . \implode(', ', OrganizationMember::ROLES)
+                __('ui.backend.organization.invalid_role', ['allowed' => \implode(', ', OrganizationMember::ROLES)])
             );
         }
     }

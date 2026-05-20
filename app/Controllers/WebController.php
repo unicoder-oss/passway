@@ -79,7 +79,7 @@ final class WebController
         }
 
         return $this->html($this->view->render('web/home', [
-            'title' => 'Passway',
+            'title' => __('ui.titles.home'),
             'user' => $user,
             'organizations' => $orgs,
             'currentOrg' => $currentOrg,
@@ -172,14 +172,14 @@ final class WebController
         $org = $this->findOrgOrFail($request);
 
         if (!$this->organizationService->hasPermission($org->id, $user->id, 'observer')) {
-            return Response::redirect('/?error=' . \urlencode('Access denied.'));
+            return Response::redirect('/?error=' . \urlencode(__('ui.messages.access_denied')));
         }
 
         $members = $this->organizationService->listMembers($org->id);
         $invites = $this->inviteService->listActive($org->id);
 
         return $this->html($this->view->render('web/organization_manage', [
-            'title' => 'Manage Organization',
+            'title' => __('ui.titles.manage_organization'),
             'user' => $user,
             'organization' => $org,
             'members' => $members,
@@ -270,7 +270,7 @@ final class WebController
         }
 
         return $this->html($this->view->render('web/audit', [
-            'title' => 'Audit Log',
+            'title' => __('ui.titles.audit_log'),
             'user' => $user,
             'organization' => $org,
             'entries' => $result['entries'],
@@ -295,7 +295,7 @@ final class WebController
         $totpSetup = $this->getTotpSetupSession();
 
         return $this->html($this->view->render('web/profile.php', [
-            'title' => 'Profile & Security',
+            'title' => __('ui.titles.profile_security'),
             'user' => $user,
             'passkeys' => Passkey::findByUserId($user->id),
             'totpSetup' => $totpSetup,
@@ -309,7 +309,7 @@ final class WebController
         $user = AuthContext::requireUser();
 
         if ($user->totpEnabled) {
-            return Response::redirect('/profile?error=' . \urlencode('TOTP is already enabled.'));
+            return Response::redirect('/profile?error=' . \urlencode(__('ui.profile.error_totp_already_enabled')));
         }
 
         try {
@@ -336,7 +336,7 @@ final class WebController
         $code = \trim((string) ($request->input('code') ?? ''));
 
         if ($code === '') {
-            return Response::redirect('/profile?error=' . \urlencode('TOTP code is required.'));
+            return Response::redirect('/profile?error=' . \urlencode(__('ui.profile.error_totp_code_required')));
         }
 
         $this->ensureSessionStarted();
@@ -344,7 +344,7 @@ final class WebController
 
         if (!\is_array($setup) || (($setup['expires'] ?? 0) < \time())) {
             unset($_SESSION['totp_setup']);
-            return Response::redirect('/profile?error=' . \urlencode('TOTP setup session expired. Please restart setup.'));
+            return Response::redirect('/profile?error=' . \urlencode(__('ui.profile.error_totp_setup_expired')));
         }
 
         try {
@@ -358,7 +358,7 @@ final class WebController
         }
 
         if (!$valid) {
-            return Response::redirect('/profile?error=' . \urlencode('Invalid TOTP code.'));
+            return Response::redirect('/profile?error=' . \urlencode(__('ui.profile.error_invalid_totp_code')));
         }
 
         $user->update([
@@ -369,7 +369,7 @@ final class WebController
         ]);
         unset($_SESSION['totp_setup']);
 
-        return Response::redirect('/profile?success=' . \urlencode('Two-factor authentication enabled.'));
+        return Response::redirect('/profile?success=' . \urlencode(__('ui.profile.success_totp_enabled')));
     }
 
     public function disableTotp(Request $request): Response
@@ -378,13 +378,13 @@ final class WebController
         $password = (string) ($request->input('password') ?? '');
 
         if ($password === '') {
-            return Response::redirect('/profile?error=' . \urlencode('Password is required to disable TOTP.'));
+            return Response::redirect('/profile?error=' . \urlencode(__('ui.profile.error_disable_totp_password_required')));
         }
         if ($user->passwordHash === null) {
-            return Response::redirect('/profile?error=' . \urlencode('Cannot disable TOTP without a password set.'));
+            return Response::redirect('/profile?error=' . \urlencode(__('ui.profile.error_disable_totp_password_missing')));
         }
         if (!$this->hashingService->verifyPassword($password, $user->passwordHash)) {
-            return Response::redirect('/profile?error=' . \urlencode('Incorrect password.'));
+            return Response::redirect('/profile?error=' . \urlencode(__('ui.profile.error_incorrect_password')));
         }
 
         $user->update([
@@ -394,7 +394,7 @@ final class WebController
             'updated_at' => now()->format('Y-m-d H:i:s'),
         ]);
 
-        return Response::redirect('/profile?success=' . \urlencode('Two-factor authentication disabled.'));
+        return Response::redirect('/profile?success=' . \urlencode(__('ui.profile.success_totp_disabled')));
     }
 
     public function deletePasskey(Request $request): Response
@@ -408,7 +408,7 @@ final class WebController
         );
 
         if ($row === null) {
-            return Response::redirect('/profile?error=' . \urlencode('Passkey not found.'));
+            return Response::redirect('/profile?error=' . \urlencode(__('ui.profile.error_passkey_not_found')));
         }
 
         if ($user->passwordHash === null) {
@@ -417,13 +417,13 @@ final class WebController
                 [$user->id]
             );
             if ($count <= 1) {
-                return Response::redirect('/profile?error=' . \urlencode('Cannot remove the last passkey when no password is set.'));
+                return Response::redirect('/profile?error=' . \urlencode(__('ui.profile.error_last_passkey_without_password')));
             }
         }
 
         \Passway\Core\Database::getInstance()->delete('passkeys', ['uuid' => $passkeyUuid, 'user_id' => $user->id]);
 
-        return Response::redirect('/profile?success=' . \urlencode('Passkey removed.'));
+        return Response::redirect('/profile?success=' . \urlencode(__('ui.profile.success_passkey_removed')));
     }
 
     public function showApiKeys(Request $request): Response
@@ -438,7 +438,7 @@ final class WebController
         }
 
         return $this->html($this->view->render('web/api_keys', [
-            'title' => 'API Keys',
+            'title' => __('ui.titles.api_keys'),
             'user' => $user,
             'organization' => $org,
             'keys' => $keys,
@@ -462,7 +462,7 @@ final class WebController
         }
 
         return $this->html($this->view->render('web/api_key_permissions', [
-            'title' => 'API Key Permissions',
+            'title' => __('ui.titles.api_key_permissions'),
             'user' => $user,
             'organization' => $org,
             'apiKey' => $apiKey,
@@ -497,14 +497,14 @@ final class WebController
         }
 
         return $this->html($this->view->render('web/api_keys', [
-            'title' => 'API Keys',
+            'title' => __('ui.titles.api_keys'),
             'user' => $user,
             'organization' => $org,
             'keys' => $keys,
             'createdRawKey' => $rawKey,
             'createdKeyUuid' => $apiKey->uuid,
             'queryError' => null,
-            'querySuccess' => 'API key created. Copy it now; it will not be shown again.',
+            'querySuccess' => __('ui.api_keys.created_copy_now'),
         ]));
     }
 
@@ -523,7 +523,7 @@ final class WebController
             return Response::redirect('/organizations/' . \urlencode($org->uuid) . '/api-keys/' . \urlencode($keyUuid) . '/permissions?error=' . \urlencode($e->getMessage()));
         }
 
-        return Response::redirect('/organizations/' . \urlencode($org->uuid) . '/api-keys/' . \urlencode($keyUuid) . '/permissions?success=' . \urlencode('Permission added.'));
+        return Response::redirect('/organizations/' . \urlencode($org->uuid) . '/api-keys/' . \urlencode($keyUuid) . '/permissions?success=' . \urlencode(__('ui.messages.permission_added')));
     }
 
     public function revokeApiKey(Request $request): Response
@@ -538,7 +538,7 @@ final class WebController
             return Response::redirect('/organizations/' . \urlencode($org->uuid) . '/api-keys?error=' . \urlencode($e->getMessage()));
         }
 
-        return Response::redirect('/organizations/' . \urlencode($org->uuid) . '/api-keys?success=' . \urlencode('API key revoked.'));
+        return Response::redirect('/organizations/' . \urlencode($org->uuid) . '/api-keys?success=' . \urlencode(__('ui.messages.api_key_revoked')));
     }
 
     public function removeApiKeyPermission(Request $request): Response
@@ -554,7 +554,7 @@ final class WebController
             return Response::redirect('/organizations/' . \urlencode($org->uuid) . '/api-keys/' . \urlencode($keyUuid) . '/permissions?error=' . \urlencode($e->getMessage()));
         }
 
-        return Response::redirect('/organizations/' . \urlencode($org->uuid) . '/api-keys/' . \urlencode($keyUuid) . '/permissions?success=' . \urlencode('Permission removed.'));
+        return Response::redirect('/organizations/' . \urlencode($org->uuid) . '/api-keys/' . \urlencode($keyUuid) . '/permissions?success=' . \urlencode(__('ui.messages.permission_removed')));
     }
 
     public function showRotationServices(Request $request): Response
@@ -562,7 +562,7 @@ final class WebController
         $user = AuthContext::requireUser();
 
         return $this->html($this->view->render('web/rotation_services', [
-            'title' => 'Rotation Services',
+            'title' => __('ui.titles.rotation_services'),
             'user' => $user,
             'services' => $this->rotationRegistryService->listAll(),
             'isSetupAdmin' => $this->isSetupAdministrator($user),
@@ -583,7 +583,7 @@ final class WebController
             return Response::redirect('/rotation-services?error=' . \urlencode($e->getMessage()));
         }
 
-        return Response::redirect('/rotation-services?success=' . \urlencode('Rotation service created.'));
+        return Response::redirect('/rotation-services?success=' . \urlencode(__('ui.messages.rotation_service_created')));
     }
 
     public function updateRotationService(Request $request): Response
@@ -605,7 +605,7 @@ final class WebController
             return Response::redirect('/rotation-services?error=' . \urlencode($e->getMessage()));
         }
 
-        return Response::redirect('/rotation-services?success=' . \urlencode('Rotation service updated.'));
+        return Response::redirect('/rotation-services?success=' . \urlencode(__('ui.messages.rotation_service_updated')));
     }
 
     public function verifyRotationService(Request $request): Response
@@ -619,7 +619,7 @@ final class WebController
             return Response::redirect('/rotation-services?error=' . \urlencode($e->getMessage()));
         }
 
-        return Response::redirect('/rotation-services?success=' . \urlencode('Rotation service verified.'));
+        return Response::redirect('/rotation-services?success=' . \urlencode(__('ui.messages.rotation_service_verified')));
     }
 
     public function deleteRotationService(Request $request): Response
@@ -633,7 +633,7 @@ final class WebController
             return Response::redirect('/rotation-services?error=' . \urlencode($e->getMessage()));
         }
 
-        return Response::redirect('/rotation-services?success=' . \urlencode('Rotation service deleted.'));
+        return Response::redirect('/rotation-services?success=' . \urlencode(__('ui.messages.rotation_service_deleted')));
     }
 
     public function showOrganizationIntegrations(Request $request): Response
@@ -648,7 +648,7 @@ final class WebController
         }
 
         return $this->html($this->view->render('web/integrations', [
-            'title' => 'Organization Integrations',
+            'title' => __('ui.titles.organization_integrations'),
             'user' => $user,
             'organization' => $org,
             'integrations' => $integrations,
@@ -678,7 +678,7 @@ final class WebController
             return Response::redirect('/organizations/' . \urlencode($org->uuid) . '/integrations?error=' . \urlencode($e->getMessage()));
         }
 
-        return Response::redirect('/organizations/' . \urlencode($org->uuid) . '/integrations?success=' . \urlencode('Integration created.'));
+        return Response::redirect('/organizations/' . \urlencode($org->uuid) . '/integrations?success=' . \urlencode(__('ui.messages.integration_created')));
     }
 
     public function updateOrganizationIntegration(Request $request): Response
@@ -702,7 +702,7 @@ final class WebController
             return Response::redirect('/organizations/' . \urlencode($org->uuid) . '/integrations?error=' . \urlencode($e->getMessage()));
         }
 
-        return Response::redirect('/organizations/' . \urlencode($org->uuid) . '/integrations?success=' . \urlencode('Integration updated.'));
+        return Response::redirect('/organizations/' . \urlencode($org->uuid) . '/integrations?success=' . \urlencode(__('ui.messages.integration_updated')));
     }
 
     public function deleteOrganizationIntegration(Request $request): Response
@@ -717,7 +717,7 @@ final class WebController
             return Response::redirect('/organizations/' . \urlencode($org->uuid) . '/integrations?error=' . \urlencode($e->getMessage()));
         }
 
-        return Response::redirect('/organizations/' . \urlencode($org->uuid) . '/integrations?success=' . \urlencode('Integration deleted.'));
+        return Response::redirect('/organizations/' . \urlencode($org->uuid) . '/integrations?success=' . \urlencode(__('ui.messages.integration_deleted')));
     }
 
     public function showSecret(Request $request): Response
@@ -736,7 +736,7 @@ final class WebController
         }
 
         return $this->html($this->view->render('web/secret_show', [
-            'title' => 'Secret Details',
+            'title' => __('ui.titles.secret_details'),
             'user' => $user,
             'organization' => $org,
             'directory' => $dir,
@@ -912,7 +912,7 @@ final class WebController
         $resourceRef = \is_string($resourceRef) ? \trim($resourceRef) : '';
 
         if ($resourceType === '' || $resourceRef === '') {
-            throw new \InvalidArgumentException('Permission target is required.');
+            throw new \InvalidArgumentException(__('ui.backend.web.permission_target_required'));
         }
 
         if ($resourceRef === '*') {
@@ -921,7 +921,7 @@ final class WebController
 
         if ($resourceType === 'organization') {
             if ($resourceRef !== 'self') {
-                throw new \InvalidArgumentException('Invalid organization target.');
+                throw new \InvalidArgumentException(__('ui.backend.web.invalid_organization_target'));
             }
 
             return ['organization', $org->id];
@@ -930,7 +930,7 @@ final class WebController
         if ($resourceType === 'directory') {
             $directory = Directory::findByUuid($resourceRef);
             if ($directory === null || $directory->organizationId !== $org->id) {
-                throw new \RuntimeException('Directory not found.');
+                throw new \RuntimeException(__('ui.backend.directory.not_found'));
             }
 
             return ['directory', $directory->id];
@@ -939,13 +939,13 @@ final class WebController
         if ($resourceType === 'secret') {
             $secret = Secret::findByUuid($resourceRef);
             if ($secret === null || $secret->organizationId !== $org->id) {
-                throw new \RuntimeException('Secret not found.');
+                throw new \RuntimeException(__('ui.backend.secret.not_found'));
             }
 
             return ['secret', $secret->id];
         }
 
-        throw new \InvalidArgumentException('Invalid permission target.');
+        throw new \InvalidArgumentException(__('ui.backend.web.invalid_permission_target'));
     }
 
     private function describeApiKeyPermission(ApiKeyPermission $permission, Organization $org): string
@@ -1000,12 +1000,12 @@ final class WebController
                 return [];
             }
 
-            throw new \InvalidArgumentException('Credentials JSON cannot be empty.');
+            throw new \InvalidArgumentException(__('ui.backend.web.credentials_json_empty'));
         }
 
         $decoded = \json_decode($json, true);
         if (!\is_array($decoded)) {
-            throw new \InvalidArgumentException('Credentials JSON must decode to an object.');
+            throw new \InvalidArgumentException(__('ui.backend.web.credentials_json_object'));
         }
 
         return $decoded;
@@ -1024,7 +1024,7 @@ final class WebController
     {
         $org = Organization::findByUuid((string) $request->routeParam('uuid'));
         if ($org === null) {
-            throw new \RuntimeException('Organization not found.');
+            throw new \RuntimeException(__('ui.backend.common.organization_not_found'));
         }
 
         return $org;
@@ -1035,11 +1035,11 @@ final class WebController
         $userUuid = (string) $request->routeParam('userUuid');
         $user = User::findByUuid($userUuid);
         if ($user === null) {
-            throw new \RuntimeException('User not found.');
+            throw new \RuntimeException(__('ui.backend.common.user_not_found'));
         }
 
         if (OrganizationMember::findByOrgAndUser($orgId, $user->id) === null) {
-            throw new \RuntimeException('User is not a member of this organization.');
+            throw new \RuntimeException(__('ui.backend.common.user_not_member_org'));
         }
 
         return $user;

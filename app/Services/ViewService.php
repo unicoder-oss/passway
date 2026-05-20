@@ -11,7 +11,7 @@ final class ViewService
     {
         $viewPath = base_path('resources/views/' . $view . '.php');
         if (!\file_exists($viewPath)) {
-            throw new \RuntimeException('View not found: ' . $view);
+            throw new \RuntimeException(__('ui.backend.view.view_not_found', ['view' => $view]));
         }
 
         $content = $this->capture($viewPath, $data);
@@ -21,7 +21,7 @@ final class ViewService
 
         $layoutPath = base_path('resources/views/' . $layout . '.php');
         if (!\file_exists($layoutPath)) {
-            throw new \RuntimeException('Layout not found: ' . $layout);
+            throw new \RuntimeException(__('ui.backend.view.layout_not_found', ['layout' => $layout]));
         }
 
         return $this->capture($layoutPath, \array_merge($data, ['content' => $content]));

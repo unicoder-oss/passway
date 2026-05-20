@@ -64,7 +64,7 @@ final class ApiKeyController
             : null;
 
         if ($name === '') {
-            return Response::validationError(['name' => ['Name is required.']]);
+            return Response::validationError(['name' => [__('ui.backend.apikey.name_required')]]);
         }
 
         try {
@@ -168,10 +168,10 @@ final class ApiKeyController
         $permission   = \trim((string) ($request->input('permission') ?? ''));
 
         if ($resourceType === '') {
-            return Response::validationError(['resource_type' => ['resource_type is required.']]);
+            return Response::validationError(['resource_type' => [__('ui.backend.apikey.resource_type_required')]]);
         }
         if ($permission === '') {
-            return Response::validationError(['permission' => ['permission is required.']]);
+            return Response::validationError(['permission' => [__('ui.backend.apikey.permission_required')]]);
         }
 
         try {
@@ -225,7 +225,7 @@ final class ApiKeyController
         $uuid = $request->routeParam('uuid');
         $org  = Organization::findByUuid((string) $uuid);
         if ($org === null) {
-            throw new \RuntimeException('Organization not found.');
+            throw new \RuntimeException(__('ui.backend.common.organization_not_found'));
         }
         return $org;
     }

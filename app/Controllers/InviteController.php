@@ -66,7 +66,7 @@ final class InviteController
         $org  = $this->findOrgOrFail($request);
 
         if (!$this->organizationService->hasPermission($org->id, $user->id, 'admin')) {
-            return Response::forbidden("Requires 'admin' role to list invites.");
+            return Response::forbidden(__('ui.backend.invite.requires_admin_list'));
         }
 
         $invites = $this->inviteService->listActive($org->id);
@@ -147,7 +147,7 @@ final class InviteController
                 return Response::redirect('/');
             }
 
-            return Response::error('Unsupported invite type.', 400);
+            return Response::error(__('ui.backend.common.unsupported_invite_type'), 400);
 
         } catch (AuthException $e) {
             if ($request->expectsJson()) {
@@ -170,7 +170,7 @@ final class InviteController
         $uuid = $request->routeParam('uuid');
         $org  = Organization::findByUuid((string) $uuid);
         if ($org === null) {
-            throw new \RuntimeException('Organization not found.');
+            throw new \RuntimeException(__('ui.backend.common.organization_not_found'));
         }
         return $org;
     }
@@ -196,16 +196,21 @@ final class InviteController
 
     private function renderAcceptForm(InviteLink $invite, ?Organization $org): string
     {
-        $orgName  = $org ? e($org->name) : 'New Organization';
+        $orgName  = $org ? e($org->name) : e(__('ui.invite.new_organization'));
         $roleHtml = e($invite->role);
+        $locale = e(app_locale());
+        $title = e(__('ui.titles.accept_invite'));
+        $heading = e(__('ui.invite.heading'));
+        $joinAs = e(__('ui.invite.join_as', ['organization' => $org ? $org->name : __('ui.invite.new_organization')]));
+        $accept = e(__('ui.invite.accept'));
 
         return <<<HTML
         <!DOCTYPE html>
-        <html lang="en">
+        <html lang="{$locale}">
         <head>
             <meta charset="UTF-8">
             <meta name="viewport" content="width=device-width, initial-scale=1.0">
-            <title>Passway — Accept Invite</title>
+            <title>{$title}</title>
             <style>
                 body { font-family: system-ui, sans-serif; background: #f4f5f7;
                        display: flex; align-items: center; justify-content: center;
@@ -225,11 +230,11 @@ final class InviteController
         </head>
         <body>
             <div class="card">
-                <h1>You're invited!</h1>
-                <p>Join <strong>{$orgName}</strong> as</p>
+                <h1>{$heading}</h1>
+                <p>{$joinAs}</p>
                 <div class="badge">{$roleHtml}</div>
                 <form method="POST">
-                    <button type="submit">Accept Invitation</button>
+                    <button type="submit">{$accept}</button>
                 </form>
             </div>
         </body>
@@ -240,11 +245,16 @@ final class InviteController
     private function renderError(string $message): string
     {
         $msg = e($message);
+        $locale = e(app_locale());
+        $title = e(__('ui.app.name'));
+        $heading = e(__('ui.invite.invalid_heading'));
+        $homeLabel = e(__('ui.invite.go_home'));
+
         return <<<HTML
-        <!DOCTYPE html><html><head><meta charset="UTF-8"><title>Passway</title></head>
+        <!DOCTYPE html><html lang="{$locale}"><head><meta charset="UTF-8"><title>{$title}</title></head>
         <body style="font-family:system-ui;text-align:center;padding:3rem">
-          <h1>Invalid Invite</h1><p style="color:#c00">{$msg}</p>
-          <a href="/">Go to homepage</a>
+          <h1>{$heading}</h1><p style="color:#c00">{$msg}</p>
+          <a href="/">{$homeLabel}</a>
         </body></html>
         HTML;
     }
