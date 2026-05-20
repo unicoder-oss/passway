@@ -69,6 +69,18 @@ final class WebController
         return $this->renderHome($request, $user);
     }
 
+    public function homeOrganizationsPartial(Request $request): Response
+    {
+        $user = AuthContext::requireUser();
+        $search = \trim((string) ($request->query('q') ?? ''));
+        $organizations = $this->filterHomeOrganizations($this->organizationService->getForUser($user->id), $search);
+
+        return $this->html($this->view->render('web/partials/home_organization_results', [
+            'organizationCards' => $this->buildHomeOrganizationCards($organizations),
+            'search' => $search,
+        ], layout: null));
+    }
+
     public function createOrganization(Request $request): Response
     {
         return Response::redirect('/?error=' . \urlencode(__('ui.home.use_create_org_invite')));
@@ -219,53 +231,21 @@ final class WebController
             return Response::redirect('/?error=' . \urlencode(__('ui.messages.access_denied')));
         }
 
-        $currentDir = null;
-        $directories = [];
-        $secrets = [];
-        $searchDirectories = [];
-        $searchSecrets = [];
         $search = \trim((string) ($request->query('q') ?? ''));
         $canManageOrganization = $this->organizationService->hasPermission($org->id, $user->id, 'admin');
         $canViewAudit = $canManageOrganization;
         $canEditContent = $this->organizationService->hasPermission($org->id, $user->id, 'editor');
-        $rootSecretDirectory = $this->findRootSecretDirectory($org->id);
-
-        if ($rootSecretDirectory === null && $canEditContent) {
-            try {
-                $rootSecretDirectory = $this->getOrCreateRootSecretDirectory($org, $user);
-            } catch (\Throwable $e) {
-                return Response::redirect($this->organizationUrl($org->uuid, error: $e->getMessage()));
-            }
-        }
-
         try {
-            $dirUuid = $request->query('dir');
-            $dirUuid = \is_string($dirUuid) && $dirUuid !== '' ? $dirUuid : null;
-
-            if ($dirUuid !== null && $this->isRootSecretDirectoryUuid($org, $dirUuid)) {
-                $dirUuid = null;
-            }
-
-            if ($dirUuid !== null) {
-                $currentDir = $this->directoryService->findInOrg($dirUuid, $org->id, $user->id);
-                $directories = $this->filterVisibleDirectories($this->directoryService->listChildren($org->id, $currentDir->uuid, $user->id));
-                $secrets = $this->secretService->listInDirectory($currentDir->uuid, $org->id, $user->id);
-            } else {
-                $directories = $this->filterVisibleDirectories($this->directoryService->listChildren($org->id, null, $user->id));
-                if ($rootSecretDirectory !== null) {
-                    $secrets = $this->secretService->listInDirectory($rootSecretDirectory->uuid, $org->id, $user->id);
-                }
-            }
+            [
+                'currentDir' => $currentDir,
+                'directories' => $directories,
+                'secrets' => $secrets,
+                'searchDirectories' => $searchDirectories,
+                'searchSecrets' => $searchSecrets,
+                'rootSecretDirectory' => $rootSecretDirectory,
+            ] = $this->buildOrganizationBrowseData($org, $user, $search, $canEditContent, $request);
         } catch (AuthException | \RuntimeException $e) {
             return Response::redirect($this->organizationUrl($org->uuid, error: $e->getMessage()));
-        }
-
-        if ($search !== '') {
-            ['directories' => $searchDirectories, 'secrets' => $searchSecrets] = $this->searchOrganizationSubtree(
-                $org,
-                $currentDir,
-                $search,
-            );
         }
 
         $allDirectories = Directory::findByOrgId($org->id);
@@ -319,6 +299,32 @@ final class WebController
             'queryError' => $request->query('error'),
             'search' => $search,
         ]));
+    }
+
+    public function organizationSearchPartial(Request $request): Response
+    {
+        $user = AuthContext::requireUser();
+        $org = $this->findOrgOrFail($request);
+
+        if (!$this->organizationService->hasPermission($org->id, $user->id, 'reader')) {
+            return Response::forbidden(__('ui.messages.access_denied'));
+        }
+
+        $search = \trim((string) ($request->query('q') ?? ''));
+        $canEditContent = $this->organizationService->hasPermission($org->id, $user->id, 'editor');
+
+        try {
+            $browseData = $this->buildOrganizationBrowseData($org, $user, $search, $canEditContent, $request);
+        } catch (AuthException | \RuntimeException $e) {
+            return Response::error($e->getMessage(), 422);
+        }
+
+        return $this->html($this->view->render('web/partials/organization_search_results', [
+            'organization' => $org,
+            'search' => $search,
+            'searchDirectories' => $browseData['searchDirectories'],
+            'searchSecrets' => $browseData['searchSecrets'],
+        ], layout: null));
     }
 
     public function showOrganizationManage(Request $request): Response
@@ -1359,14 +1365,8 @@ final class WebController
         ?string $success = null,
         ?InviteLink $createdOrganizationInvite = null,
     ): Response {
-        $orgs = $this->organizationService->getForUser($user->id);
         $search = \trim((string) ($request->query('q') ?? ''));
-        if ($search !== '') {
-            $orgs = \array_values(\array_filter(
-                $orgs,
-                static fn(Organization $org): bool => mb_stripos($org->name, $search, 0, 'UTF-8') !== false,
-            ));
-        }
+        $orgs = $this->filterHomeOrganizations($this->organizationService->getForUser($user->id), $search);
 
         $currentOrg = $this->resolveCurrentOrganization($request, $orgs);
 
@@ -1382,6 +1382,72 @@ final class WebController
             'createdOrganizationInvite' => $createdOrganizationInvite,
             'search' => $search,
         ]));
+    }
+
+    /**
+     * @param Organization[] $organizations
+     * @return Organization[]
+     */
+    private function filterHomeOrganizations(array $organizations, string $search): array
+    {
+        if ($search === '') {
+            return $organizations;
+        }
+
+        return \array_values(\array_filter(
+            $organizations,
+            static fn(Organization $org): bool => mb_stripos($org->name, $search, 0, 'UTF-8') !== false,
+        ));
+    }
+
+    /** @return array{currentDir:?Directory,directories:array<int,Directory>,secrets:array<int,Secret>,searchDirectories:array,searchSecrets:array,rootSecretDirectory:?Directory} */
+    private function buildOrganizationBrowseData(Organization $org, User $user, string $search, bool $canEditContent, Request $request): array
+    {
+        $currentDir = null;
+        $directories = [];
+        $secrets = [];
+        $searchDirectories = [];
+        $searchSecrets = [];
+        $rootSecretDirectory = $this->findRootSecretDirectory($org->id);
+
+        if ($rootSecretDirectory === null && $canEditContent) {
+            $rootSecretDirectory = $this->getOrCreateRootSecretDirectory($org, $user);
+        }
+
+        $dirUuid = $request->query('dir');
+        $dirUuid = \is_string($dirUuid) && $dirUuid !== '' ? $dirUuid : null;
+
+        if ($dirUuid !== null && $this->isRootSecretDirectoryUuid($org, $dirUuid)) {
+            $dirUuid = null;
+        }
+
+        if ($dirUuid !== null) {
+            $currentDir = $this->directoryService->findInOrg($dirUuid, $org->id, $user->id);
+            $directories = $this->filterVisibleDirectories($this->directoryService->listChildren($org->id, $currentDir->uuid, $user->id));
+            $secrets = $this->secretService->listInDirectory($currentDir->uuid, $org->id, $user->id);
+        } else {
+            $directories = $this->filterVisibleDirectories($this->directoryService->listChildren($org->id, null, $user->id));
+            if ($rootSecretDirectory !== null) {
+                $secrets = $this->secretService->listInDirectory($rootSecretDirectory->uuid, $org->id, $user->id);
+            }
+        }
+
+        if ($search !== '') {
+            ['directories' => $searchDirectories, 'secrets' => $searchSecrets] = $this->searchOrganizationSubtree(
+                $org,
+                $currentDir,
+                $search,
+            );
+        }
+
+        return [
+            'currentDir' => $currentDir,
+            'directories' => $directories,
+            'secrets' => $secrets,
+            'searchDirectories' => $searchDirectories,
+            'searchSecrets' => $searchSecrets,
+            'rootSecretDirectory' => $rootSecretDirectory,
+        ];
     }
 
     /** @return array<int, array{uuid:string,name:string,email:string,role:string}> */

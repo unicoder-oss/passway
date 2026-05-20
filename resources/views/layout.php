@@ -402,49 +402,6 @@
         element.remove();
     });
 
-    document.querySelectorAll('[data-live-submit-form="true"]').forEach((form) => {
-        if (!(form instanceof HTMLFormElement)) {
-            return;
-        }
-
-        const inputs = form.querySelectorAll('[data-live-submit-input="true"]');
-        if (inputs.length === 0) {
-            return;
-        }
-
-        let timer = null;
-        let lastSubmittedValue = Array.from(inputs).map((input) => input.value).join('\u0000');
-
-        const submitForm = () => {
-            const nextValue = Array.from(inputs).map((input) => input.value).join('\u0000');
-            if (nextValue === lastSubmittedValue) {
-                return;
-            }
-
-            lastSubmittedValue = nextValue;
-            form.requestSubmit();
-        };
-
-        inputs.forEach((input) => {
-            input.addEventListener('input', () => {
-                if (timer !== null) {
-                    window.clearTimeout(timer);
-                }
-
-                timer = window.setTimeout(() => {
-                    submitForm();
-                }, 250);
-            });
-
-            input.addEventListener('search', () => {
-                if (timer !== null) {
-                    window.clearTimeout(timer);
-                }
-                submitForm();
-            });
-        });
-    });
-
     const parseUtcDate = (value) => {
         if (typeof value !== 'string' || value.trim() === '') {
             return null;

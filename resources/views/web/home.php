@@ -19,9 +19,9 @@ require base_path('resources/views/partials/auth_topbar.php');
             <h1 style="margin:0 0 .35rem; font-size:2rem;"><?= e(__('ui.home.organizations')) ?></h1>
             <div class="muted"><?= e(__('ui.home.organizations_subtitle')) ?></div>
         </div>
-        <form method="GET" class="panel" style="padding:1rem;" data-live-submit-form="true">
+        <form method="GET" class="panel" style="padding:1rem;">
             <label for="home-search"><?= e(__('ui.home.search')) ?></label>
-            <input id="home-search" name="q" value="<?= e((string) $search) ?>" placeholder="<?= e(__('ui.home.search_placeholder')) ?>" data-live-submit-input="true">
+            <input id="home-search" name="q" value="<?= e((string) $search) ?>" placeholder="<?= e(__('ui.home.search_placeholder')) ?>">
         </form>
     </div>
 
@@ -49,42 +49,19 @@ require base_path('resources/views/partials/auth_topbar.php');
             </section>
         <?php endif; ?>
 
-        <?php foreach ($organizationCards as $card): ?>
-            <?php $organization = $card['organization']; ?>
-            <a href="/organizations/<?= e($organization->uuid) ?>" class="panel" style="padding:1.25rem; display:grid; gap:1rem; align-content:start; min-height:220px;">
-                <div style="display:flex; gap:1rem; align-items:flex-start;">
-                    <?php if (!empty($organization->avatarPath)): ?>
-                        <img class="avatar-square avatar-image" src="<?= e($organization->avatarPath) ?>" alt="<?= e($organization->name) ?>" width="64" height="64" style="width:64px; height:64px; flex:0 0 64px;">
-                    <?php else: ?>
-                        <div class="avatar-square" style="width:64px; height:64px; flex:0 0 64px; background:<?= e(avatar_fallback_color()) ?>; font-size:1.4rem;"><?= e(avatar_initial($organization->name)) ?></div>
-                    <?php endif; ?>
-                    <div>
-                        <div style="font-weight:700; font-size:1.1rem;"><?= e($organization->name) ?></div>
-                        <?php if (!empty($organization->description)): ?>
-                            <div class="muted" style="margin-top:.35rem; font-size:.92rem;"><?= e($organization->description) ?></div>
-                        <?php endif; ?>
-                    </div>
-                </div>
-                <div class="grid" style="gap:.5rem; font-size:.92rem;">
-                    <div class="muted"><?= e(__('ui.home.directories_total', ['count' => (string) $card['directories']])) ?></div>
-                    <div class="muted"><?= e(__('ui.home.secrets_total', ['count' => (string) $card['secrets']])) ?></div>
-                    <div class="muted"><?= e(__('ui.home.members_total', ['count' => (string) $card['members']])) ?></div>
-                </div>
-            </a>
-        <?php endforeach; ?>
+        <div id="home-organization-results" style="display:contents;">
+            <?php require base_path('resources/views/web/partials/home_organization_results.php'); ?>
+        </div>
     </div>
-
-    <?php if ($organizationCards === []): ?>
-        <section class="panel" style="padding:1.5rem; margin-top:1rem;">
-            <h2 style="margin:0 0 .75rem;"><?= e(__('ui.home.no_organizations_heading')) ?></h2>
-            <p class="muted" style="margin:0;"><?= e($search !== '' ? __('ui.home.no_search_results') : __('ui.home.no_organizations_text')) ?></p>
-        </section>
-    <?php endif; ?>
 </section>
 
 <script>
 (() => {
+    const searchInput = document.getElementById('home-search');
+    const results = document.getElementById('home-organization-results');
     const fields = document.querySelectorAll('.js-copy-on-click');
+    let searchTimer = null;
+    let searchController = null;
 
     for (const field of fields) {
         field.addEventListener('click', async () => {
@@ -97,6 +74,62 @@ require base_path('resources/views/partials/auth_topbar.php');
                 document.execCommand('copy');
             }
         });
+    }
+
+    if (searchInput && results) {
+        const searchLoadFailed = <?= json_encode((string) __('ui.home.search_load_failed')) ?>;
+
+        const fetchResults = async () => {
+            if (searchController) {
+                searchController.abort();
+            }
+
+            searchController = new AbortController();
+            const value = searchInput.value.trim();
+            const url = new URL('/partials/home-organizations', window.location.origin);
+            if (value !== '') {
+                url.searchParams.set('q', value);
+            }
+
+            try {
+                const response = await fetch(url.toString(), {
+                    headers: {
+                        'X-Requested-With': 'XMLHttpRequest',
+                    },
+                    credentials: 'same-origin',
+                    signal: searchController.signal,
+                });
+                if (!response.ok) {
+                    throw new Error(searchLoadFailed);
+                }
+
+                results.innerHTML = await response.text();
+
+                const nextUrl = new URL(window.location.href);
+                if (value !== '') {
+                    nextUrl.searchParams.set('q', value);
+                } else {
+                    nextUrl.searchParams.delete('q');
+                }
+                window.history.replaceState({}, '', `${nextUrl.pathname}${nextUrl.search}`);
+            } catch (error) {
+                if (error instanceof DOMException && error.name === 'AbortError') {
+                    return;
+                }
+                if (window.passwayToast && typeof window.passwayToast.show === 'function') {
+                    window.passwayToast.show(searchLoadFailed, 'error');
+                }
+            }
+        };
+
+        searchInput.addEventListener('input', () => {
+            if (searchTimer !== null) {
+                window.clearTimeout(searchTimer);
+            }
+            searchTimer = window.setTimeout(fetchResults, 250);
+        });
+
+        searchInput.addEventListener('search', fetchResults);
     }
 })();
 </script>

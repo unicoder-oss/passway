@@ -297,56 +297,19 @@ require base_path('resources/views/partials/auth_topbar.php');
             <?php endif; ?>
         </div>
 
-        <form method="GET" class="grid" style="gap:.75rem;" data-live-submit-form="true">
+        <form method="GET" class="grid" style="gap:.75rem;">
             <?php if ($currentDir !== null): ?><input type="hidden" name="dir" value="<?= e($currentDir->uuid) ?>"><?php endif; ?>
             <div>
                 <label for="organization-search"><?= e(__('ui.organization.search')) ?></label>
-                <input id="organization-search" name="q" value="<?= e((string) $search) ?>" placeholder="<?= e(__('ui.organization.search_placeholder')) ?>" data-live-submit-input="true">
+                <input id="organization-search" name="q" value="<?= e((string) $search) ?>" placeholder="<?= e(__('ui.organization.search_placeholder')) ?>">
             </div>
         </form>
 
-        <?php if ($search !== ''): ?>
-            <div class="grid grid-2" style="gap:1rem; align-items:start;">
-                <section class="panel panel-muted" style="padding:1rem; display:grid; gap:.75rem;">
-                    <h3 style="margin:0;"><?= e(__('ui.organization.search_directories')) ?></h3>
-                    <?php foreach ($searchDirectories as $result): ?>
-                        <a href="/organizations/<?= e($organization->uuid) ?>?dir=<?= e($result['directory']->uuid) ?>" class="panel" style="padding:1rem; display:block;">
-                            <div class="org-entry">
-                                <svg class="org-entry-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" aria-hidden="true">
-                                    <path d="M3 7.5A2.5 2.5 0 0 1 5.5 5h4l2 2h7A2.5 2.5 0 0 1 21 9.5v7A2.5 2.5 0 0 1 18.5 19h-13A2.5 2.5 0 0 1 3 16.5z" stroke-linecap="round" stroke-linejoin="round"/>
-                                </svg>
-                                <div class="org-entry-copy">
-                                    <div class="org-entry-title"><?= e($result['directory']->name) ?></div>
-                                    <div class="org-entry-path"><?= e($result['path']) ?></div>
-                                </div>
-                            </div>
-                        </a>
-                    <?php endforeach; ?>
-                    <?php if ($searchDirectories === []): ?><div class="muted"><?= e(__('ui.organization.search_no_directories')) ?></div><?php endif; ?>
-                </section>
-                <section class="panel panel-muted" style="padding:1rem; display:grid; gap:.75rem;">
-                    <h3 style="margin:0;"><?= e(__('ui.organization.search_secrets')) ?></h3>
-                    <?php foreach ($searchSecrets as $result): ?>
-                        <a href="/organizations/<?= e($organization->uuid) ?>/directories/<?= e($result['directory']->uuid) ?>/secrets/<?= e($result['secret']->uuid) ?>" class="panel" style="padding:1rem; display:block;">
-                            <div class="org-entry">
-                                <svg class="org-entry-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" aria-hidden="true">
-                                    <path d="M8 10V8a4 4 0 1 1 8 0v2" stroke-linecap="round" stroke-linejoin="round"/>
-                                    <rect x="5" y="10" width="14" height="10" rx="2" stroke-linecap="round" stroke-linejoin="round"/>
-                                    <path d="M12 14v2.5" stroke-linecap="round" stroke-linejoin="round"/>
-                                </svg>
-                                <div class="org-entry-copy">
-                                    <div class="org-entry-title"><?= e($result['secret']->name) ?></div>
-                                    <div class="muted" style="font-size:.92rem;"><?= e($result['path']) ?></div>
-                                </div>
-                            </div>
-                        </a>
-                    <?php endforeach; ?>
-                    <?php if ($searchSecrets === []): ?><div class="muted"><?= e(__('ui.organization.search_no_secrets')) ?></div><?php endif; ?>
-                </section>
-            </div>
-        <?php endif; ?>
+        <div id="organization-search-results"<?= $search === '' ? ' class="hidden"' : '' ?>>
+            <?php require base_path('resources/views/web/partials/organization_search_results.php'); ?>
+        </div>
 
-        <div class="grid" style="gap:.75rem;">
+        <div id="organization-level-results" class="grid<?= $search !== '' ? ' hidden' : '' ?>" style="gap:.75rem;">
             <?php if ($currentDir !== null): ?>
                 <a href="<?= e($parentDirectory !== null ? '/organizations/' . $organization->uuid . '?dir=' . $parentDirectory->uuid : '/organizations/' . $organization->uuid) ?>" class="panel panel-muted" style="padding:1rem; display:block;">
                     <div class="org-entry">
@@ -765,6 +728,11 @@ require base_path('resources/views/partials/auth_topbar.php');
 
         const openButtons = document.querySelectorAll('[data-open-modal]');
         const closeButtons = document.querySelectorAll('[data-close-modal]');
+        const organizationSearchInput = document.getElementById('organization-search');
+        const organizationSearchResults = document.getElementById('organization-search-results');
+        const organizationLevelResults = document.getElementById('organization-level-results');
+        let organizationSearchTimer = null;
+        let organizationSearchController = null;
 
         openButtons.forEach((button) => {
             button.addEventListener('click', () => {
@@ -1847,6 +1815,71 @@ require base_path('resources/views/partials/auth_topbar.php');
         setMode('static');
         syncDynamicConfig();
         renderStep();
+
+        if (organizationSearchInput && organizationSearchResults && organizationLevelResults) {
+            const searchLoadFailed = <?= json_encode((string) __('ui.organization.search_load_failed')) ?>;
+
+            const fetchOrganizationSearch = async () => {
+                if (organizationSearchController) {
+                    organizationSearchController.abort();
+                }
+
+                organizationSearchController = new AbortController();
+                const value = organizationSearchInput.value.trim();
+                const url = new URL('/organizations/<?= e($organization->uuid) ?>/search', window.location.origin);
+                const nextPageUrl = new URL(window.location.href);
+                const currentDirUuid = <?= json_encode($currentDir?->uuid) ?>;
+
+                if (currentDirUuid) {
+                    url.searchParams.set('dir', currentDirUuid);
+                    nextPageUrl.searchParams.set('dir', currentDirUuid);
+                } else {
+                    nextPageUrl.searchParams.delete('dir');
+                }
+
+                if (value !== '') {
+                    url.searchParams.set('q', value);
+                    nextPageUrl.searchParams.set('q', value);
+                } else {
+                    nextPageUrl.searchParams.delete('q');
+                }
+
+                try {
+                    const response = await fetch(url.toString(), {
+                        headers: {
+                            'X-Requested-With': 'XMLHttpRequest',
+                        },
+                        credentials: 'same-origin',
+                        signal: organizationSearchController.signal,
+                    });
+                    if (!response.ok) {
+                        throw new Error(searchLoadFailed);
+                    }
+
+                    organizationSearchResults.innerHTML = await response.text();
+                    organizationSearchResults.classList.toggle('hidden', value === '');
+                    organizationLevelResults.classList.toggle('hidden', value !== '');
+                    window.history.replaceState({}, '', `${nextPageUrl.pathname}${nextPageUrl.search}`);
+                } catch (error) {
+                    if (error instanceof DOMException && error.name === 'AbortError') {
+                        return;
+                    }
+
+                    if (window.passwayToast && typeof window.passwayToast.show === 'function') {
+                        window.passwayToast.show(searchLoadFailed, 'error');
+                    }
+                }
+            };
+
+            organizationSearchInput.addEventListener('input', () => {
+                if (organizationSearchTimer !== null) {
+                    window.clearTimeout(organizationSearchTimer);
+                }
+                organizationSearchTimer = window.setTimeout(fetchOrganizationSearch, 250);
+            });
+
+            organizationSearchInput.addEventListener('search', fetchOrganizationSearch);
+        }
     })();
     </script>
 <?php endif; ?>

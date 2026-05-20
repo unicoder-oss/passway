@@ -30,6 +30,7 @@ $router->post('/setup', [SetupController::class, 'process']);
 // ------------------------------------------------------------------ //
 
 $router->get('/', [WebController::class, 'home'], [AuthMiddleware::class]);
+$router->get('/partials/home-organizations', [WebController::class, 'homeOrganizationsPartial'], [AuthMiddleware::class]);
 $router->get('/api', [WebController::class, 'showApiDocs'], [AuthMiddleware::class]);
 
 // Health check (Docker, балансировщики)
@@ -95,6 +96,7 @@ $router->post('/rotation-services/:svcUuid/update', [WebController::class, 'upda
 $router->post('/rotation-services/:svcUuid/verify', [WebController::class, 'verifyRotationService'], [AuthMiddleware::class]);
 $router->post('/rotation-services/:svcUuid/delete', [WebController::class, 'deleteRotationService'], [AuthMiddleware::class]);
 $router->get('/organizations/:uuid', [WebController::class, 'showOrganization'], [AuthMiddleware::class]);
+$router->get('/organizations/:uuid/search', [WebController::class, 'organizationSearchPartial'], [AuthMiddleware::class]);
 $router->get('/organizations/:uuid/manage', [WebController::class, 'showOrganizationManage'], [AuthMiddleware::class]);
 $router->post('/organizations/:uuid/manage', [WebController::class, 'updateOrganizationSettings'], [AuthMiddleware::class]);
 $router->get('/organizations/:uuid/groups', [WebController::class, 'showOrganizationGroups'], [AuthMiddleware::class]);
