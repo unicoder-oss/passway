@@ -13,6 +13,7 @@ $deleteAction = '/organizations/' . $organization->uuid . '/directories/' . $dir
 $transferOwnerAction = '/organizations/' . $organization->uuid . '/directories/' . $directory->uuid . '/secrets/' . $secret->uuid . '/owner';
 $templatePreviewUrl = '/api/v1/organizations/' . $organization->uuid . '/directories/' . $directory->uuid . '/secrets/template-preview';
 $secretAclApiUrl = '/api/v1/organizations/' . $organization->uuid . '/secrets/' . $secret->uuid . '/acl';
+$secretAccessPolicyApiUrl = '/api/v1/organizations/' . $organization->uuid . '/secrets/' . $secret->uuid . '/access-policy';
 $dynamicRotationOutputs = $dynamicRotationView['outputs'] ?? [];
 $dynamicRotationInputs = $dynamicRotationView['input'] ?? [];
 $dynamicRotationPrimaryField = $dynamicRotationView['primary_field'] ?? null;
@@ -424,8 +425,33 @@ $renderReadonlyRotationField = static function (array $field, array $values): vo
                 <div class="wizard-meta" id="secret-acl-status"><?= e(__('ui.secret.acl_modal_hint')) ?></div>
             </div>
             <div class="grid" style="gap:1rem;">
+                <section class="grid" style="gap:.75rem;">
+                    <div>
+                        <strong><?= e(__('ui.secret.default_access_title')) ?></strong>
+                        <div class="wizard-meta"><?= e(__('ui.secret.default_access_hint')) ?></div>
+                    </div>
+                    <div class="grid field-actions-2" style="gap:.75rem;">
+                        <div>
+                            <label for="secret-default-read-access"><?= e(__('ui.secret.default_read_access')) ?></label>
+                            <select id="secret-default-read-access">
+                                <option value="inherit"><?= e(__('ui.secret.acl_effect_inherit')) ?></option>
+                                <option value="allow"><?= e(__('ui.secret.acl_effect_allow')) ?></option>
+                                <option value="deny"><?= e(__('ui.secret.acl_effect_deny')) ?></option>
+                            </select>
+                        </div>
+                        <div>
+                            <label for="secret-default-write-access"><?= e(__('ui.secret.default_write_access')) ?></label>
+                            <select id="secret-default-write-access">
+                                <option value="inherit"><?= e(__('ui.secret.acl_effect_inherit')) ?></option>
+                                <option value="allow"><?= e(__('ui.secret.acl_effect_allow')) ?></option>
+                                <option value="deny"><?= e(__('ui.secret.acl_effect_deny')) ?></option>
+                            </select>
+                        </div>
+                    </div>
+                </section>
                 <div class="acl-tabs">
                     <button type="button" class="secondary acl-tab is-active" data-acl-tab="users"><?= e(__('ui.secret.acl_tab_users')) ?></button>
+                    <button type="button" class="secondary acl-tab" data-acl-tab="groups"><?= e(__('ui.secret.acl_tab_groups')) ?></button>
                     <button type="button" class="secondary acl-tab" data-acl-tab="keys"><?= e(__('ui.secret.acl_tab_keys')) ?></button>
                 </div>
                 <section data-acl-panel="users" class="grid" style="gap:.75rem;">
@@ -441,6 +467,20 @@ $renderReadonlyRotationField = static function (array $field, array $values): vo
                             </select>
                         </div>
                         <button type="button" class="secondary" id="secret-acl-add-user"><?= e(__('ui.secret.acl_add_rule')) ?></button>
+                    </div>
+                </section>
+                <section data-acl-panel="groups" class="grid hidden" style="gap:.75rem;">
+                    <div class="grid field-actions-2" style="gap:.75rem; align-items:end;">
+                        <div>
+                            <label for="secret-acl-group-select"><?= e(__('ui.secret.acl_add_group')) ?></label>
+                            <select id="secret-acl-group-select">
+                                <option value=""><?= e(__('ui.secret.acl_select_group')) ?></option>
+                                <?php foreach ($organizationGroups as $group): ?>
+                                    <option value="<?= e($group['uuid']) ?>"><?= e($group['name']) ?></option>
+                                <?php endforeach; ?>
+                            </select>
+                        </div>
+                        <button type="button" class="secondary" id="secret-acl-add-group"><?= e(__('ui.secret.acl_add_rule')) ?></button>
                     </div>
                 </section>
                 <section data-acl-panel="keys" class="grid hidden" style="gap:.75rem;">
@@ -592,8 +632,12 @@ $renderReadonlyRotationField = static function (array $field, array $values): vo
     const secretAclStatus = document.getElementById('secret-acl-status');
     const secretAclRules = document.getElementById('secret-acl-rules');
     const secretAclSaveButton = document.getElementById('secret-acl-save-button');
+    const secretDefaultReadAccess = document.getElementById('secret-default-read-access');
+    const secretDefaultWriteAccess = document.getElementById('secret-default-write-access');
     const secretAclUserSelect = document.getElementById('secret-acl-user-select');
     const secretAclAddUserButton = document.getElementById('secret-acl-add-user');
+    const secretAclGroupSelect = document.getElementById('secret-acl-group-select');
+    const secretAclAddGroupButton = document.getElementById('secret-acl-add-group');
     const secretAclKeySelect = document.getElementById('secret-acl-key-select');
     const secretAclAddKeyButton = document.getElementById('secret-acl-add-key');
     const aclTabButtons = Array.from(document.querySelectorAll('[data-acl-tab]'));
@@ -606,7 +650,9 @@ $renderReadonlyRotationField = static function (array $field, array $values): vo
     const confirmSecretOwnerText = document.getElementById('confirm-secret-owner-text');
     const confirmSecretOwnerUuid = document.getElementById('confirm-secret-owner-uuid');
     const aclApiUrl = <?= json_encode($secretAclApiUrl) ?>;
+    const accessPolicyApiUrl = <?= json_encode($secretAccessPolicyApiUrl) ?>;
     const organizationMembers = <?= json_encode($organizationMembers, JSON_UNESCAPED_UNICODE | JSON_UNESCAPED_SLASHES) ?>;
+    const organizationGroups = <?= json_encode($organizationGroups, JSON_UNESCAPED_UNICODE | JSON_UNESCAPED_SLASHES) ?>;
     const organizationApiKeys = <?= json_encode($organizationApiKeys, JSON_UNESCAPED_UNICODE | JSON_UNESCAPED_SLASHES) ?>;
     const currentUserUuid = <?= json_encode($user->uuid) ?>;
     const secretOwnerUuid = <?= json_encode($secret->ownerUserId !== null ? \Passway\Models\User::findById($secret->ownerUserId)?->uuid : null) ?>;
@@ -621,12 +667,20 @@ $renderReadonlyRotationField = static function (array $field, array $values): vo
         loading: <?= json_encode((string) __('ui.secret.acl_loading')) ?>,
         saving: <?= json_encode((string) __('ui.secret.acl_saving')) ?>,
         saved: <?= json_encode((string) __('ui.secret.acl_saved')) ?>,
+        accessLoading: <?= json_encode((string) __('ui.secret.default_access_loading')) ?>,
+        accessSaving: <?= json_encode((string) __('ui.secret.default_access_saving')) ?>,
+        accessSaved: <?= json_encode((string) __('ui.secret.default_access_saved')) ?>,
         duplicate: <?= json_encode((string) __('ui.secret.acl_duplicate_subject')) ?>,
         addUser: <?= json_encode((string) __('ui.secret.acl_add_user_required')) ?>,
+        addGroup: <?= json_encode((string) __('ui.secret.acl_add_group_required')) ?>,
         addKey: <?= json_encode((string) __('ui.secret.acl_add_key_required')) ?>,
         ownerEmpty: <?= json_encode((string) __('ui.secret.owner_no_candidates')) ?>,
     };
     let secretAclState = [];
+    let secretAccessPolicyState = {
+        default_read_access: 'inherit',
+        default_write_access: 'inherit',
+    };
     let selectedSecretOwnerUuid = null;
 
     const setAclTab = (tab) => {
@@ -757,15 +811,81 @@ $renderReadonlyRotationField = static function (array $field, array $values): vo
         }
     };
 
+    const syncSecretAccessPolicyInputs = () => {
+        if (secretDefaultReadAccess) {
+            secretDefaultReadAccess.value = secretAccessPolicyState.default_read_access || 'inherit';
+        }
+        if (secretDefaultWriteAccess) {
+            secretDefaultWriteAccess.value = secretAccessPolicyState.default_write_access || 'inherit';
+        }
+    };
+
+    const loadSecretAccessPolicy = async () => {
+        if (!accessPolicyApiUrl || !secretAclStatus) {
+            return;
+        }
+
+        try {
+            const response = await fetch(accessPolicyApiUrl, {
+                headers: {
+                    'Accept': 'application/json',
+                    'X-Requested-With': 'XMLHttpRequest',
+                },
+                credentials: 'same-origin',
+            });
+            const payload = await response.json();
+            if (!response.ok || !payload.success) {
+                throw new Error(payload.error || <?= json_encode((string) __('ui.secret.default_access_load_failed')) ?>);
+            }
+
+            secretAccessPolicyState = {
+                default_read_access: payload.data && payload.data.default_read_access ? payload.data.default_read_access : 'inherit',
+                default_write_access: payload.data && payload.data.default_write_access ? payload.data.default_write_access : 'inherit',
+            };
+            syncSecretAccessPolicyInputs();
+        } catch (error) {
+            secretAclStatus.textContent = error instanceof Error ? error.message : <?= json_encode((string) __('ui.secret.default_access_load_failed')) ?>;
+        }
+    };
+
+    const saveSecretAccessPolicy = async () => {
+        if (!accessPolicyApiUrl || !secretAclStatus) {
+            return;
+        }
+
+        const response = await fetch(accessPolicyApiUrl, {
+            method: 'PUT',
+            headers: {
+                'Content-Type': 'application/json',
+                'Accept': 'application/json',
+                'X-Requested-With': 'XMLHttpRequest',
+            },
+            credentials: 'same-origin',
+            body: JSON.stringify(secretAccessPolicyState),
+        });
+        const payload = await response.json();
+        if (!response.ok || !payload.success) {
+            throw new Error(payload.error || <?= json_encode((string) __('ui.secret.default_access_save_failed')) ?>);
+        }
+
+        secretAccessPolicyState = {
+            default_read_access: payload.data && payload.data.default_read_access ? payload.data.default_read_access : 'inherit',
+            default_write_access: payload.data && payload.data.default_write_access ? payload.data.default_write_access : 'inherit',
+        };
+        syncSecretAccessPolicyInputs();
+    };
+
     const saveSecretAcl = async () => {
         if (!secretAclSaveButton || !secretAclStatus) {
             return;
         }
 
         secretAclSaveButton.disabled = true;
-        secretAclStatus.textContent = aclLabels.saving;
+        secretAclStatus.textContent = aclLabels.accessSaving;
 
         try {
+            await saveSecretAccessPolicy();
+            secretAclStatus.textContent = aclLabels.saving;
             const response = await fetch(aclApiUrl, {
                 method: 'PUT',
                 headers: {
@@ -798,7 +918,7 @@ $renderReadonlyRotationField = static function (array $field, array $values): vo
                 write: rule.write,
             })).filter((rule) => !(rule.subject_type === 'user' && rule.subject_uuid === secretOwnerUuid));
             renderAclRules();
-            secretAclStatus.textContent = aclLabels.saved;
+            secretAclStatus.textContent = aclLabels.accessSaved;
         } catch (error) {
             secretAclStatus.textContent = error instanceof Error ? error.message : <?= json_encode((string) __('ui.secret.acl_save_failed')) ?>;
         } finally {
@@ -867,6 +987,8 @@ $renderReadonlyRotationField = static function (array $field, array $values): vo
     if (openSecretAclButton && secretAclModal) {
         openSecretAclButton.addEventListener('click', () => {
             setAclTab('users');
+            secretAclStatus.textContent = aclLabels.accessLoading;
+            void loadSecretAccessPolicy();
             void loadSecretAcl();
         });
     }
@@ -908,6 +1030,39 @@ $renderReadonlyRotationField = static function (array $field, array $values): vo
         });
     }
 
+    if (secretAclAddGroupButton && secretAclGroupSelect && secretAclStatus) {
+        secretAclAddGroupButton.addEventListener('click', () => {
+            const subjectUuid = secretAclGroupSelect.value;
+            if (subjectUuid === '') {
+                secretAclStatus.textContent = aclLabels.addGroup;
+                return;
+            }
+
+            if (secretAclState.some((rule) => rule.subject_type === 'group' && rule.subject_uuid === subjectUuid)) {
+                secretAclStatus.textContent = aclLabels.duplicate;
+                return;
+            }
+
+            const group = organizationGroups.find((item) => item.uuid === subjectUuid);
+            if (!group) {
+                secretAclStatus.textContent = aclLabels.addGroup;
+                return;
+            }
+
+            secretAclState.push({
+                subject_type: 'group',
+                subject_uuid: group.uuid,
+                subject_name: group.name,
+                subject_email: null,
+                read: null,
+                write: null,
+            });
+            secretAclGroupSelect.value = '';
+            secretAclStatus.textContent = <?= json_encode((string) __('ui.secret.acl_modal_hint')) ?>;
+            renderAclRules();
+        });
+    }
+
     if (secretAclAddKeyButton && secretAclKeySelect && secretAclStatus) {
         secretAclAddKeyButton.addEventListener('click', () => {
             const subjectUuid = secretAclKeySelect.value;
@@ -943,6 +1098,10 @@ $renderReadonlyRotationField = static function (array $field, array $values): vo
 
     if (secretAclSaveButton) {
         secretAclSaveButton.addEventListener('click', () => {
+            secretAccessPolicyState = {
+                default_read_access: secretDefaultReadAccess ? secretDefaultReadAccess.value : 'inherit',
+                default_write_access: secretDefaultWriteAccess ? secretDefaultWriteAccess.value : 'inherit',
+            };
             void saveSecretAcl();
         });
     }
@@ -950,10 +1109,27 @@ $renderReadonlyRotationField = static function (array $field, array $values): vo
     if (secretAclModal) {
         secretAclModal.addEventListener('close', () => {
             secretAclState = [];
+            secretAccessPolicyState = {
+                default_read_access: 'inherit',
+                default_write_access: 'inherit',
+            };
+            syncSecretAccessPolicyInputs();
             if (secretAclStatus) {
                 secretAclStatus.textContent = <?= json_encode((string) __('ui.secret.acl_modal_hint')) ?>;
             }
             renderAclRules();
+        });
+    }
+
+    if (secretDefaultReadAccess) {
+        secretDefaultReadAccess.addEventListener('change', () => {
+            secretAccessPolicyState.default_read_access = secretDefaultReadAccess.value;
+        });
+    }
+
+    if (secretDefaultWriteAccess) {
+        secretDefaultWriteAccess.addEventListener('change', () => {
+            secretAccessPolicyState.default_write_access = secretDefaultWriteAccess.value;
         });
     }
 

@@ -134,6 +134,10 @@ $router->group('/api/v1', function (\Passway\Core\Router $router) {
             [DirectoryController::class, 'acl'], [AuthMiddleware::class]);
         $router->put('/:uuid/directories/:dirUuid/acl',
             [DirectoryController::class, 'replaceAcl'], [AuthMiddleware::class]);
+        $router->get('/:uuid/directories/:dirUuid/access-policy',
+            [DirectoryController::class, 'accessPolicy'], [AuthMiddleware::class]);
+        $router->put('/:uuid/directories/:dirUuid/access-policy',
+            [DirectoryController::class, 'updateAccessPolicy'], [AuthMiddleware::class]);
         $router->post('/:uuid/directories/:dirUuid/owner',
             [DirectoryController::class, 'transferOwnership'], [AuthMiddleware::class]);
         $router->patch('/:uuid/directories/:dirUuid',
@@ -186,6 +190,10 @@ $router->group('/api/v1', function (\Passway\Core\Router $router) {
             [SecretController::class, 'acl'], [AuthMiddleware::class]);
         $router->put('/:uuid/secrets/:secUuid/acl',
             [SecretController::class, 'replaceAcl'], [AuthMiddleware::class]);
+        $router->get('/:uuid/secrets/:secUuid/access-policy',
+            [SecretController::class, 'accessPolicy'], [AuthMiddleware::class]);
+        $router->put('/:uuid/secrets/:secUuid/access-policy',
+            [SecretController::class, 'updateAccessPolicy'], [AuthMiddleware::class]);
         $router->post('/:uuid/secrets/:secUuid/owner',
             [SecretController::class, 'transferOwnership'], [AuthMiddleware::class]);
         $router->post('/:uuid/secrets/:secUuid/approvals',

@@ -80,6 +80,8 @@ final class SecretService
         string $userId,
         ?string $rotationIntegrationUuid = null,
         ?string $rotationSchedule = null,
+        string $defaultReadAccess = 'inherit',
+        string $defaultWriteAccess = 'inherit',
     ): Secret {
         $name = \trim($name);
         if ($name === '') {
@@ -93,6 +95,9 @@ final class SecretService
                 __('ui.backend.secret.invalid_type', ['allowed' => \implode(', ', self::VALID_TYPES)])
             );
         }
+
+        $defaultReadAccess = $this->normalizeAccessPolicy($defaultReadAccess);
+        $defaultWriteAccess = $this->normalizeAccessPolicy($defaultWriteAccess);
 
         $rotationIntegrationUuid = $rotationIntegrationUuid !== null && \trim($rotationIntegrationUuid) !== ''
             ? \trim($rotationIntegrationUuid)
@@ -129,6 +134,8 @@ final class SecretService
             'version'          => 1,
             'created_by'       => (int) $userId,
             'owner_user_id'    => (int) $userId,
+            'default_read_access' => $defaultReadAccess,
+            'default_write_access' => $defaultWriteAccess,
             'created_at'       => $now,
             'updated_at'       => $now,
         ]);
@@ -163,6 +170,8 @@ final class SecretService
         array $overrides = [],
         ?string $rotationSchedule = null,
         ?string $providedValue = null,
+        string $defaultReadAccess = 'inherit',
+        string $defaultWriteAccess = 'inherit',
     ): Secret {
         if ($rotationSchedule !== null && \trim($rotationSchedule) !== '') {
             throw new \InvalidArgumentException(__('ui.backend.secret.template_rotation_not_supported'));
@@ -183,6 +192,9 @@ final class SecretService
         if (\strlen($name) > 255) {
             throw new \InvalidArgumentException(__('ui.backend.secret.name_too_long'));
         }
+
+        $defaultReadAccess = $this->normalizeAccessPolicy($defaultReadAccess);
+        $defaultWriteAccess = $this->normalizeAccessPolicy($defaultWriteAccess);
 
         $preview = $this->getTemplateService()->preview($templateUuid, $orgId, $overrides);
         $describedValue = $providedValue !== null
@@ -215,6 +227,8 @@ final class SecretService
             'version'               => 1,
             'created_by'            => (int) $userId,
             'owner_user_id'         => (int) $userId,
+            'default_read_access'   => $defaultReadAccess,
+            'default_write_access'  => $defaultWriteAccess,
             'created_at'            => $now,
             'updated_at'            => $now,
         ]);
@@ -252,6 +266,8 @@ final class SecretService
         string $primaryField,
         string $userId,
         ?string $secretUuid = null,
+        string $defaultReadAccess = 'inherit',
+        string $defaultWriteAccess = 'inherit',
     ): Secret {
         $name = \trim($name);
         if ($name === '') {
@@ -260,6 +276,9 @@ final class SecretService
         if (\strlen($name) > 255) {
             throw new \InvalidArgumentException(__('ui.backend.secret.name_too_long'));
         }
+
+        $defaultReadAccess = $this->normalizeAccessPolicy($defaultReadAccess);
+        $defaultWriteAccess = $this->normalizeAccessPolicy($defaultWriteAccess);
 
         $rotationSchedule = $this->normalizeRotationSchedule($rotationSchedule);
         $primaryField = \trim($primaryField);
@@ -296,6 +315,8 @@ final class SecretService
             'version'                 => 1,
             'created_by'              => (int) $userId,
             'owner_user_id'           => (int) $userId,
+            'default_read_access'     => $defaultReadAccess,
+            'default_write_access'    => $defaultWriteAccess,
             'created_at'              => $now,
             'updated_at'              => $now,
         ]);
@@ -669,6 +690,46 @@ final class SecretService
         $this->assertOwnedBy($secret, $requesterId, 'ui.backend.secret.owner_acl_required');
 
         return $this->permissionService->replaceForResource('secret', $secret->id, $rules, $requesterId);
+    }
+
+    /** @return array{default_read_access:string,default_write_access:string} */
+    public function getAccessPolicy(string $secretUuid, string $orgId, string $requesterId): array
+    {
+        $secret = $this->findSecretInOrg($secretUuid, $orgId);
+        $this->assertOwnedBy($secret, $requesterId, 'ui.backend.secret.owner_acl_required');
+
+        return [
+            'default_read_access' => $secret->defaultReadAccess,
+            'default_write_access' => $secret->defaultWriteAccess,
+        ];
+    }
+
+    /** @return array{default_read_access:string,default_write_access:string} */
+    public function updateAccessPolicy(
+        string $secretUuid,
+        string $orgId,
+        string $requesterId,
+        string $defaultReadAccess,
+        string $defaultWriteAccess,
+    ): array {
+        $secret = $this->findSecretInOrg($secretUuid, $orgId);
+        $this->assertOwnedBy($secret, $requesterId, 'ui.backend.secret.owner_acl_required');
+        $defaultReadAccess = $this->normalizeAccessPolicy($defaultReadAccess);
+        $defaultWriteAccess = $this->normalizeAccessPolicy($defaultWriteAccess);
+
+        $secret->update([
+            'default_read_access' => $defaultReadAccess,
+            'default_write_access' => $defaultWriteAccess,
+            'updated_at' => now()->format('Y-m-d H:i:s'),
+        ]);
+
+        $updated = Secret::findByUuid($secretUuid)
+            ?? throw new \RuntimeException(__('ui.backend.secret.not_found'));
+
+        return [
+            'default_read_access' => $updated->defaultReadAccess,
+            'default_write_access' => $updated->defaultWriteAccess,
+        ];
     }
 
     /**
@@ -1128,5 +1189,15 @@ final class SecretService
         }
 
         return \implode(' ', $parts);
+    }
+
+    private function normalizeAccessPolicy(string $value): string
+    {
+        $value = \trim($value);
+        if (!\in_array($value, PermissionService::VALID_ACCESS_POLICIES, true)) {
+            throw new \InvalidArgumentException(__('ui.backend.permission.invalid_access_policy'));
+        }
+
+        return $value;
     }
 }

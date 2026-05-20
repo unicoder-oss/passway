@@ -65,6 +65,8 @@ final class RotationService
         ?string $rotationSchedule,
         array $rotationInput,
         string $userId,
+        string $defaultReadAccess = 'inherit',
+        string $defaultWriteAccess = 'inherit',
     ): Secret {
         $integration = \Passway\Models\OrganizationIntegration::findByUuid($rotationIntegrationUuid)
             ?? throw new \RuntimeException(__('ui.backend.secret.rotation_integration_not_found'));
@@ -119,6 +121,8 @@ final class RotationService
             version: 1,
             createdBy: $userId,
             ownerUserId: $userId,
+            defaultReadAccess: $defaultReadAccess,
+            defaultWriteAccess: $defaultWriteAccess,
             createdAt: now()->format('Y-m-d H:i:s'),
             updatedAt: now()->format('Y-m-d H:i:s'),
             deletedAt: null,
@@ -139,6 +143,8 @@ final class RotationService
             $primaryField,
             $userId,
             $secretUuid,
+            $defaultReadAccess,
+            $defaultWriteAccess,
         );
 
         return $secret;

@@ -535,4 +535,56 @@ final class DirectoryServiceTest extends DatabaseTestCase
             $rules,
         ))));
     }
+
+    public function test_replace_acl_stores_group_subject_rules(): void
+    {
+        $owner = $this->createTestUser();
+        $member = $this->createTestUser('group-member@example.com');
+        $org = $this->orgSvc->create('Org', $owner->id);
+        $this->orgSvc->addMember($org->id, $member->id, 'reader', null);
+        $dir = $this->svc->create($org->id, null, 'Dir', $owner->id);
+        $groupService = new GroupService($this->orgSvc);
+        $group = $groupService->create($org->id, 'Writers', null, $owner->id);
+        $groupService->addMember($group->uuid, $member->id, $owner->id, $org->id);
+
+        $rules = $this->svc->replaceAcl($dir->uuid, $org->id, $owner->id, [[
+            'subject_type' => 'group',
+            'subject_id' => $group->id,
+            'read' => 'allow',
+            'write' => 'deny',
+        ]]);
+
+        $this->assertCount(2, $rules);
+        $this->assertSame(['group'], array_values(array_unique(array_map(
+            static fn($rule) => $rule->subjectType,
+            $rules,
+        ))));
+    }
+
+    public function test_update_access_policy_requires_directory_owner(): void
+    {
+        $owner = $this->createTestUser();
+        $editor = $this->createTestUser('editor-policy@example.com');
+        $org = $this->orgSvc->create('Org', $owner->id);
+        $this->orgSvc->addMember($org->id, $editor->id, 'editor', null);
+        $dir = $this->svc->create($org->id, null, 'Dir', $owner->id);
+
+        $this->expectException(AuthException::class);
+        $this->svc->updateAccessPolicy($dir->uuid, $org->id, $editor->id, 'deny', 'deny');
+    }
+
+    public function test_update_access_policy_persists_values(): void
+    {
+        $owner = $this->createTestUser();
+        $org = $this->orgSvc->create('Org', $owner->id);
+        $dir = $this->svc->create($org->id, null, 'Dir', $owner->id);
+
+        $policy = $this->svc->updateAccessPolicy($dir->uuid, $org->id, $owner->id, 'deny', 'allow');
+
+        $this->assertSame('deny', $policy['default_read_access']);
+        $this->assertSame('allow', $policy['default_write_access']);
+        $stored = $this->svc->getAccessPolicy($dir->uuid, $org->id, $owner->id);
+        $this->assertSame('deny', $stored['default_read_access']);
+        $this->assertSame('allow', $stored['default_write_access']);
+    }
 }

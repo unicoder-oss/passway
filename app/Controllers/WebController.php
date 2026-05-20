@@ -11,6 +11,7 @@ use Passway\Core\Response;
 use Passway\Exceptions\AuthException;
 use Passway\Models\ApiKey;
 use Passway\Models\Directory;
+use Passway\Models\Group;
 use Passway\Models\InviteLink;
 use Passway\Models\Organization;
 use Passway\Models\OrganizationIntegration;
@@ -106,9 +107,18 @@ final class WebController
         $name = \trim((string) ($request->input('name') ?? ''));
         $parentUuid = $request->input('parent_uuid');
         $parentUuid = \is_string($parentUuid) && $parentUuid !== '' ? $parentUuid : null;
+        $defaultReadAccess = \trim((string) ($request->input('default_read_access') ?? 'inherit'));
+        $defaultWriteAccess = \trim((string) ($request->input('default_write_access') ?? 'inherit'));
 
         try {
-            $dir = $this->directoryService->create($org->id, $parentUuid, $name, $user->id);
+            $dir = $this->directoryService->create(
+                $org->id,
+                $parentUuid,
+                $name,
+                $user->id,
+                $defaultReadAccess,
+                $defaultWriteAccess,
+            );
         } catch (\Throwable $e) {
             return Response::redirect($this->organizationUrl($org->uuid, error: $e->getMessage()));
         }
@@ -148,6 +158,8 @@ final class WebController
         $rotationIntegrationUuid = \trim((string) ($request->input('rotation_integration_uuid') ?? ''));
         $rotationSchedule = \trim((string) ($request->input('rotation_schedule') ?? ''));
         $rotationInput = $request->input('rotation_input');
+        $defaultReadAccess = \trim((string) ($request->input('default_read_access') ?? 'inherit'));
+        $defaultWriteAccess = \trim((string) ($request->input('default_write_access') ?? 'inherit'));
 
         try {
             if ($type === 'template' && $templateUuid !== '') {
@@ -160,6 +172,8 @@ final class WebController
                     $templateOverrides,
                     $rotationSchedule !== '' ? $rotationSchedule : null,
                     $value,
+                    $defaultReadAccess,
+                    $defaultWriteAccess,
                 );
             } elseif ($type === 'dynamic') {
                 $secret = $this->rotationService->provisionDynamicSecret(
@@ -170,6 +184,8 @@ final class WebController
                     $rotationSchedule !== '' ? $rotationSchedule : null,
                     \is_array($rotationInput) ? $rotationInput : [],
                     $user->id,
+                    $defaultReadAccess,
+                    $defaultWriteAccess,
                 );
             } else {
                 $secret = $this->secretService->create(
@@ -181,6 +197,8 @@ final class WebController
                     $user->id,
                     $rotationIntegrationUuid !== '' ? $rotationIntegrationUuid : null,
                     $rotationSchedule !== '' ? $rotationSchedule : null,
+                    $defaultReadAccess,
+                    $defaultWriteAccess,
                 );
             }
         } catch (\Throwable $e) {
@@ -264,6 +282,7 @@ final class WebController
             ? ($directoryMap[$currentDir->parentId] ?? null)
             : null;
         $organizationMembers = $this->serializeOrganizationMembers($org->id);
+        $organizationGroups = $this->serializeOrganizationGroups($org->id);
         $canWriteCurrentDirectory = $currentDir !== null
             ? $this->permissionService->can('write', $user->id, 'directory', $currentDir->id, $org->id)
             : false;
@@ -286,6 +305,7 @@ final class WebController
             'integrations' => $this->listActiveIntegrationsForOrg($org->id),
             'rotationServiceMap' => $this->buildRotationServiceMap(),
             'organizationMembers' => $organizationMembers,
+            'organizationGroups' => $organizationGroups,
             'organizationApiKeys' => $currentDir !== null && $currentDir->ownerUserId === $user->id
                 ? $this->serializeOrganizationApiKeys($org->id)
                 : [],
@@ -974,6 +994,7 @@ final class WebController
             'templateExtraFields' => $templateExtraFields,
             'dynamicRotationView' => $dynamicRotationView,
             'organizationMembers' => $this->serializeOrganizationMembers($org->id),
+            'organizationGroups' => $this->serializeOrganizationGroups($org->id),
             'organizationApiKeys' => $secret->ownerUserId === $user->id
                 ? $this->serializeOrganizationApiKeys($org->id)
                 : [],
@@ -1228,6 +1249,22 @@ final class WebController
         }
 
         return $keys;
+    }
+
+    /** @return array<int, array{uuid:string,name:string,description:?string}> */
+    private function serializeOrganizationGroups(string $orgId): array
+    {
+        $groups = [];
+
+        foreach (Group::findByOrgId($orgId) as $group) {
+            $groups[] = [
+                'uuid' => $group->uuid,
+                'name' => $group->name,
+                'description' => $group->description,
+            ];
+        }
+
+        return $groups;
     }
 
     /**

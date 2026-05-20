@@ -12,6 +12,9 @@ $secretDirUuid = $currentDir?->uuid ?? $rootSecretDirectory?->uuid ?? '';
 $currentDirAclApiUrl = $currentDir !== null
     ? '/api/v1/organizations/' . $organization->uuid . '/directories/' . $currentDir->uuid . '/acl'
     : null;
+$currentDirAccessPolicyApiUrl = $currentDir !== null
+    ? '/api/v1/organizations/' . $organization->uuid . '/directories/' . $currentDir->uuid . '/access-policy'
+    : null;
 $currentDirOwnerAction = $currentDir !== null
     ? '/organizations/' . $organization->uuid . '/directories/' . $currentDir->uuid . '/owner'
     : null;
@@ -408,6 +411,24 @@ require base_path('resources/views/partials/auth_topbar.php');
                     <label for="modal-dir-name"><?= e(__('ui.home.directory_name')) ?></label>
                     <input id="modal-dir-name" name="name" placeholder="<?= e(__('ui.home.directory_name_placeholder')) ?>" required>
                 </div>
+                <div class="grid field-actions-2" style="gap:.75rem;">
+                    <div>
+                        <label for="modal-dir-default-read-access"><?= e(__('ui.organization.default_read_access')) ?></label>
+                        <select id="modal-dir-default-read-access" name="default_read_access">
+                            <option value="inherit"><?= e(__('ui.organization.acl_effect_inherit')) ?></option>
+                            <option value="allow"><?= e(__('ui.organization.acl_effect_allow')) ?></option>
+                            <option value="deny"><?= e(__('ui.organization.acl_effect_deny')) ?></option>
+                        </select>
+                    </div>
+                    <div>
+                        <label for="modal-dir-default-write-access"><?= e(__('ui.organization.default_write_access')) ?></label>
+                        <select id="modal-dir-default-write-access" name="default_write_access">
+                            <option value="inherit"><?= e(__('ui.organization.acl_effect_inherit')) ?></option>
+                            <option value="allow"><?= e(__('ui.organization.acl_effect_allow')) ?></option>
+                            <option value="deny"><?= e(__('ui.organization.acl_effect_deny')) ?></option>
+                        </select>
+                    </div>
+                </div>
                 <div class="actions-end">
                     <button type="button" class="secondary" data-close-modal="directory-modal"><?= e(__('ui.organization.cancel')) ?></button>
                     <button type="submit"><?= e(__('ui.organization.create')) ?></button>
@@ -446,8 +467,33 @@ require base_path('resources/views/partials/auth_topbar.php');
                         <div class="wizard-meta" id="directory-acl-status"><?= e(__('ui.organization.acl_modal_hint')) ?></div>
                     </div>
                     <div class="grid" style="gap:1rem;">
+                        <section class="grid" style="gap:.75rem;">
+                            <div>
+                                <strong><?= e(__('ui.organization.default_access_title')) ?></strong>
+                                <div class="wizard-meta"><?= e(__('ui.organization.default_access_hint')) ?></div>
+                            </div>
+                            <div class="grid field-actions-2" style="gap:.75rem;">
+                                <div>
+                                    <label for="directory-default-read-access"><?= e(__('ui.organization.default_read_access')) ?></label>
+                                    <select id="directory-default-read-access">
+                                        <option value="inherit"><?= e(__('ui.organization.acl_effect_inherit')) ?></option>
+                                        <option value="allow"><?= e(__('ui.organization.acl_effect_allow')) ?></option>
+                                        <option value="deny"><?= e(__('ui.organization.acl_effect_deny')) ?></option>
+                                    </select>
+                                </div>
+                                <div>
+                                    <label for="directory-default-write-access"><?= e(__('ui.organization.default_write_access')) ?></label>
+                                    <select id="directory-default-write-access">
+                                        <option value="inherit"><?= e(__('ui.organization.acl_effect_inherit')) ?></option>
+                                        <option value="allow"><?= e(__('ui.organization.acl_effect_allow')) ?></option>
+                                        <option value="deny"><?= e(__('ui.organization.acl_effect_deny')) ?></option>
+                                    </select>
+                                </div>
+                            </div>
+                        </section>
                         <div class="acl-tabs">
                             <button type="button" class="secondary acl-tab is-active" data-directory-acl-tab="users"><?= e(__('ui.organization.acl_tab_users')) ?></button>
+                            <button type="button" class="secondary acl-tab" data-directory-acl-tab="groups"><?= e(__('ui.organization.acl_tab_groups')) ?></button>
                             <button type="button" class="secondary acl-tab" data-directory-acl-tab="keys"><?= e(__('ui.organization.acl_tab_keys')) ?></button>
                         </div>
                         <section data-directory-acl-panel="users" class="grid" style="gap:.75rem;">
@@ -463,6 +509,20 @@ require base_path('resources/views/partials/auth_topbar.php');
                                     </select>
                                 </div>
                                 <button type="button" class="secondary" id="directory-acl-add-user"><?= e(__('ui.organization.acl_add_rule')) ?></button>
+                            </div>
+                        </section>
+                        <section data-directory-acl-panel="groups" class="grid hidden" style="gap:.75rem;">
+                            <div class="grid field-actions-2" style="gap:.75rem; align-items:end;">
+                                <div>
+                                    <label for="directory-acl-group-select"><?= e(__('ui.organization.acl_add_group')) ?></label>
+                                    <select id="directory-acl-group-select">
+                                        <option value=""><?= e(__('ui.organization.acl_select_group')) ?></option>
+                                        <?php foreach ($organizationGroups as $group): ?>
+                                            <option value="<?= e($group['uuid']) ?>"><?= e($group['name']) ?></option>
+                                        <?php endforeach; ?>
+                                    </select>
+                                </div>
+                                <button type="button" class="secondary" id="directory-acl-add-group"><?= e(__('ui.organization.acl_add_rule')) ?></button>
                             </div>
                         </section>
                         <section data-directory-acl-panel="keys" class="grid hidden" style="gap:.75rem;">
@@ -625,6 +685,25 @@ require base_path('resources/views/partials/auth_topbar.php');
                             <?php endforeach; ?>
                         </div>
                     </div>
+
+                    <div class="grid field-actions-2" style="gap:.75rem;">
+                        <div>
+                            <label for="modal-secret-default-read-access"><?= e(__('ui.secret.default_read_access')) ?></label>
+                            <select id="modal-secret-default-read-access" name="default_read_access">
+                                <option value="inherit"><?= e(__('ui.secret.acl_effect_inherit')) ?></option>
+                                <option value="allow"><?= e(__('ui.secret.acl_effect_allow')) ?></option>
+                                <option value="deny"><?= e(__('ui.secret.acl_effect_deny')) ?></option>
+                            </select>
+                        </div>
+                        <div>
+                            <label for="modal-secret-default-write-access"><?= e(__('ui.secret.default_write_access')) ?></label>
+                            <select id="modal-secret-default-write-access" name="default_write_access">
+                                <option value="inherit"><?= e(__('ui.secret.acl_effect_inherit')) ?></option>
+                                <option value="allow"><?= e(__('ui.secret.acl_effect_allow')) ?></option>
+                                <option value="deny"><?= e(__('ui.secret.acl_effect_deny')) ?></option>
+                            </select>
+                        </div>
+                    </div>
                 </section>
 
                 <div class="actions-end">
@@ -710,8 +789,12 @@ require base_path('resources/views/partials/auth_topbar.php');
         const directoryAclStatus = document.getElementById('directory-acl-status');
         const directoryAclRules = document.getElementById('directory-acl-rules');
         const directoryAclSaveButton = document.getElementById('directory-acl-save-button');
+        const directoryDefaultReadAccess = document.getElementById('directory-default-read-access');
+        const directoryDefaultWriteAccess = document.getElementById('directory-default-write-access');
         const directoryAclUserSelect = document.getElementById('directory-acl-user-select');
         const directoryAclAddUserButton = document.getElementById('directory-acl-add-user');
+        const directoryAclGroupSelect = document.getElementById('directory-acl-group-select');
+        const directoryAclAddGroupButton = document.getElementById('directory-acl-add-group');
         const directoryAclKeySelect = document.getElementById('directory-acl-key-select');
         const directoryAclAddKeyButton = document.getElementById('directory-acl-add-key');
         const directoryAclTabButtons = Array.from(document.querySelectorAll('[data-directory-acl-tab]'));
@@ -724,7 +807,9 @@ require base_path('resources/views/partials/auth_topbar.php');
         const confirmDirectoryOwnerText = document.getElementById('confirm-directory-owner-text');
         const confirmDirectoryOwnerUuid = document.getElementById('confirm-directory-owner-uuid');
         const directoryAclApiUrl = <?= json_encode($currentDirAclApiUrl) ?>;
+        const directoryAccessPolicyApiUrl = <?= json_encode($currentDirAccessPolicyApiUrl) ?>;
         const organizationMembers = <?= json_encode($organizationMembers, JSON_UNESCAPED_UNICODE | JSON_UNESCAPED_SLASHES) ?>;
+        const organizationGroups = <?= json_encode($organizationGroups, JSON_UNESCAPED_UNICODE | JSON_UNESCAPED_SLASHES) ?>;
         const organizationApiKeys = <?= json_encode($organizationApiKeys, JSON_UNESCAPED_UNICODE | JSON_UNESCAPED_SLASHES) ?>;
         const currentUserUuid = <?= json_encode($user->uuid) ?>;
         const currentDirectoryOwnerUuid = <?= json_encode($currentDir !== null && $currentDir->ownerUserId !== null ? \Passway\Models\User::findById($currentDir->ownerUserId)?->uuid : null) ?>;
@@ -739,12 +824,20 @@ require base_path('resources/views/partials/auth_topbar.php');
             loading: <?= json_encode((string) __('ui.organization.acl_loading')) ?>,
             saving: <?= json_encode((string) __('ui.organization.acl_saving')) ?>,
             saved: <?= json_encode((string) __('ui.organization.acl_saved')) ?>,
+            accessLoading: <?= json_encode((string) __('ui.organization.default_access_loading')) ?>,
+            accessSaving: <?= json_encode((string) __('ui.organization.default_access_saving')) ?>,
+            accessSaved: <?= json_encode((string) __('ui.organization.default_access_saved')) ?>,
             duplicate: <?= json_encode((string) __('ui.organization.acl_duplicate_subject')) ?>,
             addUser: <?= json_encode((string) __('ui.organization.acl_add_user_required')) ?>,
+            addGroup: <?= json_encode((string) __('ui.organization.acl_add_group_required')) ?>,
             addKey: <?= json_encode((string) __('ui.organization.acl_add_key_required')) ?>,
             ownerEmpty: <?= json_encode((string) __('ui.organization.owner_no_candidates')) ?>,
         };
         let directoryAclState = [];
+        let directoryAccessPolicyState = {
+            default_read_access: 'inherit',
+            default_write_access: 'inherit',
+        };
         let selectedDirectoryOwnerUuid = null;
 
         const setDirectoryAclTab = (tab) => {
@@ -874,15 +967,81 @@ require base_path('resources/views/partials/auth_topbar.php');
             }
         };
 
+        const syncDirectoryAccessPolicyInputs = () => {
+            if (directoryDefaultReadAccess) {
+                directoryDefaultReadAccess.value = directoryAccessPolicyState.default_read_access || 'inherit';
+            }
+            if (directoryDefaultWriteAccess) {
+                directoryDefaultWriteAccess.value = directoryAccessPolicyState.default_write_access || 'inherit';
+            }
+        };
+
+        const loadDirectoryAccessPolicy = async () => {
+            if (!directoryAccessPolicyApiUrl || !directoryAclStatus) {
+                return;
+            }
+
+            try {
+                const response = await fetch(directoryAccessPolicyApiUrl, {
+                    headers: {
+                        'Accept': 'application/json',
+                        'X-Requested-With': 'XMLHttpRequest',
+                    },
+                    credentials: 'same-origin',
+                });
+                const payload = await response.json();
+                if (!response.ok || !payload.success) {
+                    throw new Error(payload.error || <?= json_encode((string) __('ui.organization.default_access_load_failed')) ?>);
+                }
+
+                directoryAccessPolicyState = {
+                    default_read_access: payload.data && payload.data.default_read_access ? payload.data.default_read_access : 'inherit',
+                    default_write_access: payload.data && payload.data.default_write_access ? payload.data.default_write_access : 'inherit',
+                };
+                syncDirectoryAccessPolicyInputs();
+            } catch (error) {
+                directoryAclStatus.textContent = error instanceof Error ? error.message : <?= json_encode((string) __('ui.organization.default_access_load_failed')) ?>;
+            }
+        };
+
+        const saveDirectoryAccessPolicy = async () => {
+            if (!directoryAccessPolicyApiUrl || !directoryAclStatus) {
+                return;
+            }
+
+            const response = await fetch(directoryAccessPolicyApiUrl, {
+                method: 'PUT',
+                headers: {
+                    'Content-Type': 'application/json',
+                    'Accept': 'application/json',
+                    'X-Requested-With': 'XMLHttpRequest',
+                },
+                credentials: 'same-origin',
+                body: JSON.stringify(directoryAccessPolicyState),
+            });
+            const payload = await response.json();
+            if (!response.ok || !payload.success) {
+                throw new Error(payload.error || <?= json_encode((string) __('ui.organization.default_access_save_failed')) ?>);
+            }
+
+            directoryAccessPolicyState = {
+                default_read_access: payload.data && payload.data.default_read_access ? payload.data.default_read_access : 'inherit',
+                default_write_access: payload.data && payload.data.default_write_access ? payload.data.default_write_access : 'inherit',
+            };
+            syncDirectoryAccessPolicyInputs();
+        };
+
         const saveDirectoryAcl = async () => {
             if (!directoryAclApiUrl || !directoryAclSaveButton || !directoryAclStatus) {
                 return;
             }
 
             directoryAclSaveButton.disabled = true;
-            directoryAclStatus.textContent = directoryAclLabels.saving;
+            directoryAclStatus.textContent = directoryAclLabels.accessSaving;
 
             try {
+                await saveDirectoryAccessPolicy();
+                directoryAclStatus.textContent = directoryAclLabels.saving;
                 const response = await fetch(directoryAclApiUrl, {
                     method: 'PUT',
                     headers: {
@@ -915,7 +1074,7 @@ require base_path('resources/views/partials/auth_topbar.php');
                     write: rule.write,
                 })).filter((rule) => !(rule.subject_type === 'user' && rule.subject_uuid === currentDirectoryOwnerUuid));
                 renderDirectoryAclRules();
-                directoryAclStatus.textContent = directoryAclLabels.saved;
+                directoryAclStatus.textContent = directoryAclLabels.accessSaved;
             } catch (error) {
                 directoryAclStatus.textContent = error instanceof Error ? error.message : <?= json_encode((string) __('ui.organization.acl_save_failed')) ?>;
             } finally {
@@ -984,6 +1143,8 @@ require base_path('resources/views/partials/auth_topbar.php');
         if (openDirectoryAclButton && directoryAclModal) {
             openDirectoryAclButton.addEventListener('click', () => {
                 setDirectoryAclTab('users');
+                directoryAclStatus.textContent = directoryAclLabels.accessLoading;
+                void loadDirectoryAccessPolicy();
                 void loadDirectoryAcl();
             });
         }
@@ -1025,6 +1186,39 @@ require base_path('resources/views/partials/auth_topbar.php');
             });
         }
 
+        if (directoryAclAddGroupButton && directoryAclGroupSelect && directoryAclStatus) {
+            directoryAclAddGroupButton.addEventListener('click', () => {
+                const subjectUuid = directoryAclGroupSelect.value;
+                if (subjectUuid === '') {
+                    directoryAclStatus.textContent = directoryAclLabels.addGroup;
+                    return;
+                }
+
+                if (directoryAclState.some((rule) => rule.subject_type === 'group' && rule.subject_uuid === subjectUuid)) {
+                    directoryAclStatus.textContent = directoryAclLabels.duplicate;
+                    return;
+                }
+
+                const group = organizationGroups.find((item) => item.uuid === subjectUuid);
+                if (!group) {
+                    directoryAclStatus.textContent = directoryAclLabels.addGroup;
+                    return;
+                }
+
+                directoryAclState.push({
+                    subject_type: 'group',
+                    subject_uuid: group.uuid,
+                    subject_name: group.name,
+                    subject_email: null,
+                    read: null,
+                    write: null,
+                });
+                directoryAclGroupSelect.value = '';
+                directoryAclStatus.textContent = <?= json_encode((string) __('ui.organization.acl_modal_hint')) ?>;
+                renderDirectoryAclRules();
+            });
+        }
+
         if (directoryAclAddKeyButton && directoryAclKeySelect && directoryAclStatus) {
             directoryAclAddKeyButton.addEventListener('click', () => {
                 const subjectUuid = directoryAclKeySelect.value;
@@ -1060,6 +1254,10 @@ require base_path('resources/views/partials/auth_topbar.php');
 
         if (directoryAclSaveButton) {
             directoryAclSaveButton.addEventListener('click', () => {
+                directoryAccessPolicyState = {
+                    default_read_access: directoryDefaultReadAccess ? directoryDefaultReadAccess.value : 'inherit',
+                    default_write_access: directoryDefaultWriteAccess ? directoryDefaultWriteAccess.value : 'inherit',
+                };
                 void saveDirectoryAcl();
             });
         }
@@ -1067,10 +1265,27 @@ require base_path('resources/views/partials/auth_topbar.php');
         if (directoryAclModal) {
             directoryAclModal.addEventListener('close', () => {
                 directoryAclState = [];
+                directoryAccessPolicyState = {
+                    default_read_access: 'inherit',
+                    default_write_access: 'inherit',
+                };
+                syncDirectoryAccessPolicyInputs();
                 if (directoryAclStatus) {
                     directoryAclStatus.textContent = <?= json_encode((string) __('ui.organization.acl_modal_hint')) ?>;
                 }
                 renderDirectoryAclRules();
+            });
+        }
+
+        if (directoryDefaultReadAccess) {
+            directoryDefaultReadAccess.addEventListener('change', () => {
+                directoryAccessPolicyState.default_read_access = directoryDefaultReadAccess.value;
+            });
+        }
+
+        if (directoryDefaultWriteAccess) {
+            directoryDefaultWriteAccess.addEventListener('change', () => {
+                directoryAccessPolicyState.default_write_access = directoryDefaultWriteAccess.value;
             });
         }
 

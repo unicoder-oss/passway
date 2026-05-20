@@ -23,6 +23,7 @@ use Passway\Models\UserPermission;
 final class PermissionService
 {
     public const VALID_PERMISSIONS = UserPermission::VALID_PERMISSIONS;
+    public const VALID_ACCESS_POLICIES = ['inherit', 'allow', 'deny'];
 
     /**
      * Минимальная роль в организации, достаточная для данного права.
@@ -76,6 +77,11 @@ final class PermissionService
         $fineGrained = $this->checkFineGrained($permission, $userId, $resourceType, $resourceId, $orgId);
         if ($fineGrained !== null) {
             return $fineGrained;
+        }
+
+        $defaultPolicy = $this->checkDefaultPolicy($permission, $resourceType, $resourceId);
+        if ($defaultPolicy !== null) {
+            return $defaultPolicy;
         }
 
         // 3. Fallback на роль в организации
@@ -349,6 +355,29 @@ final class PermissionService
         return null;
     }
 
+    private function checkDefaultPolicy(string $permission, string $resourceType, string $resourceId): ?bool
+    {
+        if (!\in_array($permission, ['read', 'write'], true)) {
+            return null;
+        }
+
+        foreach ($this->buildResourceChain($resourceType, $resourceId) as $resource) {
+            $effect = $permission === 'read'
+                ? ($resource['default_read_access'] ?? 'inherit')
+                : ($resource['default_write_access'] ?? 'inherit');
+
+            if ($effect === 'allow') {
+                return true;
+            }
+
+            if ($effect === 'deny') {
+                return false;
+            }
+        }
+
+        return null;
+    }
+
     /**
      * Проверить права на конкретный ресурс (без наследования).
      * Возвращает true/false если нашли правило, null если правил нет.
@@ -393,7 +422,7 @@ final class PermissionService
      * Построить цепочку ресурсов для проверки ACL
      * (от конкретного ресурса к корневому каталогу).
      *
-     * @return array<int, array{resource_type:string, resource_id:string}>
+     * @return array<int, array{resource_type:string, resource_id:string, default_read_access:string, default_write_access:string}>
      */
     private function buildResourceChain(string $resourceType, string $resourceId): array
     {
@@ -401,12 +430,17 @@ final class PermissionService
             $chain = [[
                 'resource_type' => 'secret',
                 'resource_id' => $resourceId,
+                'default_read_access' => 'inherit',
+                'default_write_access' => 'inherit',
             ]];
 
             $secret = Secret::findById($resourceId);
             if ($secret === null) {
                 return $chain;
             }
+
+            $chain[0]['default_read_access'] = $secret->defaultReadAccess;
+            $chain[0]['default_write_access'] = $secret->defaultWriteAccess;
 
             return [...$chain, ...$this->buildDirectoryResourceChain($secret->directoryId)];
         }
@@ -418,11 +452,13 @@ final class PermissionService
         return [[
             'resource_type' => $resourceType,
             'resource_id' => $resourceId,
+            'default_read_access' => 'inherit',
+            'default_write_access' => 'inherit',
         ]];
     }
 
     /**
-     * @return array<int, array{resource_type:string, resource_id:string}>
+     * @return array<int, array{resource_type:string, resource_id:string, default_read_access:string, default_write_access:string}>
      */
     private function buildDirectoryResourceChain(string $directoryId): array
     {
@@ -433,6 +469,8 @@ final class PermissionService
             $chain[] = [
                 'resource_type' => 'directory',
                 'resource_id' => $current->id,
+                'default_read_access' => $current->defaultReadAccess,
+                'default_write_access' => $current->defaultWriteAccess,
             ];
             $current = $current->parentId !== null
                 ? Directory::findById($current->parentId)

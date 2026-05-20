@@ -57,6 +57,8 @@ final class DirectoryService
         ?string $parentUuid,
         string  $name,
         string  $userId,
+        string  $defaultReadAccess = 'inherit',
+        string  $defaultWriteAccess = 'inherit',
     ): Directory {
         $name = \trim($name);
         if ($name === '') {
@@ -65,6 +67,9 @@ final class DirectoryService
         if (\strlen($name) > 255) {
             throw new \InvalidArgumentException(__('ui.backend.directory.name_too_long'));
         }
+
+        $defaultReadAccess = $this->normalizeAccessPolicy($defaultReadAccess);
+        $defaultWriteAccess = $this->normalizeAccessPolicy($defaultWriteAccess);
 
         $parent = null;
         if ($parentUuid !== null) {
@@ -98,6 +103,8 @@ final class DirectoryService
             'path'            => $path,
             'created_by'      => (int) $userId,
             'owner_user_id'   => (int) $userId,
+            'default_read_access' => $defaultReadAccess,
+            'default_write_access' => $defaultWriteAccess,
             'created_at'      => $now,
             'updated_at'      => $now,
         ]);
@@ -377,6 +384,54 @@ final class DirectoryService
         return $this->permissionService->replaceForResource('directory', $dir->id, $rules, $requesterId);
     }
 
+    /** @return array{default_read_access:string,default_write_access:string} */
+    public function getAccessPolicy(string $dirUuid, string $orgId, string $requesterId): array
+    {
+        $dir = Directory::findByUuid($dirUuid);
+        if ($dir === null || $dir->organizationId !== $orgId) {
+            throw new \RuntimeException(__('ui.backend.directory.not_found'));
+        }
+
+        $this->assertOwnedBy($dir, $requesterId, 'ui.backend.directory.owner_acl_required');
+
+        return [
+            'default_read_access' => $dir->defaultReadAccess,
+            'default_write_access' => $dir->defaultWriteAccess,
+        ];
+    }
+
+    /** @return array{default_read_access:string,default_write_access:string} */
+    public function updateAccessPolicy(
+        string $dirUuid,
+        string $orgId,
+        string $requesterId,
+        string $defaultReadAccess,
+        string $defaultWriteAccess,
+    ): array {
+        $dir = Directory::findByUuid($dirUuid);
+        if ($dir === null || $dir->organizationId !== $orgId) {
+            throw new \RuntimeException(__('ui.backend.directory.not_found'));
+        }
+
+        $this->assertOwnedBy($dir, $requesterId, 'ui.backend.directory.owner_acl_required');
+        $defaultReadAccess = $this->normalizeAccessPolicy($defaultReadAccess);
+        $defaultWriteAccess = $this->normalizeAccessPolicy($defaultWriteAccess);
+
+        $dir->update([
+            'default_read_access' => $defaultReadAccess,
+            'default_write_access' => $defaultWriteAccess,
+            'updated_at' => now()->format('Y-m-d H:i:s'),
+        ]);
+
+        $updated = Directory::findByUuid($dirUuid)
+            ?? throw new \RuntimeException(__('ui.backend.directory.not_found'));
+
+        return [
+            'default_read_access' => $updated->defaultReadAccess,
+            'default_write_access' => $updated->defaultWriteAccess,
+        ];
+    }
+
     // ------------------------------------------------------------------ //
     //  Вспомогательные                                                    //
     // ------------------------------------------------------------------ //
@@ -445,5 +500,15 @@ final class DirectoryService
     private function getApiKeyAccessService(): ApiKeyAccessService
     {
         return $this->apiKeyAccessService ?? new ApiKeyAccessService();
+    }
+
+    private function normalizeAccessPolicy(string $value): string
+    {
+        $value = \trim($value);
+        if (!\in_array($value, PermissionService::VALID_ACCESS_POLICIES, true)) {
+            throw new \InvalidArgumentException(__('ui.backend.permission.invalid_access_policy'));
+        }
+
+        return $value;
     }
 }

@@ -26,6 +26,8 @@ final class Directory
         public readonly string  $path,
         public readonly ?string $createdBy,
         public readonly ?string $ownerUserId,
+        public readonly string  $defaultReadAccess,
+        public readonly string  $defaultWriteAccess,
         public readonly string  $createdAt,
         public readonly string  $updatedAt,
         public readonly ?string $deletedAt,
@@ -51,6 +53,10 @@ final class Directory
                 ? (string) $row['created_by'] : null,
             ownerUserId:    isset($row['owner_user_id']) && $row['owner_user_id'] !== null
                 ? (string) $row['owner_user_id'] : null,
+            defaultReadAccess: isset($row['default_read_access']) && $row['default_read_access'] !== null
+                ? (string) $row['default_read_access'] : 'inherit',
+            defaultWriteAccess: isset($row['default_write_access']) && $row['default_write_access'] !== null
+                ? (string) $row['default_write_access'] : 'inherit',
             createdAt:      (string) $row['created_at'],
             updatedAt:      (string) $row['updated_at'],
             deletedAt:      isset($row['deleted_at']) && $row['deleted_at'] !== null

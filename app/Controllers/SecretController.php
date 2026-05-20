@@ -29,9 +29,11 @@ use Passway\Services\SecretService;
  * PATCH  /api/v1/organizations/:uuid/directories/:dirUuid/secrets/:secUuid         — обновить
  * DELETE /api/v1/organizations/:uuid/directories/:dirUuid/secrets/:secUuid         — мягкое удаление
  * GET    /api/v1/organizations/:uuid/directories/:dirUuid/secrets/:secUuid/versions — история
- * GET    /api/v1/organizations/:uuid/secrets/:secUuid/acl                           — exact ACL
- * PUT    /api/v1/organizations/:uuid/secrets/:secUuid/acl                           — replace exact ACL
- * POST   /api/v1/organizations/:uuid/secrets/:secUuid/owner                         — transfer ownership
+     * GET    /api/v1/organizations/:uuid/secrets/:secUuid/acl                           — exact ACL
+     * PUT    /api/v1/organizations/:uuid/secrets/:secUuid/acl                           — replace exact ACL
+     * GET    /api/v1/organizations/:uuid/secrets/:secUuid/access-policy                 — default access policy
+     * PUT    /api/v1/organizations/:uuid/secrets/:secUuid/access-policy                 — update default access policy
+     * POST   /api/v1/organizations/:uuid/secrets/:secUuid/owner                         — transfer ownership
  */
 final class SecretController
 {
@@ -84,6 +86,8 @@ final class SecretController
             ? \trim((string) $request->input('rotation_schedule'))
             : null;
         $rotationInput = $request->input('rotation_input');
+        $defaultReadAccess = \trim((string) ($request->input('default_read_access') ?? 'inherit'));
+        $defaultWriteAccess = \trim((string) ($request->input('default_write_access') ?? 'inherit'));
         $templateOverrides = $this->parseTemplateOverridesInput($request->input('template_overrides'));
         $templateValue = $request->input('value');
         $templateValue = \is_string($templateValue) ? $templateValue : null;
@@ -108,6 +112,8 @@ final class SecretController
                     $templateOverrides,
                     $rotationSchedule !== '' ? $rotationSchedule : null,
                     $templateValue,
+                    $defaultReadAccess,
+                    $defaultWriteAccess,
                 )
                 : ($type === 'dynamic'
                     ? $this->rotationService->provisionDynamicSecret(
@@ -118,6 +124,8 @@ final class SecretController
                         $rotationSchedule !== '' ? $rotationSchedule : null,
                         \is_array($rotationInput) ? $rotationInput : [],
                         $user->id,
+                        $defaultReadAccess,
+                        $defaultWriteAccess,
                     )
                 : $this->secretService->create(
                     $org->id,
@@ -128,6 +136,8 @@ final class SecretController
                     $user->id,
                     $rotationIntegrationUuid !== '' ? $rotationIntegrationUuid : null,
                     $rotationSchedule !== '' ? $rotationSchedule : null,
+                    $defaultReadAccess,
+                    $defaultWriteAccess,
                 ));
         } catch (AuthException $e) {
             return Response::error($e->getMessage(), $e->getCode() ?: 403);
@@ -437,6 +447,50 @@ final class SecretController
         return Response::success($this->serializeMeta($secret));
     }
 
+    public function accessPolicy(Request $request): Response
+    {
+        $user = AuthContext::requireUser();
+        $org = $this->findOrgOrFail($request);
+        $secUuid = (string) $request->routeParam('secUuid');
+
+        try {
+            $policy = $this->secretService->getAccessPolicy($secUuid, $org->id, $user->id);
+        } catch (AuthException $e) {
+            return Response::error($e->getMessage(), $e->getCode() ?: 403);
+        } catch (\RuntimeException $e) {
+            return Response::notFound($e->getMessage());
+        }
+
+        return Response::success($policy);
+    }
+
+    public function updateAccessPolicy(Request $request): Response
+    {
+        $user = AuthContext::requireUser();
+        $org = $this->findOrgOrFail($request);
+        $secUuid = (string) $request->routeParam('secUuid');
+        $defaultReadAccess = \trim((string) ($request->input('default_read_access') ?? 'inherit'));
+        $defaultWriteAccess = \trim((string) ($request->input('default_write_access') ?? 'inherit'));
+
+        try {
+            $policy = $this->secretService->updateAccessPolicy(
+                $secUuid,
+                $org->id,
+                $user->id,
+                $defaultReadAccess,
+                $defaultWriteAccess,
+            );
+        } catch (AuthException $e) {
+            return Response::error($e->getMessage(), $e->getCode() ?: 403);
+        } catch (\InvalidArgumentException $e) {
+            return Response::validationError(['default_read_access' => [$e->getMessage()]]);
+        } catch (\RuntimeException $e) {
+            return Response::error($e->getMessage(), 422);
+        }
+
+        return Response::success($policy);
+    }
+
     // ------------------------------------------------------------------ //
     //  Helpers                                                            //
     // ------------------------------------------------------------------ //
@@ -458,6 +512,8 @@ final class SecretController
             'uuid'              => $s->uuid,
             'name'              => $s->name,
             'owner_user_uuid'   => $s->ownerUserId !== null ? User::findById($s->ownerUserId)?->uuid : null,
+            'default_read_access' => $s->defaultReadAccess,
+            'default_write_access' => $s->defaultWriteAccess,
             'type'              => $s->type,
             'requires_approval' => $s->requiresApproval,
             'version'           => $s->version,

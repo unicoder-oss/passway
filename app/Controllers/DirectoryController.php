@@ -25,9 +25,11 @@ use Passway\Services\DirectoryService;
  * GET    /api/v1/organizations/:uuid/directories/:dirUuid  — детали
  * PATCH  /api/v1/organizations/:uuid/directories/:dirUuid  — переименовать / переместить
  * DELETE /api/v1/organizations/:uuid/directories/:dirUuid  — мягкое удаление
- * GET    /api/v1/organizations/:uuid/directories/:dirUuid/acl — exact ACL
- * PUT    /api/v1/organizations/:uuid/directories/:dirUuid/acl — replace exact ACL
- * POST   /api/v1/organizations/:uuid/directories/:dirUuid/owner — transfer ownership
+     * GET    /api/v1/organizations/:uuid/directories/:dirUuid/acl — exact ACL
+     * PUT    /api/v1/organizations/:uuid/directories/:dirUuid/acl — replace exact ACL
+     * GET    /api/v1/organizations/:uuid/directories/:dirUuid/access-policy — effective default policy
+     * PUT    /api/v1/organizations/:uuid/directories/:dirUuid/access-policy — update default policy
+     * POST   /api/v1/organizations/:uuid/directories/:dirUuid/owner — transfer ownership
  */
 final class DirectoryController
 {
@@ -73,13 +75,22 @@ final class DirectoryController
         $name       = \trim((string) ($request->input('name') ?? ''));
         $parentUuid = $request->input('parent_uuid');
         $parentUuid = \is_string($parentUuid) && $parentUuid !== '' ? $parentUuid : null;
+        $defaultReadAccess = \trim((string) ($request->input('default_read_access') ?? 'inherit'));
+        $defaultWriteAccess = \trim((string) ($request->input('default_write_access') ?? 'inherit'));
 
         if ($name === '') {
             return Response::validationError(['name' => [__('ui.backend.common.name_required')]]);
         }
 
         try {
-            $dir = $this->directoryService->create($org->id, $parentUuid, $name, $user->id);
+            $dir = $this->directoryService->create(
+                $org->id,
+                $parentUuid,
+                $name,
+                $user->id,
+                $defaultReadAccess,
+                $defaultWriteAccess,
+            );
         } catch (AuthException $e) {
             return Response::error($e->getMessage(), $e->getCode() ?: 403);
         } catch (\InvalidArgumentException $e) {
@@ -255,6 +266,50 @@ final class DirectoryController
         return Response::success($this->serializeDir($dir));
     }
 
+    public function accessPolicy(Request $request): Response
+    {
+        $user = AuthContext::requireUser();
+        $org = $this->findOrgOrFail($request);
+        $dirUuid = (string) $request->routeParam('dirUuid');
+
+        try {
+            $policy = $this->directoryService->getAccessPolicy($dirUuid, $org->id, $user->id);
+        } catch (AuthException $e) {
+            return Response::error($e->getMessage(), $e->getCode() ?: 403);
+        } catch (\RuntimeException $e) {
+            return Response::notFound($e->getMessage());
+        }
+
+        return Response::success($policy);
+    }
+
+    public function updateAccessPolicy(Request $request): Response
+    {
+        $user = AuthContext::requireUser();
+        $org = $this->findOrgOrFail($request);
+        $dirUuid = (string) $request->routeParam('dirUuid');
+        $defaultReadAccess = \trim((string) ($request->input('default_read_access') ?? 'inherit'));
+        $defaultWriteAccess = \trim((string) ($request->input('default_write_access') ?? 'inherit'));
+
+        try {
+            $policy = $this->directoryService->updateAccessPolicy(
+                $dirUuid,
+                $org->id,
+                $user->id,
+                $defaultReadAccess,
+                $defaultWriteAccess,
+            );
+        } catch (AuthException $e) {
+            return Response::error($e->getMessage(), $e->getCode() ?: 403);
+        } catch (\InvalidArgumentException $e) {
+            return Response::validationError(['default_read_access' => [$e->getMessage()]]);
+        } catch (\RuntimeException $e) {
+            return Response::error($e->getMessage(), 422);
+        }
+
+        return Response::success($policy);
+    }
+
     // ------------------------------------------------------------------ //
     //  Helpers                                                            //
     // ------------------------------------------------------------------ //
@@ -289,6 +344,8 @@ final class DirectoryController
             'uuid'        => $dir->uuid,
             'name'        => $dir->name,
             'owner_user_uuid' => $dir->ownerUserId !== null ? User::findById($dir->ownerUserId)?->uuid : null,
+            'default_read_access' => $dir->defaultReadAccess,
+            'default_write_access' => $dir->defaultWriteAccess,
             'parent_uuid' => $parentUuid,
             'depth'       => $dir->depth,
             'path'        => $dir->path,

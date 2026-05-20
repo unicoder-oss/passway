@@ -233,6 +233,91 @@ final class PermissionServiceTest extends DatabaseTestCase
         $this->assertTrue($this->svc->can('read', $user->id, 'secret', $secret->id, $org->id));
     }
 
+    public function test_directory_default_deny_blocks_reader_without_acl(): void
+    {
+        $owner = $this->createTestUser('owner-default-deny@test.com');
+        $org = $this->orgSvc->create('Org', $owner->id);
+        $dir = $this->dirSvc->create($org->id, null, 'Restricted', $owner->id, 'deny', 'deny');
+        $reader = $this->createTestUser('reader-default-deny@test.com');
+        $this->orgSvc->addMember($org->id, $reader->id, 'reader', null);
+
+        $this->assertFalse($this->svc->can('read', $reader->id, 'directory', $dir->id, $org->id));
+        $this->assertFalse($this->svc->can('write', $reader->id, 'directory', $dir->id, $org->id));
+    }
+
+    public function test_directory_default_deny_is_inherited_by_child_directory(): void
+    {
+        $owner = $this->createTestUser('owner-inherit-deny@test.com');
+        $org = $this->orgSvc->create('Org', $owner->id);
+        $parent = $this->dirSvc->create($org->id, null, 'Parent', $owner->id);
+        $child = $this->dirSvc->create($org->id, $parent->uuid, 'Child', $owner->id);
+        $this->dirSvc->updateAccessPolicy($parent->uuid, $org->id, $owner->id, 'deny', 'deny');
+        $reader = $this->createTestUser('reader-inherit-deny@test.com');
+        $this->orgSvc->addMember($org->id, $reader->id, 'reader', null);
+
+        $this->assertFalse($this->svc->can('read', $reader->id, 'directory', $child->id, $org->id));
+        $this->assertFalse($this->svc->can('write', $reader->id, 'directory', $child->id, $org->id));
+    }
+
+    public function test_secret_inherits_directory_default_deny(): void
+    {
+        $owner = $this->createTestUser('owner-secret-deny@test.com');
+        $org = $this->orgSvc->create('Org', $owner->id);
+        $dir = $this->dirSvc->create($org->id, null, 'Restricted', $owner->id);
+        $secret = $this->secretSvc->create($org->id, $dir->uuid, 'Secret', 'static', 'value', $owner->id);
+        $this->dirSvc->updateAccessPolicy($dir->uuid, $org->id, $owner->id, 'deny', 'deny');
+        $reader = $this->createTestUser('reader-secret-deny@test.com');
+        $this->orgSvc->addMember($org->id, $reader->id, 'reader', null);
+
+        $this->assertFalse($this->svc->can('read', $reader->id, 'secret', $secret->id, $org->id));
+    }
+
+    public function test_exact_acl_overrides_inherited_default_deny(): void
+    {
+        $owner = $this->createTestUser('owner-override@test.com');
+        $org = $this->orgSvc->create('Org', $owner->id);
+        $parent = $this->dirSvc->create($org->id, null, 'Parent', $owner->id);
+        $child = $this->dirSvc->create($org->id, $parent->uuid, 'Child', $owner->id);
+        $this->dirSvc->updateAccessPolicy($parent->uuid, $org->id, $owner->id, 'deny', 'deny');
+        $reader = $this->createTestUser('reader-override@test.com');
+        $this->orgSvc->addMember($org->id, $reader->id, 'reader', null);
+
+        $this->assertFalse($this->svc->can('read', $reader->id, 'directory', $child->id, $org->id));
+
+        $this->svc->grant('user', $reader->id, 'directory', $child->id, 'read', false, null, $owner->id, $org->id);
+
+        $this->assertTrue($this->svc->can('read', $reader->id, 'directory', $child->id, $org->id));
+    }
+
+    public function test_inherit_policy_falls_back_to_org_role(): void
+    {
+        $owner = $this->createTestUser('owner-fallback@test.com');
+        $org = $this->orgSvc->create('Org', $owner->id);
+        $dir = $this->dirSvc->create($org->id, null, 'Docs', $owner->id);
+        $reader = $this->createTestUser('reader-fallback@test.com');
+        $this->orgSvc->addMember($org->id, $reader->id, 'reader', null);
+
+        $this->assertTrue($this->svc->can('read', $reader->id, 'directory', $dir->id, $org->id));
+        $this->assertFalse($this->svc->can('write', $reader->id, 'directory', $dir->id, $org->id));
+    }
+
+    public function test_group_acl_overrides_default_deny(): void
+    {
+        $owner = $this->createTestUser('owner-group-override@test.com');
+        $org = $this->orgSvc->create('Org', $owner->id);
+        $dir = $this->dirSvc->create($org->id, null, 'Restricted', $owner->id, 'deny', 'deny');
+        $user = $this->createTestUser('user-group-override@test.com');
+        $this->orgSvc->addMember($org->id, $user->id, 'reader', null);
+        $group = $this->groupSvc->create($org->id, 'Readers', null, $owner->id);
+        $this->groupSvc->addMember($group->uuid, $user->id, $owner->id, $org->id);
+
+        $this->assertFalse($this->svc->can('read', $user->id, 'directory', $dir->id, $org->id));
+
+        $this->svc->grant('group', $group->id, 'directory', $dir->id, 'read', false, null, $owner->id, $org->id);
+
+        $this->assertTrue($this->svc->can('read', $user->id, 'directory', $dir->id, $org->id));
+    }
+
     // ------------------------------------------------------------------ //
     //  can() — expired permissions                                        //
     // ------------------------------------------------------------------ //
