@@ -69,6 +69,10 @@ final class InviteController
 
     public function list(Request $request): Response
     {
+        if (is_solo_mode()) {
+            return Response::forbidden(__('ui.backend.invite.join_org_not_in_solo'));
+        }
+
         $user = AuthContext::requireUser();
         $org  = $this->findOrgOrFail($request);
 
@@ -90,6 +94,10 @@ final class InviteController
 
     public function revoke(Request $request): Response
     {
+        if (is_solo_mode()) {
+            return Response::forbidden(__('ui.backend.invite.join_org_not_in_solo'));
+        }
+
         $user      = AuthContext::requireUser();
         $invUuid   = $request->routeParam('invUuid');
 

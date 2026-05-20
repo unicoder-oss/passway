@@ -107,6 +107,10 @@ final class OrganizationController
 
     public function listMembers(Request $request): Response
     {
+        if (is_solo_mode()) {
+            return Response::forbidden(__('ui.backend.organization.team_mode_required'));
+        }
+
         $user    = AuthContext::requireUser();
         $org     = $this->findOrgOrFail($request);
 

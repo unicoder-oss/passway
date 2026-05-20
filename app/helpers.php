@@ -9,6 +9,7 @@ declare(strict_types=1);
 
 use Passway\Core\Config;
 use Passway\Core\Request;
+use Passway\Services\DeployMode;
 
 if (!function_exists('config')) {
     /**
@@ -73,6 +74,27 @@ if (!function_exists('app_url')) {
         }
 
         return $baseUrl . '/' . ltrim($path, '/');
+    }
+}
+
+if (!function_exists('deploy_mode')) {
+    function deploy_mode(): string
+    {
+        return DeployMode::current();
+    }
+}
+
+if (!function_exists('is_solo_mode')) {
+    function is_solo_mode(): bool
+    {
+        return DeployMode::isSolo();
+    }
+}
+
+if (!function_exists('is_team_mode')) {
+    function is_team_mode(): bool
+    {
+        return DeployMode::isTeam();
     }
 }
 

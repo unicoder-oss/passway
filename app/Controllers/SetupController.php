@@ -166,17 +166,24 @@ final class SetupController
         $confirmPasswordPlaceholder = e(__('ui.setup.confirm_password_placeholder'));
         $deployModeLabel = e(__('ui.setup.deploy_mode'));
         $soloLabel = e(__('ui.setup.mode_solo'));
-        $soloHint = e(__('ui.setup.mode_solo_hint'));
         $teamLabel = e(__('ui.setup.mode_team'));
-        $teamHint = e(__('ui.setup.mode_team_hint'));
+        $soloPoints = [
+            e(__('ui.setup.mode_solo_point_1')),
+            e(__('ui.setup.mode_solo_point_2')),
+            e(__('ui.setup.mode_solo_point_3')),
+        ];
+        $teamPoints = [
+            e(__('ui.setup.mode_team_point_1')),
+            e(__('ui.setup.mode_team_point_2')),
+            e(__('ui.setup.mode_team_point_3')),
+        ];
         $submitLabel = e(__('ui.setup.submit'));
-
-        $modeOptions = '';
-        foreach (SetupService::DEPLOY_MODES as $mode) {
-            $label = $mode === 'team' ? __('ui.setup.mode_team') : __('ui.setup.mode_solo');
-            $selected = $selectedMode === $mode ? ' selected' : '';
-            $modeOptions .= "<option value=\"{$mode}\"{$selected}>{$label}</option>";
-        }
+        $soloActive = $selectedMode === 'solo' ? ' is-active' : '';
+        $teamActive = $selectedMode === 'team' ? ' is-active' : '';
+        $soloChecked = $selectedMode === 'solo' ? ' checked' : '';
+        $teamChecked = $selectedMode === 'team' ? ' checked' : '';
+        $soloItems = '<li>' . \implode('</li><li>', $soloPoints) . '</li>';
+        $teamItems = '<li>' . \implode('</li><li>', $teamPoints) . '</li>';
 
         return <<<HTML
         <!DOCTYPE html>
@@ -190,7 +197,7 @@ final class SetupController
                 @media (prefers-color-scheme: dark) { :root { --bg:#111111; --fg:#f3f3f3; --muted:#a4a4a4; --panel:#1a1a1a; --border:#393939; --error-bg:#351b1b; --error-border:#6a2d2d; --error-fg:#f1cdcd; --button:#d6d6d6; } }
                 * { box-sizing: border-box; }
                 body { margin: 0; font-family: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace; background: var(--bg); color: var(--fg); display: flex; align-items: center; justify-content: center; min-height: 100vh; padding: 1rem; }
-                .card { background: var(--panel); border: 1px solid var(--border); padding: 2rem; width: 100%; max-width: 520px; }
+                .card { background: var(--panel); border: 1px solid var(--border); padding: 2rem; width: 100%; max-width: 760px; }
                 h1 { margin: 0 0 .35rem; font-size: 1.6rem; }
                 p.subtitle { margin: 0 0 1.5rem; color: var(--muted); }
                 .error { border: 1px solid var(--error-border); background: var(--error-bg); color: var(--error-fg); padding: .9rem 1rem; margin-bottom: 1rem; }
@@ -198,6 +205,13 @@ final class SetupController
                 input, select { width: 100%; border: 1px solid var(--border); background: var(--panel); color: var(--fg); padding: .8rem .9rem; font: inherit; }
                 button { margin-top: 1.5rem; width: 100%; border: 1px solid var(--button); background: var(--button); color: var(--bg); padding: .8rem 1rem; font: inherit; cursor: pointer; }
                 .hint { font-size: .85rem; color: var(--muted); margin-top: .35rem; }
+                .mode-grid { display:grid; grid-template-columns:repeat(2, minmax(0, 1fr)); gap:1rem; margin-top:.5rem; }
+                .mode-input { position:absolute; opacity:0; pointer-events:none; }
+                .mode-option { border:1px solid var(--border); padding:1rem; cursor:pointer; display:grid; gap:.75rem; min-height:100%; }
+                .mode-option.is-active { border-color: var(--button); box-shadow: inset 0 0 0 1px var(--button); }
+                .mode-option strong { font-size:1rem; }
+                .mode-option ul { margin:0; padding-left:1.1rem; color:var(--muted); display:grid; gap:.35rem; }
+                @media (max-width: 640px) { .mode-grid { grid-template-columns:1fr; } }
             </style>
         </head>
         <body>
@@ -226,18 +240,49 @@ final class SetupController
                     <input type="password" id="password_confirm" name="password_confirm"
                            placeholder="{$confirmPasswordPlaceholder}" required autocomplete="new-password">
 
-                    <label for="deploy_mode">{$deployModeLabel}</label>
-                    <select id="deploy_mode" name="deploy_mode">
-                        {$modeOptions}
-                    </select>
-                    <p class="hint">
-                        <strong>{$soloLabel}</strong> - {$soloHint} &nbsp;
-                        <strong>{$teamLabel}</strong> - {$teamHint}
-                    </p>
+                     <label>{$deployModeLabel}</label>
+                     <div class="mode-grid" role="radiogroup" aria-label="{$deployModeLabel}">
+                         <label class="mode-option{$soloActive}">
+                             <input class="mode-input" type="radio" name="deploy_mode" value="solo"{$soloChecked}>
+                             <strong>{$soloLabel}</strong>
+                             <ul>{$soloItems}</ul>
+                         </label>
+                         <label class="mode-option{$teamActive}">
+                             <input class="mode-input" type="radio" name="deploy_mode" value="team"{$teamChecked}>
+                             <strong>{$teamLabel}</strong>
+                             <ul>{$teamItems}</ul>
+                         </label>
+                     </div>
 
-                    <button type="submit">{$submitLabel}</button>
-                </form>
-            </div>
+                     <button type="submit">{$submitLabel}</button>
+                 </form>
+             </div>
+            <script>
+            (() => {
+                const options = Array.from(document.querySelectorAll('.mode-option'));
+
+                const sync = () => {
+                    for (const option of options) {
+                        const input = option.querySelector('input[name="deploy_mode"]');
+                        option.classList.toggle('is-active', Boolean(input && input.checked));
+                    }
+                };
+
+                for (const option of options) {
+                    option.addEventListener('click', () => {
+                        const input = option.querySelector('input[name="deploy_mode"]');
+                        if (!input) {
+                            return;
+                        }
+
+                        input.checked = true;
+                        sync();
+                    });
+                }
+
+                sync();
+            })();
+            </script>
         </body>
         </html>
         HTML;

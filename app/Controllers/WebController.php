@@ -87,12 +87,34 @@ final class WebController
 
     public function createOrganization(Request $request): Response
     {
-        return Response::redirect('/?error=' . \urlencode(__('ui.home.use_create_org_invite')));
+        $user = AuthContext::requireUser();
+
+        if (!is_solo_mode()) {
+            return Response::redirect('/?error=' . \urlencode(__('ui.home.use_create_org_invite')));
+        }
+
+        if (!$this->isSetupAdministrator($user)) {
+            return Response::redirect('/?error=' . \urlencode(__('ui.messages.access_denied')));
+        }
+
+        $name = \trim((string) ($request->input('name') ?? ''));
+
+        try {
+            $org = $this->organizationService->create($name, $user->id);
+        } catch (\Throwable $e) {
+            return Response::redirect('/?error=' . \urlencode($e->getMessage()));
+        }
+
+        return Response::redirect('/organizations/' . \urlencode($org->uuid));
     }
 
     public function createOrganizationInvite(Request $request): Response
     {
         $user = AuthContext::requireUser();
+
+        if (is_solo_mode()) {
+            return Response::redirect('/?error=' . \urlencode(__('ui.backend.invite.create_org_not_in_solo')));
+        }
 
         if (!$this->isSetupAdministrator($user)) {
             return Response::redirect('/?error=' . \urlencode(__('ui.messages.access_denied')));
@@ -299,6 +321,7 @@ final class WebController
             'organizationApiKeys' => $currentDir !== null && $currentDir->ownerUserId === $user->id
                 ? $this->serializeOrganizationApiKeys($org->id)
                 : [],
+            'isSoloMode' => is_solo_mode(),
             'canManageOrganization' => $canManageOrganization,
             'canViewAudit' => $canViewAudit,
             'canEditContent' => $canEditContent,
@@ -364,6 +387,10 @@ final class WebController
 
     public function showOrganizationMembers(Request $request): Response
     {
+        if (is_solo_mode()) {
+            return Response::redirect($this->settingsSectionUrl((string) $request->routeParam('uuid'), 'settings', error: __('ui.backend.organization.team_mode_required')));
+        }
+
         $user = AuthContext::requireUser();
         $org = $this->findOrgOrFail($request);
 
@@ -387,6 +414,10 @@ final class WebController
 
     public function showOrganizationInvites(Request $request): Response
     {
+        if (is_solo_mode()) {
+            return Response::redirect($this->settingsSectionUrl((string) $request->routeParam('uuid'), 'settings', error: __('ui.backend.organization.team_mode_required')));
+        }
+
         $user = AuthContext::requireUser();
         $org = $this->findOrgOrFail($request);
 
@@ -452,6 +483,10 @@ final class WebController
 
     public function showOrganizationGroups(Request $request): Response
     {
+        if (is_solo_mode()) {
+            return Response::redirect($this->settingsSectionUrl((string) $request->routeParam('uuid'), 'settings', error: __('ui.backend.group.team_mode_required')));
+        }
+
         $user = AuthContext::requireUser();
         $org = $this->findOrgOrFail($request);
 
@@ -483,6 +518,10 @@ final class WebController
 
     public function showOrganizationGroup(Request $request): Response
     {
+        if (is_solo_mode()) {
+            return Response::redirect($this->settingsSectionUrl((string) $request->routeParam('uuid'), 'settings', error: __('ui.backend.group.team_mode_required')));
+        }
+
         $user = AuthContext::requireUser();
         $org = $this->findOrgOrFail($request);
         $grpUuid = (string) $request->routeParam('grpUuid');
@@ -554,6 +593,10 @@ final class WebController
 
     public function createGroup(Request $request): Response
     {
+        if (is_solo_mode()) {
+            return Response::redirect($this->settingsSectionUrl((string) $request->routeParam('uuid'), 'settings', error: __('ui.backend.group.team_mode_required')));
+        }
+
         $user = AuthContext::requireUser();
         $org = $this->findOrgOrFail($request);
         $name = \trim((string) ($request->input('name') ?? ''));
@@ -571,6 +614,10 @@ final class WebController
 
     public function deleteGroup(Request $request): Response
     {
+        if (is_solo_mode()) {
+            return Response::redirect($this->settingsSectionUrl((string) $request->routeParam('uuid'), 'settings', error: __('ui.backend.group.team_mode_required')));
+        }
+
         $user = AuthContext::requireUser();
         $org = $this->findOrgOrFail($request);
         $grpUuid = (string) $request->routeParam('grpUuid');
@@ -586,6 +633,10 @@ final class WebController
 
     public function addGroupMember(Request $request): Response
     {
+        if (is_solo_mode()) {
+            return Response::redirect($this->settingsSectionUrl((string) $request->routeParam('uuid'), 'settings', error: __('ui.backend.group.team_mode_required')));
+        }
+
         $user = AuthContext::requireUser();
         $org = $this->findOrgOrFail($request);
         $grpUuid = (string) $request->routeParam('grpUuid');
@@ -607,6 +658,10 @@ final class WebController
 
     public function removeGroupMember(Request $request): Response
     {
+        if (is_solo_mode()) {
+            return Response::redirect($this->settingsSectionUrl((string) $request->routeParam('uuid'), 'settings', error: __('ui.backend.group.team_mode_required')));
+        }
+
         $user = AuthContext::requireUser();
         $org = $this->findOrgOrFail($request);
         $grpUuid = (string) $request->routeParam('grpUuid');
@@ -623,6 +678,10 @@ final class WebController
 
     public function updateMemberRole(Request $request): Response
     {
+        if (is_solo_mode()) {
+            return Response::redirect($this->settingsSectionUrl((string) $request->routeParam('uuid'), 'settings', error: __('ui.backend.organization.team_mode_required')));
+        }
+
         $user = AuthContext::requireUser();
         $org = $this->findOrgOrFail($request);
         $targetUser = $this->findMemberUserOrFail($request, $org->id);
@@ -639,6 +698,10 @@ final class WebController
 
     public function removeMember(Request $request): Response
     {
+        if (is_solo_mode()) {
+            return Response::redirect($this->settingsSectionUrl((string) $request->routeParam('uuid'), 'settings', error: __('ui.backend.organization.team_mode_required')));
+        }
+
         $user = AuthContext::requireUser();
         $org = $this->findOrgOrFail($request);
         $targetUser = $this->findMemberUserOrFail($request, $org->id);
@@ -654,6 +717,10 @@ final class WebController
 
     public function createInvite(Request $request): Response
     {
+        if (is_solo_mode()) {
+            return Response::redirect($this->settingsSectionUrl((string) $request->routeParam('uuid'), 'settings', error: __('ui.backend.invite.join_org_not_in_solo')));
+        }
+
         $user = AuthContext::requireUser();
         $org = $this->findOrgOrFail($request);
         $role = \trim((string) ($request->input('role') ?? 'reader'));
@@ -674,6 +741,10 @@ final class WebController
 
     public function revokeInvite(Request $request): Response
     {
+        if (is_solo_mode()) {
+            return Response::redirect($this->settingsSectionUrl((string) $request->routeParam('uuid'), 'settings', error: __('ui.backend.invite.join_org_not_in_solo')));
+        }
+
         $user = AuthContext::requireUser();
         $org = $this->findOrgOrFail($request);
         $inviteUuid = (string) $request->routeParam('invUuid');
@@ -2265,6 +2336,7 @@ final class WebController
             'organizationApiKeys' => $secret->ownerUserId === $user->id
                 ? $this->serializeOrganizationApiKeys($org->id)
                 : [],
+            'isSoloMode' => is_solo_mode(),
             'canDirectReadSecret' => $canDirectRead,
             'pendingApprovalRequest' => $pendingApprovalRequest,
             'canWriteSecret' => $canWriteSecret,
@@ -2469,6 +2541,7 @@ final class WebController
             'currentOrg' => $currentOrg,
             'queryError' => $request->query('error'),
             'querySuccess' => $success,
+            'isSoloMode' => is_solo_mode(),
             'isSetupAdmin' => $this->isSetupAdministrator($user),
             'createdOrganizationInvite' => $createdOrganizationInvite,
             'search' => $search,

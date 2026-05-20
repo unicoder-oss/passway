@@ -120,6 +120,19 @@ final class InviteServiceTest extends DatabaseTestCase
         $this->svc->createOrgInvite($user->id);
     }
 
+    public function test_create_join_invite_throws_in_solo_mode(): void
+    {
+        Database::getInstance()->query(
+            "UPDATE system_config SET value = 'solo' WHERE key = 'deploy_mode'"
+        );
+
+        $owner = $this->createTestUser();
+        $org = $this->orgSvc->create('Org', $owner->id);
+
+        $this->expectException(AuthException::class);
+        $this->svc->createJoinOrgInvite($org->id, 'reader', $owner->id);
+    }
+
     // ------------------------------------------------------------------ //
     //  findValid()                                                        //
     // ------------------------------------------------------------------ //

@@ -30,7 +30,6 @@ final class OrganizationService
     /**
      * Создать организацию и добавить создателя как owner.
      *
-     * @throws \RuntimeException при solo-режиме, если орг уже существует
      * @throws \InvalidArgumentException при пустом имени
      */
     public function create(string $name, string $ownerId): Organization
@@ -41,14 +40,6 @@ final class OrganizationService
         }
         if (\strlen($name) > 255) {
             throw new \InvalidArgumentException(__('ui.backend.organization.name_too_long'));
-        }
-
-        // solo-режим: только одна организация
-        $deployMode = Database::getInstance()->fetchColumn(
-            "SELECT value FROM system_config WHERE key = 'deploy_mode'"
-        );
-        if ($deployMode === 'solo' && Organization::count() > 0) {
-            throw new \RuntimeException(__('ui.backend.organization.solo_one_only'));
         }
 
         $slug = $this->generateUniqueSlug($name);
@@ -186,6 +177,7 @@ final class OrganizationService
         string $newRole,
         string $requesterId,
     ): void {
+        $this->assertTeamMode('ui.backend.organization.team_mode_required');
         $this->assertHasPermission($orgId, $requesterId, 'admin');
         $this->assertValidRole($newRole);
 
@@ -227,6 +219,7 @@ final class OrganizationService
         string $targetUserId,
         string $requesterId,
     ): void {
+        $this->assertTeamMode('ui.backend.organization.team_mode_required');
         // Участник может удалить себя сам (выйти из орг)
         $isSelf = $targetUserId === $requesterId;
 
@@ -266,6 +259,7 @@ final class OrganizationService
         string $newOwnerId,
         string $requesterId,
     ): void {
+        $this->assertTeamMode('ui.backend.organization.team_mode_required');
         $this->assertHasPermission($orgId, $requesterId, 'owner');
 
         $newOwner = OrganizationMember::findByOrgAndUser($orgId, $newOwnerId);
@@ -341,6 +335,13 @@ final class OrganizationService
                 __('ui.backend.organization.requires_role', ['role' => $minRole]),
                 403
             );
+        }
+    }
+
+    private function assertTeamMode(string $messageKey): void
+    {
+        if (DeployMode::isSolo()) {
+            throw new AuthException(__($messageKey), 403);
         }
     }
 

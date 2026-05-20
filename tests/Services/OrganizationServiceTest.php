@@ -87,17 +87,17 @@ final class OrganizationServiceTest extends DatabaseTestCase
         $this->svc->create('', $owner->id);
     }
 
-    public function test_create_throws_in_solo_mode_if_org_exists(): void
+    public function test_create_allows_multiple_orgs_in_solo_mode(): void
     {
         Database::getInstance()->query(
             "UPDATE system_config SET value = 'solo' WHERE key = 'deploy_mode'"
         );
 
         $owner = $this->createTestUser();
-        $this->svc->create('First Org', $owner->id);
+        $org1 = $this->svc->create('First Org', $owner->id);
+        $org2 = $this->svc->create('Second Org', $owner->id);
 
-        $this->expectException(\RuntimeException::class);
-        $this->svc->create('Second Org', $owner->id);
+        $this->assertNotSame($org1->id, $org2->id);
     }
 
     public function test_create_allows_multiple_orgs_in_team_mode(): void

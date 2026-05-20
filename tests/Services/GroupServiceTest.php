@@ -101,6 +101,19 @@ final class GroupServiceTest extends DatabaseTestCase
         $this->svc->create($org->id, 'Team', null, $nonMember->id);
     }
 
+    public function test_create_group_throws_in_solo_mode(): void
+    {
+        Database::getInstance()->query(
+            "UPDATE system_config SET value = 'solo' WHERE key = 'deploy_mode'"
+        );
+
+        $owner = $this->createTestUser();
+        $org = $this->orgSvc->create('Org', $owner->id);
+
+        $this->expectException(AuthException::class);
+        $this->svc->create($org->id, 'Team', null, $owner->id);
+    }
+
     // ------------------------------------------------------------------ //
     //  list()                                                             //
     // ------------------------------------------------------------------ //

@@ -17,7 +17,7 @@ require base_path('resources/views/partials/auth_topbar.php');
     <div style="display:grid; gap:1rem; margin-bottom:1rem;">
         <div>
             <h1 style="margin:0 0 .35rem; font-size:2rem;"><?= e(__('ui.home.organizations')) ?></h1>
-            <div class="muted"><?= e(__('ui.home.organizations_subtitle')) ?></div>
+            <div class="muted"><?= e(__($isSoloMode ? 'ui.home.organizations_subtitle_solo' : 'ui.home.organizations_subtitle')) ?></div>
         </div>
         <form method="GET" class="panel" style="padding:1rem;">
             <label for="home-search"><?= e(__('ui.home.search')) ?></label>
@@ -30,21 +30,31 @@ require base_path('resources/views/partials/auth_topbar.php');
             <section class="panel panel-muted" style="padding:1.25rem; display:grid; gap:1rem; align-content:start; min-height:220px;">
                 <div style="display:flex; align-items:center; justify-content:center; width:64px; height:64px; border:1px solid var(--border); font-size:2rem; font-weight:700;">+</div>
                 <div>
-                    <div style="font-weight:700; margin-bottom:.35rem;"><?= e(__('ui.home.create_organization_invite')) ?></div>
-                    <div class="muted" style="font-size:.92rem;"><?= e(__('ui.home.organization_invite_help')) ?></div>
+                    <div style="font-weight:700; margin-bottom:.35rem;"><?= e(__($isSoloMode ? 'ui.home.create_organization' : 'ui.home.create_organization_invite')) ?></div>
+                    <div class="muted" style="font-size:.92rem;"><?= e(__($isSoloMode ? 'ui.home.organization_create_help' : 'ui.home.organization_invite_help')) ?></div>
                 </div>
-                <form method="POST" action="/organization-invites" class="grid" style="gap:.75rem;">
-                    <div>
-                        <label for="org-invite-ttl"><?= e(__('ui.home.organization_invite_ttl')) ?></label>
-                        <input id="org-invite-ttl" type="number" name="ttl" value="1" min="1" max="168">
-                    </div>
-                    <button type="submit"><?= e(__('ui.home.create_organization_invite')) ?></button>
-                </form>
-                <?php if ($createdOrganizationInvite !== null): ?>
-                    <div>
-                        <label><?= e(__('ui.home.organization_invite_link')) ?></label>
-                        <input class="mono js-copy-on-click" value="<?= e((string) $createdOrganizationInviteUrl) ?>" readonly>
-                    </div>
+                <?php if ($isSoloMode): ?>
+                    <form method="POST" action="/organizations" class="grid" style="gap:.75rem;">
+                        <div>
+                            <label for="new-organization-name"><?= e(__('ui.home.new_organization')) ?></label>
+                            <input id="new-organization-name" name="name" placeholder="<?= e(__('ui.home.new_organization_placeholder')) ?>" required>
+                        </div>
+                        <button type="submit"><?= e(__('ui.home.create_organization')) ?></button>
+                    </form>
+                <?php else: ?>
+                    <form method="POST" action="/organization-invites" class="grid" style="gap:.75rem;">
+                        <div>
+                            <label for="org-invite-ttl"><?= e(__('ui.home.organization_invite_ttl')) ?></label>
+                            <input id="org-invite-ttl" type="number" name="ttl" value="1" min="1" max="168">
+                        </div>
+                        <button type="submit"><?= e(__('ui.home.create_organization_invite')) ?></button>
+                    </form>
+                    <?php if ($createdOrganizationInvite !== null): ?>
+                        <div>
+                            <label><?= e(__('ui.home.organization_invite_link')) ?></label>
+                            <input class="mono js-copy-on-click" value="<?= e((string) $createdOrganizationInviteUrl) ?>" readonly>
+                        </div>
+                    <?php endif; ?>
                 <?php endif; ?>
             </section>
         <?php endif; ?>

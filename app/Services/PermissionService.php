@@ -111,6 +111,8 @@ final class PermissionService
         string  $grantedBy,
         string  $orgId,
     ): UserPermission {
+        $this->assertSoloSubjectAllowed($subjectType);
+
         if (!$this->organizationService->hasPermission($orgId, $grantedBy, 'admin')) {
             throw new AuthException(__('ui.backend.permission.requires_admin_grant'), 403);
         }
@@ -241,7 +243,17 @@ final class PermissionService
     {
         return \array_values(\array_filter(
             UserPermission::findForResource($resourceType, $resourceId),
-            static fn(UserPermission $permission): bool => \in_array($permission->permission, ['read', 'write'], true)
+            static function (UserPermission $permission): bool {
+                if (!\in_array($permission->permission, ['read', 'write'], true)) {
+                    return false;
+                }
+
+                if (DeployMode::isSolo() && $permission->subjectType !== 'api_key') {
+                    return false;
+                }
+
+                return true;
+            }
         ));
     }
 
@@ -264,6 +276,8 @@ final class PermissionService
         foreach ($rules as $index => $rule) {
             $subjectType = isset($rule['subject_type']) ? \trim((string) $rule['subject_type']) : '';
             $subjectId = isset($rule['subject_id']) ? \trim((string) $rule['subject_id']) : '';
+
+            $this->assertSoloSubjectAllowed($subjectType);
 
             if (!\in_array($subjectType, UserPermission::VALID_SUBJECT_TYPES, true)) {
                 throw new \InvalidArgumentException(
@@ -336,6 +350,10 @@ final class PermissionService
         string $resourceId,
         string $orgId,
     ): ?bool {
+        if (DeployMode::isSolo()) {
+            return null;
+        }
+
         $groupIds      = $this->groupService->getUserGroupIds($userId, $orgId);
         $resourceChain = $this->buildResourceChain($resourceType, $resourceId);
 
@@ -416,6 +434,13 @@ final class PermissionService
         }
 
         return null; // Нет правил на этом уровне — проверить предка
+    }
+
+    private function assertSoloSubjectAllowed(string $subjectType): void
+    {
+        if (DeployMode::isSolo() && \in_array($subjectType, ['user', 'group'], true)) {
+            throw new \InvalidArgumentException(__('ui.backend.permission.solo_only_api_keys'));
+        }
     }
 
     /**

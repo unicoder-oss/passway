@@ -561,6 +561,26 @@ final class DirectoryServiceTest extends DatabaseTestCase
         ))));
     }
 
+    public function test_replace_acl_rejects_user_subject_in_solo_mode(): void
+    {
+        Database::getInstance()->query(
+            "UPDATE system_config SET value = 'solo' WHERE key = 'deploy_mode'"
+        );
+
+        $owner = $this->createTestUser();
+        $reader = $this->createTestUser('reader-solo@example.com');
+        $org = $this->orgSvc->create('Org', $owner->id);
+        $dir = $this->svc->create($org->id, null, 'Dir', $owner->id);
+
+        $this->expectException(\InvalidArgumentException::class);
+        $this->svc->replaceAcl($dir->uuid, $org->id, $owner->id, [[
+            'subject_type' => 'user',
+            'subject_id' => $reader->id,
+            'read' => 'allow',
+            'write' => 'deny',
+        ]]);
+    }
+
     public function test_update_access_policy_requires_directory_owner(): void
     {
         $owner = $this->createTestUser();

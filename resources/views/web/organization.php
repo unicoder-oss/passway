@@ -279,7 +279,7 @@ require base_path('resources/views/partials/auth_topbar.php');
                             <div class="org-menu-panel panel">
                                 <?php if (!empty($canWriteCurrentDirectory)): ?><button type="button" class="secondary" data-open-modal="rename-directory-modal"><?= e(__('ui.organization.rename_directory')) ?></button><?php endif; ?>
                                 <?php if (!empty($canManageCurrentDirectoryAcl)): ?><button type="button" class="secondary" data-open-modal="directory-acl-modal" id="open-directory-acl-modal"><?= e(__('ui.organization.configure_acl')) ?></button><?php endif; ?>
-                                <?php if (!empty($canManageCurrentDirectoryAcl)): ?><button type="button" class="secondary" data-open-modal="transfer-directory-owner-modal"><?= e(__('ui.organization.transfer_owner')) ?></button><?php endif; ?>
+                                <?php if (!empty($canManageCurrentDirectoryAcl) && !$isSoloMode): ?><button type="button" class="secondary" data-open-modal="transfer-directory-owner-modal"><?= e(__('ui.organization.transfer_owner')) ?></button><?php endif; ?>
                                 <?php if (!empty($canManageCurrentDirectoryAcl)): ?><button type="button" class="secondary danger" data-open-modal="delete-directory-modal"><?= e(__('ui.organization.delete_directory')) ?></button><?php endif; ?>
                             </div>
                         </div>
@@ -455,40 +455,46 @@ require base_path('resources/views/partials/auth_topbar.php');
                             </div>
                         </section>
                         <div class="acl-tabs">
-                            <button type="button" class="secondary acl-tab is-active" data-directory-acl-tab="users"><?= e(__('ui.organization.acl_tab_users')) ?></button>
-                            <button type="button" class="secondary acl-tab" data-directory-acl-tab="groups"><?= e(__('ui.organization.acl_tab_groups')) ?></button>
-                            <button type="button" class="secondary acl-tab" data-directory-acl-tab="keys"><?= e(__('ui.organization.acl_tab_keys')) ?></button>
+                            <?php if (!$isSoloMode): ?>
+                                <button type="button" class="secondary acl-tab is-active" data-directory-acl-tab="users"><?= e(__('ui.organization.acl_tab_users')) ?></button>
+                                <button type="button" class="secondary acl-tab" data-directory-acl-tab="groups"><?= e(__('ui.organization.acl_tab_groups')) ?></button>
+                                <button type="button" class="secondary acl-tab" data-directory-acl-tab="keys"><?= e(__('ui.organization.acl_tab_keys')) ?></button>
+                            <?php else: ?>
+                                <button type="button" class="secondary acl-tab is-active" data-directory-acl-tab="keys"><?= e(__('ui.organization.acl_tab_keys')) ?></button>
+                            <?php endif; ?>
                         </div>
-                        <section data-directory-acl-panel="users" class="grid" style="gap:.75rem;">
-                            <div class="grid field-actions-2" style="gap:.75rem; align-items:end;">
-                                <div>
-                                    <label for="directory-acl-user-select"><?= e(__('ui.organization.acl_add_user')) ?></label>
-                                    <select id="directory-acl-user-select">
-                                        <option value=""><?= e(__('ui.organization.acl_select_user')) ?></option>
-                                        <?php foreach ($organizationMembers as $member): ?>
-                                            <?php if ($member['role'] === 'owner') { continue; } ?>
-                                            <option value="<?= e($member['uuid']) ?>"><?= e($member['name'] . ' <' . $member['email'] . '>') ?></option>
-                                        <?php endforeach; ?>
-                                    </select>
+                        <?php if (!$isSoloMode): ?>
+                            <section data-directory-acl-panel="users" class="grid" style="gap:.75rem;">
+                                <div class="grid field-actions-2" style="gap:.75rem; align-items:end;">
+                                    <div>
+                                        <label for="directory-acl-user-select"><?= e(__('ui.organization.acl_add_user')) ?></label>
+                                        <select id="directory-acl-user-select">
+                                            <option value=""><?= e(__('ui.organization.acl_select_user')) ?></option>
+                                            <?php foreach ($organizationMembers as $member): ?>
+                                                <?php if ($member['role'] === 'owner') { continue; } ?>
+                                                <option value="<?= e($member['uuid']) ?>"><?= e($member['name'] . ' <' . $member['email'] . '>') ?></option>
+                                            <?php endforeach; ?>
+                                        </select>
+                                    </div>
+                                    <button type="button" class="secondary" id="directory-acl-add-user"><?= e(__('ui.organization.acl_add_rule')) ?></button>
                                 </div>
-                                <button type="button" class="secondary" id="directory-acl-add-user"><?= e(__('ui.organization.acl_add_rule')) ?></button>
-                            </div>
-                        </section>
-                        <section data-directory-acl-panel="groups" class="grid hidden" style="gap:.75rem;">
-                            <div class="grid field-actions-2" style="gap:.75rem; align-items:end;">
-                                <div>
-                                    <label for="directory-acl-group-select"><?= e(__('ui.organization.acl_add_group')) ?></label>
-                                    <select id="directory-acl-group-select">
-                                        <option value=""><?= e(__('ui.organization.acl_select_group')) ?></option>
-                                        <?php foreach ($organizationGroups as $group): ?>
-                                            <option value="<?= e($group['uuid']) ?>"><?= e($group['name']) ?></option>
-                                        <?php endforeach; ?>
-                                    </select>
+                            </section>
+                            <section data-directory-acl-panel="groups" class="grid hidden" style="gap:.75rem;">
+                                <div class="grid field-actions-2" style="gap:.75rem; align-items:end;">
+                                    <div>
+                                        <label for="directory-acl-group-select"><?= e(__('ui.organization.acl_add_group')) ?></label>
+                                        <select id="directory-acl-group-select">
+                                            <option value=""><?= e(__('ui.organization.acl_select_group')) ?></option>
+                                            <?php foreach ($organizationGroups as $group): ?>
+                                                <option value="<?= e($group['uuid']) ?>"><?= e($group['name']) ?></option>
+                                            <?php endforeach; ?>
+                                        </select>
+                                    </div>
+                                    <button type="button" class="secondary" id="directory-acl-add-group"><?= e(__('ui.organization.acl_add_rule')) ?></button>
                                 </div>
-                                <button type="button" class="secondary" id="directory-acl-add-group"><?= e(__('ui.organization.acl_add_rule')) ?></button>
-                            </div>
-                        </section>
-                        <section data-directory-acl-panel="keys" class="grid hidden" style="gap:.75rem;">
+                            </section>
+                        <?php endif; ?>
+                        <section data-directory-acl-panel="keys" class="grid<?= $isSoloMode ? '' : ' hidden' ?>" style="gap:.75rem;">
                             <div class="grid field-actions-2" style="gap:.75rem; align-items:end;">
                                 <div>
                                     <label for="directory-acl-key-select"><?= e(__('ui.organization.acl_add_key')) ?></label>
@@ -511,39 +517,41 @@ require base_path('resources/views/partials/auth_topbar.php');
                 </div>
             </dialog>
 
-            <dialog id="transfer-directory-owner-modal" class="modal">
-                <div class="modal-body">
-                    <div>
-                        <h3 style="margin:0 0 .35rem;"><?= e(__('ui.organization.transfer_owner')) ?></h3>
-                        <div class="wizard-meta"><?= e(__('ui.organization.transfer_owner_hint')) ?></div>
-                    </div>
-                    <div class="grid" style="gap:1rem;">
+            <?php if (!$isSoloMode): ?>
+                <dialog id="transfer-directory-owner-modal" class="modal">
+                    <div class="modal-body">
                         <div>
-                            <label for="directory-owner-search"><?= e(__('ui.organization.owner_search')) ?></label>
-                            <input id="directory-owner-search" placeholder="<?= e(__('ui.organization.owner_search_placeholder')) ?>">
+                            <h3 style="margin:0 0 .35rem;"><?= e(__('ui.organization.transfer_owner')) ?></h3>
+                            <div class="wizard-meta"><?= e(__('ui.organization.transfer_owner_hint')) ?></div>
                         </div>
-                        <div id="directory-owner-candidates" class="owner-candidate-list"></div>
-                        <div class="actions-end">
-                            <button type="button" class="secondary" data-close-modal="transfer-directory-owner-modal"><?= e(__('ui.organization.cancel')) ?></button>
-                            <button type="button" id="directory-owner-continue-button"><?= e(__('ui.organization.transfer_owner_continue')) ?></button>
+                        <div class="grid" style="gap:1rem;">
+                            <div>
+                                <label for="directory-owner-search"><?= e(__('ui.organization.owner_search')) ?></label>
+                                <input id="directory-owner-search" placeholder="<?= e(__('ui.organization.owner_search_placeholder')) ?>">
+                            </div>
+                            <div id="directory-owner-candidates" class="owner-candidate-list"></div>
+                            <div class="actions-end">
+                                <button type="button" class="secondary" data-close-modal="transfer-directory-owner-modal"><?= e(__('ui.organization.cancel')) ?></button>
+                                <button type="button" id="directory-owner-continue-button"><?= e(__('ui.organization.transfer_owner_continue')) ?></button>
+                            </div>
                         </div>
                     </div>
-                </div>
-            </dialog>
+                </dialog>
 
-            <dialog id="confirm-directory-owner-modal" class="modal">
-                <div class="modal-body">
-                    <div>
-                        <h3 style="margin:0 0 .35rem;"><?= e(__('ui.organization.transfer_owner_confirm_title')) ?></h3>
-                        <div class="wizard-meta" id="confirm-directory-owner-text"></div>
+                <dialog id="confirm-directory-owner-modal" class="modal">
+                    <div class="modal-body">
+                        <div>
+                            <h3 style="margin:0 0 .35rem;"><?= e(__('ui.organization.transfer_owner_confirm_title')) ?></h3>
+                            <div class="wizard-meta" id="confirm-directory-owner-text"></div>
+                        </div>
+                        <form method="POST" action="<?= e((string) $currentDirOwnerAction) ?>" class="actions-end">
+                            <input type="hidden" name="user_uuid" id="confirm-directory-owner-uuid">
+                            <button type="button" class="secondary" data-close-modal="confirm-directory-owner-modal"><?= e(__('ui.organization.cancel')) ?></button>
+                            <button type="submit"><?= e(__('ui.organization.transfer_owner_confirm_button')) ?></button>
+                        </form>
                     </div>
-                    <form method="POST" action="<?= e((string) $currentDirOwnerAction) ?>" class="actions-end">
-                        <input type="hidden" name="user_uuid" id="confirm-directory-owner-uuid">
-                        <button type="button" class="secondary" data-close-modal="confirm-directory-owner-modal"><?= e(__('ui.organization.cancel')) ?></button>
-                        <button type="submit"><?= e(__('ui.organization.transfer_owner_confirm_button')) ?></button>
-                    </form>
-                </div>
-            </dialog>
+                </dialog>
+            <?php endif; ?>
 
             <dialog id="delete-directory-modal" class="modal">
                 <div class="modal-body">

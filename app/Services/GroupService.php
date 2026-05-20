@@ -41,6 +41,7 @@ final class GroupService
         ?string $description,
         string  $userId,
     ): Group {
+        $this->assertTeamMode();
         $this->assertHasPermission($orgId, $userId, 'admin');
 
         $name = \trim($name);
@@ -97,6 +98,7 @@ final class GroupService
      */
     public function list(string $orgId, string $userId): array
     {
+        $this->assertTeamMode();
         $this->assertHasPermission($orgId, $userId, 'reader');
         return Group::findByOrgId($orgId);
     }
@@ -107,6 +109,7 @@ final class GroupService
      */
     public function findInOrg(string $groupUuid, string $orgId, string $userId): Group
     {
+        $this->assertTeamMode();
         $this->assertHasPermission($orgId, $userId, 'reader');
         $group = Group::findByUuid($groupUuid);
         if ($group === null || $group->organizationId !== $orgId) {
@@ -125,6 +128,7 @@ final class GroupService
      */
     public function delete(string $groupUuid, string $orgId, string $userId): void
     {
+        $this->assertTeamMode();
         $this->assertHasPermission($orgId, $userId, 'admin');
         $group = Group::findByUuid($groupUuid);
         if ($group === null || $group->organizationId !== $orgId) {
@@ -158,6 +162,7 @@ final class GroupService
         string $requesterId,
         string $orgId,
     ): GroupMember {
+        $this->assertTeamMode();
         $this->assertHasPermission($orgId, $requesterId, 'admin');
 
         $group = Group::findByUuid($groupUuid);
@@ -208,6 +213,7 @@ final class GroupService
         string $requesterId,
         string $orgId,
     ): void {
+        $this->assertTeamMode();
         $this->assertHasPermission($orgId, $requesterId, 'admin');
 
         $group = Group::findByUuid($groupUuid);
@@ -242,6 +248,7 @@ final class GroupService
      */
     public function listMembers(string $groupUuid, string $orgId, string $userId): array
     {
+        $this->assertTeamMode();
         $this->assertHasPermission($orgId, $userId, 'reader');
         $group = Group::findByUuid($groupUuid);
         if ($group === null || $group->organizationId !== $orgId) {
@@ -257,6 +264,10 @@ final class GroupService
      */
     public function getUserGroupIds(string $userId, string $orgId): array
     {
+        if (DeployMode::isSolo()) {
+            return [];
+        }
+
         return GroupMember::getGroupIdsForUserInOrg($userId, $orgId);
     }
 
@@ -271,6 +282,13 @@ final class GroupService
                 __('ui.backend.group.requires_role', ['role' => $minRole]),
                 403
             );
+        }
+    }
+
+    private function assertTeamMode(): void
+    {
+        if (DeployMode::isSolo()) {
+            throw new AuthException(__('ui.backend.group.team_mode_required'), 403);
         }
     }
 

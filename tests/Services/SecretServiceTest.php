@@ -540,6 +540,35 @@ final class SecretServiceTest extends DatabaseTestCase
         ))));
     }
 
+    public function test_list_acl_in_solo_mode_shows_only_api_key_rules(): void
+    {
+        Database::getInstance()->query(
+            "UPDATE system_config SET value = 'solo' WHERE key = 'deploy_mode'"
+        );
+
+        $owner = $this->createTestUser();
+        $org = $this->orgSvc->create('Org', $owner->id);
+        $dir = $this->dirSvc->create($org->id, null, 'Dir', $owner->id);
+        $secret = $this->svc->create($org->id, $dir->uuid, 'Secret', 'static', 'value', $owner->id);
+        $apiKeyService = new ApiKeyService($this->orgSvc);
+        ['key' => $apiKey] = $apiKeyService->create('Deploy key', $org->id, $owner->id);
+
+        $rules = $this->svc->replaceAcl($secret->uuid, $org->id, $owner->id, [[
+            'subject_type' => 'api_key',
+            'subject_id' => $apiKey->id,
+            'read' => 'allow',
+            'write' => 'deny',
+        ]]);
+
+        $this->assertCount(2, $rules);
+        $stored = $this->svc->listAcl($secret->uuid, $org->id, $owner->id);
+        $this->assertCount(2, $stored);
+        $this->assertSame(['api_key'], array_values(array_unique(array_map(
+            static fn($rule) => $rule->subjectType,
+            $stored,
+        ))));
+    }
+
     public function test_update_access_policy_requires_secret_owner(): void
     {
         $owner = $this->createTestUser();

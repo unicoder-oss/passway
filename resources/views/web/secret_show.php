@@ -273,7 +273,7 @@ $renderReadonlyRotationField = static function (array $field, array $values): vo
                 <?php endif; ?>
                 <?php if (!empty($canManageSecretAcl)): ?>
                     <button type="button" class="secondary" data-open-modal="secret-acl-modal" id="open-secret-acl-modal"><?= e(__('ui.secret.configure_acl')) ?></button>
-                    <button type="button" class="secondary" data-open-modal="transfer-secret-owner-modal"><?= e(__('ui.secret.transfer_owner')) ?></button>
+                    <?php if (!$isSoloMode): ?><button type="button" class="secondary" data-open-modal="transfer-secret-owner-modal"><?= e(__('ui.secret.transfer_owner')) ?></button><?php endif; ?>
                 <?php endif; ?>
                 <?php if (!empty($canWriteSecret)): ?><button type="button" class="danger" data-open-modal="delete-secret-modal"><?= e(__('ui.secret.delete_secret')) ?></button><?php endif; ?>
             </div>
@@ -458,40 +458,46 @@ $renderReadonlyRotationField = static function (array $field, array $values): vo
                     </label>
                 </section>
                 <div class="acl-tabs">
-                    <button type="button" class="secondary acl-tab is-active" data-acl-tab="users"><?= e(__('ui.secret.acl_tab_users')) ?></button>
-                    <button type="button" class="secondary acl-tab" data-acl-tab="groups"><?= e(__('ui.secret.acl_tab_groups')) ?></button>
-                    <button type="button" class="secondary acl-tab" data-acl-tab="keys"><?= e(__('ui.secret.acl_tab_keys')) ?></button>
+                    <?php if (!$isSoloMode): ?>
+                        <button type="button" class="secondary acl-tab is-active" data-acl-tab="users"><?= e(__('ui.secret.acl_tab_users')) ?></button>
+                        <button type="button" class="secondary acl-tab" data-acl-tab="groups"><?= e(__('ui.secret.acl_tab_groups')) ?></button>
+                        <button type="button" class="secondary acl-tab" data-acl-tab="keys"><?= e(__('ui.secret.acl_tab_keys')) ?></button>
+                    <?php else: ?>
+                        <button type="button" class="secondary acl-tab is-active" data-acl-tab="keys"><?= e(__('ui.secret.acl_tab_keys')) ?></button>
+                    <?php endif; ?>
                 </div>
-                <section data-acl-panel="users" class="grid" style="gap:.75rem;">
-                    <div class="grid field-actions-2" style="gap:.75rem; align-items:end;">
-                        <div>
-                            <label for="secret-acl-user-select"><?= e(__('ui.secret.acl_add_user')) ?></label>
-                            <select id="secret-acl-user-select">
-                                <option value=""><?= e(__('ui.secret.acl_select_user')) ?></option>
-                                <?php foreach ($organizationMembers as $member): ?>
-                                    <?php if ($member['role'] === 'owner') { continue; } ?>
-                                    <option value="<?= e($member['uuid']) ?>"><?= e($member['name'] . ' <' . $member['email'] . '>') ?></option>
-                                <?php endforeach; ?>
-                            </select>
+                <?php if (!$isSoloMode): ?>
+                    <section data-acl-panel="users" class="grid" style="gap:.75rem;">
+                        <div class="grid field-actions-2" style="gap:.75rem; align-items:end;">
+                            <div>
+                                <label for="secret-acl-user-select"><?= e(__('ui.secret.acl_add_user')) ?></label>
+                                <select id="secret-acl-user-select">
+                                    <option value=""><?= e(__('ui.secret.acl_select_user')) ?></option>
+                                    <?php foreach ($organizationMembers as $member): ?>
+                                        <?php if ($member['role'] === 'owner') { continue; } ?>
+                                        <option value="<?= e($member['uuid']) ?>"><?= e($member['name'] . ' <' . $member['email'] . '>') ?></option>
+                                    <?php endforeach; ?>
+                                </select>
+                            </div>
+                            <button type="button" class="secondary" id="secret-acl-add-user"><?= e(__('ui.secret.acl_add_rule')) ?></button>
                         </div>
-                        <button type="button" class="secondary" id="secret-acl-add-user"><?= e(__('ui.secret.acl_add_rule')) ?></button>
-                    </div>
-                </section>
-                <section data-acl-panel="groups" class="grid hidden" style="gap:.75rem;">
-                    <div class="grid field-actions-2" style="gap:.75rem; align-items:end;">
-                        <div>
-                            <label for="secret-acl-group-select"><?= e(__('ui.secret.acl_add_group')) ?></label>
-                            <select id="secret-acl-group-select">
-                                <option value=""><?= e(__('ui.secret.acl_select_group')) ?></option>
-                                <?php foreach ($organizationGroups as $group): ?>
-                                    <option value="<?= e($group['uuid']) ?>"><?= e($group['name']) ?></option>
-                                <?php endforeach; ?>
-                            </select>
+                    </section>
+                    <section data-acl-panel="groups" class="grid hidden" style="gap:.75rem;">
+                        <div class="grid field-actions-2" style="gap:.75rem; align-items:end;">
+                            <div>
+                                <label for="secret-acl-group-select"><?= e(__('ui.secret.acl_add_group')) ?></label>
+                                <select id="secret-acl-group-select">
+                                    <option value=""><?= e(__('ui.secret.acl_select_group')) ?></option>
+                                    <?php foreach ($organizationGroups as $group): ?>
+                                        <option value="<?= e($group['uuid']) ?>"><?= e($group['name']) ?></option>
+                                    <?php endforeach; ?>
+                                </select>
+                            </div>
+                            <button type="button" class="secondary" id="secret-acl-add-group"><?= e(__('ui.secret.acl_add_rule')) ?></button>
                         </div>
-                        <button type="button" class="secondary" id="secret-acl-add-group"><?= e(__('ui.secret.acl_add_rule')) ?></button>
-                    </div>
-                </section>
-                <section data-acl-panel="keys" class="grid hidden" style="gap:.75rem;">
+                    </section>
+                <?php endif; ?>
+                <section data-acl-panel="keys" class="grid<?= $isSoloMode ? '' : ' hidden' ?>" style="gap:.75rem;">
                     <div class="grid field-actions-2" style="gap:.75rem; align-items:end;">
                         <div>
                             <label for="secret-acl-key-select"><?= e(__('ui.secret.acl_add_key')) ?></label>
@@ -514,39 +520,41 @@ $renderReadonlyRotationField = static function (array $field, array $values): vo
         </div>
     </dialog>
 
-    <dialog id="transfer-secret-owner-modal" class="modal">
-        <div class="modal-body">
-            <div>
-                <h3 style="margin:0 0 .35rem;"><?= e(__('ui.secret.transfer_owner')) ?></h3>
-                <div class="wizard-meta"><?= e(__('ui.secret.transfer_owner_hint')) ?></div>
-            </div>
-            <div class="grid" style="gap:1rem;">
+    <?php if (!$isSoloMode): ?>
+        <dialog id="transfer-secret-owner-modal" class="modal">
+            <div class="modal-body">
                 <div>
-                    <label for="secret-owner-search"><?= e(__('ui.secret.owner_search')) ?></label>
-                    <input id="secret-owner-search" placeholder="<?= e(__('ui.secret.owner_search_placeholder')) ?>">
+                    <h3 style="margin:0 0 .35rem;"><?= e(__('ui.secret.transfer_owner')) ?></h3>
+                    <div class="wizard-meta"><?= e(__('ui.secret.transfer_owner_hint')) ?></div>
                 </div>
-                <div id="secret-owner-candidates" class="owner-candidate-list"></div>
-                <div class="actions-end">
-                    <button type="button" class="secondary" data-close-modal="transfer-secret-owner-modal"><?= e(__('ui.organization.cancel')) ?></button>
-                    <button type="button" id="secret-owner-continue-button"><?= e(__('ui.secret.transfer_owner_continue')) ?></button>
+                <div class="grid" style="gap:1rem;">
+                    <div>
+                        <label for="secret-owner-search"><?= e(__('ui.secret.owner_search')) ?></label>
+                        <input id="secret-owner-search" placeholder="<?= e(__('ui.secret.owner_search_placeholder')) ?>">
+                    </div>
+                    <div id="secret-owner-candidates" class="owner-candidate-list"></div>
+                    <div class="actions-end">
+                        <button type="button" class="secondary" data-close-modal="transfer-secret-owner-modal"><?= e(__('ui.organization.cancel')) ?></button>
+                        <button type="button" id="secret-owner-continue-button"><?= e(__('ui.secret.transfer_owner_continue')) ?></button>
+                    </div>
                 </div>
             </div>
-        </div>
-    </dialog>
+        </dialog>
 
-    <dialog id="confirm-secret-owner-modal" class="modal">
-        <div class="modal-body">
-            <div>
-                <h3 style="margin:0 0 .35rem;"><?= e(__('ui.secret.transfer_owner_confirm_title')) ?></h3>
-                <div class="wizard-meta" id="confirm-secret-owner-text"></div>
+        <dialog id="confirm-secret-owner-modal" class="modal">
+            <div class="modal-body">
+                <div>
+                    <h3 style="margin:0 0 .35rem;"><?= e(__('ui.secret.transfer_owner_confirm_title')) ?></h3>
+                    <div class="wizard-meta" id="confirm-secret-owner-text"></div>
+                </div>
+                <form method="POST" action="<?= e($transferOwnerAction) ?>" class="actions-end">
+                    <input type="hidden" name="user_uuid" id="confirm-secret-owner-uuid">
+                    <button type="button" class="secondary" data-close-modal="confirm-secret-owner-modal"><?= e(__('ui.organization.cancel')) ?></button>
+                    <button type="submit"><?= e(__('ui.secret.transfer_owner_confirm_button')) ?></button>
+                </form>
             </div>
-            <form method="POST" action="<?= e($transferOwnerAction) ?>" class="actions-end">
-                <input type="hidden" name="user_uuid" id="confirm-secret-owner-uuid">
-                <button type="button" class="secondary" data-close-modal="confirm-secret-owner-modal"><?= e(__('ui.organization.cancel')) ?></button>
-                <button type="submit"><?= e(__('ui.secret.transfer_owner_confirm_button')) ?></button>
-            </form>
-        </div>
-    </dialog>
+        </dialog>
+    <?php endif; ?>
 <?php endif; ?>
 
     </div>

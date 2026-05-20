@@ -46,6 +46,10 @@ final class InviteService
         string $createdBy,
         int    $ttlSeconds = OrganizationService::DEFAULT_INVITE_TTL,
     ): InviteLink {
+        if (DeployMode::isSolo()) {
+            throw new AuthException(__('ui.backend.invite.join_org_not_in_solo'), 403);
+        }
+
         $this->assertValidInviteRole($role);
 
         // Только admin+ может создавать инвайты
@@ -77,10 +81,7 @@ final class InviteService
         string $createdBy,
         int    $ttlSeconds = OrganizationService::DEFAULT_INVITE_TTL,
     ): InviteLink {
-        $deployMode = Database::getInstance()->fetchColumn(
-            "SELECT value FROM system_config WHERE key = 'deploy_mode'"
-        );
-        if ($deployMode === 'solo') {
+        if (DeployMode::isSolo()) {
             throw new \RuntimeException(__('ui.backend.invite.create_org_not_in_solo'));
         }
 
@@ -142,6 +143,10 @@ final class InviteService
      */
     public function acceptJoinOrg(string $token, string $acceptorUserId): Organization
     {
+        if (DeployMode::isSolo()) {
+            throw new AuthException(__('ui.backend.invite.join_org_not_in_solo'), 403);
+        }
+
         $invite = $this->findValid($token);
 
         if ($invite->type !== InviteLink::TYPE_JOIN_ORG) {
