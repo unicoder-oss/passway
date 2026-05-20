@@ -1,6 +1,5 @@
 <?php
 $topbarLinks = $topbarLinks ?? [];
-$topbarTitle = isset($topbarTitle) ? trim((string) $topbarTitle) : '';
 $profileDisplayName = display_name_for_user($user);
 $profileAvatarPath = isset($user->avatarPath) ? trim((string) $user->avatarPath) : '';
 $profileAvatarColor = avatar_color_for_user($user);
@@ -9,9 +8,6 @@ $profileAvatarInitial = avatar_initial($profileDisplayName);
 <div class="topbar">
     <div>
         <a class="brand" href="/">passway</a>
-        <?php if ($topbarTitle !== ''): ?>
-            <div class="topbar-title"><?= e($topbarTitle) ?></div>
-        <?php endif; ?>
     </div>
     <div class="topnav">
         <?php foreach ($topbarLinks as $link): ?>

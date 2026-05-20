@@ -187,11 +187,8 @@ final class InviteService
             throw new AuthException(__('ui.backend.invite.wrong_type_create_org'));
         }
 
-        $org = null;
-        Database::getInstance()->transaction(function () use ($invite, $acceptorUserId, $name, &$org): void {
-            $org = $this->organizationService->create($name, $acceptorUserId);
-            $this->markUsed($invite->id, $acceptorUserId);
-        });
+        $org = $this->organizationService->create($name, $acceptorUserId);
+        $this->markUsed($invite->id, $acceptorUserId);
 
         if (!$org instanceof Organization) {
             throw new \RuntimeException(__('ui.backend.organization.failed_load_created'));

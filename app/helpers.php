@@ -63,6 +63,18 @@ if (!function_exists('public_path')) {
     }
 }
 
+if (!function_exists('app_url')) {
+    function app_url(string $path = ''): string
+    {
+        $baseUrl = rtrim((string) config('app.url', env('APP_URL', '')), '/');
+        if ($path === '') {
+            return $baseUrl;
+        }
+
+        return $baseUrl . '/' . ltrim($path, '/');
+    }
+}
+
 if (!function_exists('generate_uuid')) {
     /**
      * Генерировать UUID v4.

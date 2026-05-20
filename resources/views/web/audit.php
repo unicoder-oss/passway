@@ -1,11 +1,14 @@
 <?php
-$topbarTitle = __('ui.audit.for_org', ['organization' => $organization->name]);
 $topbarLinks = [
     ['href' => '/organizations/' . $organization->uuid . '/manage', 'label' => __('ui.app.back_to_management')],
     ['href' => '/auth/logout', 'label' => __('ui.app.logout')],
 ];
 require base_path('resources/views/partials/auth_topbar.php');
 ?>
+
+<section style="margin:0 0 1rem;">
+    <h1 style="margin:0; font-size:2rem;"><?= e(__('ui.audit.for_org', ['organization' => $organization->name])) ?></h1>
+</section>
 
 <section class="panel" style="padding:1.5rem; margin-bottom:1rem;">
     <form method="GET" class="grid grid-4" style="gap:1rem;">

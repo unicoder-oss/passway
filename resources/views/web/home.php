@@ -3,6 +3,9 @@ $topbarTitle = '';
 $topbarLinks = [
     ['href' => '/rotation-services', 'label' => __('ui.home.rotation_services')],
 ];
+$createdOrganizationInviteUrl = $createdOrganizationInvite !== null
+    ? app_url('/invite/' . $createdOrganizationInvite->token)
+    : null;
 require base_path('resources/views/partials/auth_topbar.php');
 ?>
 
@@ -39,7 +42,7 @@ require base_path('resources/views/partials/auth_topbar.php');
                 <?php if ($createdOrganizationInvite !== null): ?>
                     <div>
                         <label><?= e(__('ui.home.organization_invite_link')) ?></label>
-                        <input class="mono" value="<?= e('/invite/' . $createdOrganizationInvite->token) ?>" readonly>
+                        <input class="mono js-copy-on-click" value="<?= e((string) $createdOrganizationInviteUrl) ?>" readonly>
                     </div>
                 <?php endif; ?>
             </section>
@@ -75,3 +78,22 @@ require base_path('resources/views/partials/auth_topbar.php');
         </section>
     <?php endif; ?>
 </section>
+
+<script>
+(() => {
+    const fields = document.querySelectorAll('.js-copy-on-click');
+
+    for (const field of fields) {
+        field.addEventListener('click', async () => {
+            field.focus();
+            field.select();
+
+            try {
+                await navigator.clipboard.writeText(field.value);
+            } catch (error) {
+                document.execCommand('copy');
+            }
+        });
+    }
+})();
+</script>

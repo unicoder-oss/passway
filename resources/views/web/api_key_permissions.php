@@ -1,5 +1,4 @@
 <?php
-$topbarTitle = __('ui.api_key_permissions.for_key', ['name' => $apiKey->name]);
 $topbarLinks = [
     ['href' => '/organizations/' . $organization->uuid . '/api-keys', 'label' => __('ui.api_key_permissions.back_to_api_keys')],
     ['href' => '/organizations/' . $organization->uuid . '/manage', 'label' => __('ui.app.manage_org')],
@@ -10,6 +9,10 @@ require base_path('resources/views/partials/auth_topbar.php');
 
 <?php if (!empty($queryError)): ?><div class="error" style="margin-bottom:1rem;"><?= e((string) $queryError) ?></div><?php endif; ?>
 <?php if (!empty($querySuccess)): ?><div class="success" style="margin-bottom:1rem;"><?= e((string) $querySuccess) ?></div><?php endif; ?>
+
+<section style="margin:0 0 1rem;">
+    <h1 style="margin:0; font-size:2rem;"><?= e(__('ui.api_key_permissions.for_key', ['name' => $apiKey->name])) ?></h1>
+</section>
 
 <div class="grid grid-2" style="align-items:start; padding-bottom:2rem; gap:1rem;">
     <section class="panel" style="padding:1.5rem; display:grid; gap:1rem;">

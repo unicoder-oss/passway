@@ -1,5 +1,4 @@
 <?php
-$topbarTitle = __('ui.rotation_services.subtitle');
 $topbarLinks = [
     ['href' => '/', 'label' => __('ui.app.back_to_dashboard')],
     ['href' => '/auth/logout', 'label' => __('ui.app.logout')],
@@ -9,6 +8,10 @@ require base_path('resources/views/partials/auth_topbar.php');
 
 <?php if (!empty($queryError)): ?><div class="error" style="margin-bottom:1rem;"><?= e((string) $queryError) ?></div><?php endif; ?>
 <?php if (!empty($querySuccess)): ?><div class="success" style="margin-bottom:1rem;"><?= e((string) $querySuccess) ?></div><?php endif; ?>
+
+<section style="margin:0 0 1rem;">
+    <h1 style="margin:0; font-size:2rem;"><?= e(__('ui.rotation_services.subtitle')) ?></h1>
+</section>
 
 <div class="grid grid-2" style="align-items:start; padding-bottom:2rem; gap:1rem;">
     <section class="panel" style="padding:1.5rem; display:grid; gap:1rem;">

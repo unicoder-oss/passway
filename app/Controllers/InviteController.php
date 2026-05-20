@@ -111,6 +111,7 @@ final class InviteController
     public function showAccept(Request $request): Response
     {
         $token = (string) $request->routeParam('token');
+        $user = $this->resolveInviteUser();
 
         try {
             $invite = $this->inviteService->findValid($token);
@@ -124,8 +125,19 @@ final class InviteController
             ? Organization::findById($invite->organizationId)
             : null;
 
-        if ($invite->type === InviteLink::TYPE_CREATE_ORG && AuthContext::isAuthenticated()) {
+        if ($invite->type === InviteLink::TYPE_CREATE_ORG && $user !== null) {
             return Response::redirect('/invite/' . $invite->token . '/create-organization');
+        }
+
+        if ($invite->type === InviteLink::TYPE_JOIN_ORG && $user !== null) {
+            try {
+                $acceptedOrg = $this->inviteService->acceptJoinOrg($invite->token, $user->id);
+                return Response::redirect('/organizations/' . \urlencode($acceptedOrg->uuid));
+            } catch (AuthException | \RuntimeException $e) {
+                return Response::make(400)
+                    ->withContentType('text/html; charset=utf-8')
+                    ->withBody($this->renderError($e->getMessage()));
+            }
         }
 
         if ($invite->type === InviteLink::TYPE_CREATE_ORG) {
@@ -134,7 +146,7 @@ final class InviteController
                 ->withBody($this->renderCreateOrgEntry($invite));
         }
 
-        if (!AuthContext::isAuthenticated()) {
+        if ($user === null) {
             return Response::make(200)
                 ->withContentType('text/html; charset=utf-8')
                 ->withBody($this->renderJoinOrgEntry($invite, $org));
@@ -152,7 +164,7 @@ final class InviteController
     public function accept(Request $request): Response
     {
         $token = $request->routeParam('token');
-        $user  = AuthContext::getUser();
+        $user  = $this->resolveInviteUser();
 
         if ($user === null) {
             // Не аутентифицирован — редиректим на логин с return_to
@@ -210,7 +222,7 @@ final class InviteController
     {
         $token = (string) $request->routeParam('token');
 
-        if (AuthContext::isAuthenticated()) {
+        if ($this->resolveInviteUser() !== null) {
             $invite = $this->requireWebInvite($token);
             if (!$invite instanceof InviteLink) {
                 return $invite;
@@ -221,7 +233,7 @@ final class InviteController
                 : '/invite/' . $token);
         }
 
-        $invite = $this->requireCreateOrgInvite($token);
+        $invite = $this->requireWebInvite($token);
         if (!$invite instanceof InviteLink) {
             return $invite;
         }
@@ -239,7 +251,7 @@ final class InviteController
     {
         $token = (string) $request->routeParam('token');
 
-        if (AuthContext::isAuthenticated()) {
+        if ($this->resolveInviteUser() !== null) {
             $invite = $this->requireWebInvite($token);
             if (!$invite instanceof InviteLink) {
                 return $invite;
@@ -250,7 +262,7 @@ final class InviteController
                 : '/invite/' . $token);
         }
 
-        $invite = $this->requireCreateOrgInvite($token);
+        $invite = $this->requireWebInvite($token);
         if (!$invite instanceof InviteLink) {
             return $invite;
         }
@@ -258,6 +270,8 @@ final class InviteController
         $email = \strtolower(\trim((string) ($request->input('email') ?? '')));
         $password = (string) ($request->input('password') ?? '');
         $passwordConfirm = (string) ($request->input('password_confirm') ?? '');
+
+        $createdUser = null;
 
         try {
             $this->setupService->validateEmail($email);
@@ -283,6 +297,7 @@ final class InviteController
                 'created_at' => $now,
                 'updated_at' => $now,
             ]);
+            $createdUser = $user;
 
             $rawToken = $this->sessionService->create($user->id, $request->ip(), $request->header('User-Agent'));
             $user->update([
@@ -292,6 +307,17 @@ final class InviteController
             $this->sessionService->setCookie($rawToken);
         } catch (\Throwable $e) {
             return Response::redirect('/invite/' . $token . '/register?error=' . \urlencode($e->getMessage()) . '&email=' . \urlencode($email));
+        }
+
+        if ($invite->type === InviteLink::TYPE_JOIN_ORG && $createdUser instanceof User) {
+            try {
+                $org = $this->inviteService->acceptJoinOrg($token, $createdUser->id);
+                return Response::redirect('/organizations/' . \urlencode($org->uuid));
+            } catch (AuthException | \RuntimeException $e) {
+                return Response::make(400)
+                    ->withContentType('text/html; charset=utf-8')
+                    ->withBody($this->renderError($e->getMessage()));
+            }
         }
 
         return Response::redirect($invite->type === InviteLink::TYPE_CREATE_ORG
@@ -319,10 +345,12 @@ final class InviteController
         try {
             $avatarPath = $this->storeOrganizationAvatar($avatarData);
             $org = $this->inviteService->acceptCreateOrg($token, $user->id, $name);
-            $org->update([
-                'avatar_path' => $avatarPath,
-                'updated_at' => now()->format('Y-m-d H:i:s'),
-            ]);
+            if ($avatarPath !== null) {
+                $org->update([
+                    'avatar_path' => $avatarPath,
+                    'updated_at' => now()->format('Y-m-d H:i:s'),
+                ]);
+            }
         } catch (AuthException $e) {
             return Response::make(400)
                 ->withContentType('text/html; charset=utf-8')
@@ -372,12 +400,34 @@ final class InviteController
 
     private function requireAuthenticatedInviteUser(string $token): User|Response
     {
-        $user = AuthContext::getUser();
+        $user = $this->resolveInviteUser();
         if ($user !== null) {
             return $user;
         }
 
         return Response::redirect('/auth/login?return_to=' . \urlencode('/invite/' . $token . '/create-organization'));
+    }
+
+    private function resolveInviteUser(): ?User
+    {
+        $user = AuthContext::getUser();
+        if ($user !== null) {
+            return $user;
+        }
+
+        $rawToken = $this->sessionService->getTokenFromCookie();
+        if ($rawToken === null) {
+            return null;
+        }
+
+        $user = $this->sessionService->validate($rawToken);
+        if ($user === null || !$user->isActive) {
+            return null;
+        }
+
+        AuthContext::setUser($user);
+
+        return $user;
     }
 
     /**
@@ -394,7 +444,7 @@ final class InviteController
         ];
         if ($withToken) {
             $data['token'] = $invite->token;
-            $data['url']   = '/invite/' . $invite->token;
+            $data['url']   = app_url('/invite/' . $invite->token);
         }
         return $data;
     }
@@ -491,7 +541,7 @@ final class InviteController
                     <div class="crop-shell">
                         <div>
                             <label for="avatar-file">{$avatarLabel}</label>
-                            <input id="avatar-file" type="file" accept="image/png,image/jpeg,image/webp" required>
+                            <input id="avatar-file" type="file" accept="image/png,image/jpeg,image/webp">
                             <div class="hint">{$avatarHint}</div>
                         </div>
                         <div class="preview-wrap"><canvas id="avatar-canvas" width="256" height="256"></canvas></div>
@@ -500,7 +550,7 @@ final class InviteController
                             <input id="avatar-zoom" class="range" type="range" min="1" max="4" step="0.01" value="1">
                         </div>
                     </div>
-                    <input id="avatar-data" type="hidden" name="avatar_data" required>
+                    <input id="avatar-data" type="hidden" name="avatar_data">
                     <button type="submit">{$submit}</button>
                 </form>
                 <script>
@@ -632,10 +682,10 @@ final class InviteController
         HTML;
     }
 
-    private function storeOrganizationAvatar(string $avatarData): string
+    private function storeOrganizationAvatar(string $avatarData): ?string
     {
         if ($avatarData === '') {
-            throw new \InvalidArgumentException(__('ui.invite.organization_avatar_required'));
+            return null;
         }
 
         if (!preg_match('#^data:(image/(png|webp));base64,(.+)$#', $avatarData, $matches)) {
@@ -786,13 +836,15 @@ final class InviteController
             <meta name="viewport" content="width=device-width, initial-scale=1.0">
             <title>{$title}</title>
             <style>
-                body { font-family: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace; background: #f5f5f5; color: #161616; display: flex; align-items: center; justify-content: center; min-height: 100vh; padding: 1rem; }
-                .card { background: #fff; border: 1px solid #d0d0d0; padding: 2rem; width: 100%; max-width: 520px; }
+                :root { color-scheme: light dark; --bg:#f5f5f5; --fg:#161616; --muted:#606060; --panel:#fff; --border:#d0d0d0; --button:#4b4b4b; }
+                @media (prefers-color-scheme: dark) { :root { --bg:#111111; --fg:#f3f3f3; --muted:#a4a4a4; --panel:#1a1a1a; --border:#393939; --button:#d6d6d6; } }
+                body { font-family: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace; background: var(--bg); color: var(--fg); display: flex; align-items: center; justify-content: center; min-height: 100vh; padding: 1rem; }
+                .card { background: var(--panel); border: 1px solid var(--border); padding: 2rem; width: 100%; max-width: 520px; }
                 h1 { margin: 0 0 .75rem; font-size: 1.5rem; }
-                p { margin: 0 0 1.25rem; color: #606060; }
-                label { display: block; margin-bottom: .4rem; color: #606060; }
-                input { width: 100%; border: 1px solid #d0d0d0; padding: .8rem .9rem; font: inherit; box-sizing: border-box; margin-bottom: .9rem; }
-                button { width: 100%; border: 1px solid #4b4b4b; background: #4b4b4b; color: #fff; padding: .8rem 1rem; font: inherit; cursor: pointer; }
+                p { margin: 0 0 1.25rem; color: var(--muted); }
+                label { display: block; margin-bottom: .4rem; color: var(--muted); }
+                input { width: 100%; border: 1px solid var(--border); background: var(--panel); color: var(--fg); padding: .8rem .9rem; font: inherit; box-sizing: border-box; margin-bottom: .9rem; }
+                button { width: 100%; border: 1px solid var(--button); background: var(--button); color: var(--bg); padding: .8rem 1rem; font: inherit; cursor: pointer; }
             </style>
         </head>
         <body>

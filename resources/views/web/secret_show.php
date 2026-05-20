@@ -1,5 +1,4 @@
 <?php
-$topbarTitle = __('ui.secret.details_for_org', ['organization' => $organization->name]);
 $topbarLinks = [
     ['href' => '/organizations/' . $organization->uuid . '?dir=' . $directory->uuid, 'label' => __('ui.secret.back_to_directory')],
     ['href' => '/auth/logout', 'label' => __('ui.app.logout')],
@@ -8,6 +7,10 @@ require base_path('resources/views/partials/auth_topbar.php');
 ?>
 
 <?php if (!empty($error)): ?><div class="error" style="margin-bottom:1rem;"><?= e((string) $error) ?></div><?php endif; ?>
+
+<section style="margin:0 0 1rem;">
+    <h1 style="margin:0; font-size:2rem;"><?= e(__('ui.secret.details_for_org', ['organization' => $organization->name])) ?></h1>
+</section>
 
 <div class="grid grid-2-compact" style="align-items:start; padding-bottom:2rem;">
     <section class="panel" style="padding:1.5rem; display:grid; gap:1rem;">

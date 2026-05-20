@@ -5,6 +5,10 @@
         <p class="muted" style="margin:0 0 1.25rem;"><?= e(__('ui.auth.login.subtitle')) ?></p>
         <?php if (!empty($success)): ?><div class="success" style="margin-bottom:1rem;"><?= e((string) $success) ?></div><?php endif; ?>
         <?php if (!empty($error)): ?><div class="error" style="margin-bottom:1rem;"><?= e((string) $error) ?></div><?php endif; ?>
+        <div style="display:grid; gap:.75rem; margin-bottom:1rem;">
+            <button type="button" id="passkey-login-button" class="secondary"><?= e(__('ui.auth.login.passkey_submit')) ?></button>
+            <div id="passkey-login-status" class="muted" aria-live="polite" style="display:none; font-size:.92rem;"></div>
+        </div>
         <form method="POST" action="/auth/login" class="grid">
             <?php if (!empty($returnTo)): ?><input type="hidden" name="return_to" value="<?= e((string) $returnTo) ?>"><?php endif; ?>
             <div>
@@ -17,14 +21,6 @@
             </div>
             <button type="submit"><?= e(__('ui.auth.login.submit')) ?></button>
         </form>
-        <div class="panel panel-muted" style="margin-top:1rem; padding:1rem; display:grid; gap:.75rem;">
-            <div>
-                <h2 style="margin:0 0 .35rem; font-size:1.1rem;"><?= e(__('ui.auth.login.passkey_heading')) ?></h2>
-                <div class="muted" style="font-size:.92rem;"><?= e(__('ui.auth.login.passkey_hint')) ?></div>
-            </div>
-            <button type="button" id="passkey-login-button" class="secondary"><?= e(__('ui.auth.login.passkey_submit')) ?></button>
-            <div id="passkey-login-status" class="muted" style="font-size:.92rem;"><?= e(__('ui.auth.login.passkey_idle')) ?></div>
-        </div>
     </div>
 </div>
 
@@ -91,6 +87,7 @@
     const setStatus = (message, type = 'muted') => {
         status.className = type;
         status.textContent = message;
+        status.style.display = message ? 'block' : 'none';
     };
 
     button.addEventListener('click', async () => {

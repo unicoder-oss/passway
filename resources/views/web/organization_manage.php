@@ -1,5 +1,4 @@
 <?php
-$topbarTitle = __('ui.organization_manage.manage', ['organization' => $organization->name]);
 $topbarLinks = [
     ['href' => '/organizations/' . $organization->uuid, 'label' => __('ui.app.back_to_dashboard')],
     ['href' => '/organizations/' . $organization->uuid . '/audit', 'label' => __('ui.organization_manage.audit_log')],
@@ -11,6 +10,10 @@ require base_path('resources/views/partials/auth_topbar.php');
 ?>
 
 <?php if (!empty($queryError)): ?><div class="error" style="margin-bottom:1rem;"><?= e((string) $queryError) ?></div><?php endif; ?>
+
+<section style="margin:0 0 1rem;">
+    <h1 style="margin:0; font-size:2rem;"><?= e(__('ui.organization_manage.manage', ['organization' => $organization->name])) ?></h1>
+</section>
 
 <div class="grid grid-2-compact" style="align-items:start; padding-bottom:2rem;">
     <section class="panel" style="padding:1.5rem;">
@@ -66,10 +69,14 @@ require base_path('resources/views/partials/auth_topbar.php');
             <h3 style="margin:0 0 .75rem;"><?= e(__('ui.organization_manage.active_invites')) ?></h3>
             <div class="grid" style="gap:.75rem;">
                 <?php foreach ($invites as $invite): ?>
+                    <?php $inviteUrl = app_url('/invite/' . $invite->token); ?>
                     <div class="panel panel-muted" style="padding:1rem;">
                         <div style="font-weight:700;"><?= e(__('ui.organization_manage.role')) ?>: <?= e($invite->role) ?></div>
                         <div class="muted" style="font-size:.92rem;"><?= e(__('ui.organization_manage.expires', ['date' => $invite->expiresAt])) ?></div>
-                        <div class="muted" style="font-size:.92rem; margin:.35rem 0;"><?= e(__('ui.organization_manage.link', ['link' => '/invite/' . $invite->token])) ?></div>
+                        <div style="margin:.5rem 0 .75rem;">
+                            <label><?= e(__('ui.organization_manage.link', ['link' => $inviteUrl])) ?></label>
+                            <input class="mono js-copy-on-click" value="<?= e($inviteUrl) ?>" readonly>
+                        </div>
                         <form method="POST" action="/organizations/<?= e($organization->uuid) ?>/invites/<?= e($invite->uuid) ?>/revoke">
                             <button type="submit" class="danger"><?= e(__('ui.organization_manage.revoke_invite')) ?></button>
                         </form>
@@ -80,3 +87,22 @@ require base_path('resources/views/partials/auth_topbar.php');
         </div>
     </section>
 </div>
+
+<script>
+(() => {
+    const fields = document.querySelectorAll('.js-copy-on-click');
+
+    for (const field of fields) {
+        field.addEventListener('click', async () => {
+            field.focus();
+            field.select();
+
+            try {
+                await navigator.clipboard.writeText(field.value);
+            } catch (error) {
+                document.execCommand('copy');
+            }
+        });
+    }
+})();
+</script>

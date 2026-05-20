@@ -62,7 +62,6 @@
         .shell { min-height: 100vh; background: var(--bg); }
         .container { width: min(1080px, calc(100vw - 2rem)); margin: 0 auto; padding: 0 0 2rem; }
         .topbar { display: flex; align-items: center; justify-content: space-between; gap: 1rem; padding: 1rem 0 1.5rem; }
-        .topbar-title { color: var(--muted); margin-top: .35rem; font-size: .92rem; }
         .brand { display: inline-block; font-weight: 700; letter-spacing: .02em; text-transform: lowercase; }
         .topnav { display: flex; gap: .75rem; align-items: center; flex-wrap: wrap; justify-content: flex-end; }
         .profile-link {
@@ -73,10 +72,12 @@
             padding: .55rem .75rem;
             border: 1px solid var(--border);
             background: var(--panel);
+            cursor: pointer;
         }
         .profile-menu { position: relative; }
-        .profile-menu summary { list-style: none; }
+        .profile-menu summary { list-style: none; cursor: pointer; }
         .profile-menu summary::-webkit-details-marker { display: none; }
+        .profile-menu:not([open]) .profile-menu-panel { display: none; }
         .profile-menu-panel {
             position: absolute;
             right: 0;
@@ -87,6 +88,8 @@
             gap: .5rem;
             z-index: 20;
         }
+        .profile-menu:hover .profile-menu-panel,
+        .profile-menu:focus-within .profile-menu-panel { display: grid; }
         .avatar-square {
             display: inline-flex;
             align-items: center;
