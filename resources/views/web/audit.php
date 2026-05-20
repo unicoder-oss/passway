@@ -1,6 +1,6 @@
 <?php
 $topbarLinks = [
-    ['href' => '/organizations/' . $organization->uuid . '/manage', 'label' => __('ui.app.back_to_management')],
+    ['href' => '/organizations/' . $organization->uuid, 'label' => __('ui.app.back_to_organization')],
     ['href' => '/auth/logout', 'label' => __('ui.app.logout')],
 ];
 require base_path('resources/views/partials/auth_topbar.php');
@@ -43,15 +43,18 @@ require base_path('resources/views/partials/auth_topbar.php');
     <div class="muted"><?= e(__('ui.audit.summary', ['total' => (string) $meta['total'], 'offset' => (string) $meta['offset'], 'limit' => (string) $meta['limit']])) ?></div>
     <?php foreach ($entries as $entry): ?>
         <div class="panel panel-muted" style="padding:1rem;">
-            <div style="display:flex; justify-content:space-between; gap:1rem; flex-wrap:wrap;">
-                <div>
-                    <div style="font-weight:700;"><?= e($entry->action) ?></div>
-                    <div class="muted" style="font-size:.92rem;"><?= local_datetime($entry->createdAt) ?> · <?= e($entry->success ? __('ui.app.success') : __('ui.app.failed')) ?></div>
+            <div>
+                <div style="font-weight:700; line-height:1.45;">
+                    <?php foreach ($entry['title_parts'] as $part): ?>
+                        <?php if ($part['href'] !== null): ?><a href="<?= e((string) $part['href']) ?>" class="audit-title-link"><?= e((string) $part['text']) ?></a><?php else: ?><?php if (!empty($part['accent'])): ?><span class="audit-title-accent"><?= e((string) $part['text']) ?></span><?php else: ?><?= e((string) $part['text']) ?><?php endif; ?><?php endif; ?>
+                    <?php endforeach; ?>
                 </div>
-                <div class="muted" style="font-size:.92rem;"><?= e((string) ($entry->resourceType ?? __('ui.audit.system'))) ?> <?= e((string) ($entry->resourceUuid ?? '')) ?></div>
+                <div class="muted" style="font-size:.92rem;"><?= $entry['timestamp_html'] ?> · <?= e((string) $entry['status']) ?> · <?php if ($entry['actor_href'] !== null): ?><a href="<?= e((string) $entry['actor_href']) ?>"><?= e((string) $entry['actor_label']) ?></a><?php else: ?><?= e((string) $entry['actor_label']) ?><?php endif; ?></div>
             </div>
-            <?php if ($entry->ipAddress !== null): ?><div class="muted" style="margin-top:.35rem; font-size:.92rem;"><?= e(__('ui.audit.ip', ['ip' => $entry->ipAddress])) ?></div><?php endif; ?>
-            <?php if ($entry->details() !== []): ?><pre class="mono panel panel-muted" style="margin-top:.75rem; padding:.85rem; overflow:auto;"><?= e((string) json_encode($entry->details(), JSON_PRETTY_PRINT | JSON_UNESCAPED_SLASHES | JSON_UNESCAPED_UNICODE)) ?></pre><?php endif; ?>
+            <?php foreach (($entry['details'] ?? []) as $detail): ?>
+                <div class="muted" style="margin-top:.35rem; font-size:.92rem;"><?= e((string) $detail) ?></div>
+            <?php endforeach; ?>
+            <?php if (($entry['ip_address'] ?? null) !== null): ?><div class="muted" style="margin-top:.35rem; font-size:.92rem;"><?= e(__('ui.audit.ip', ['ip' => (string) $entry['ip_address']])) ?></div><?php endif; ?>
         </div>
     <?php endforeach; ?>
     <?php if ($entries === []): ?><div class="muted"><?= e(__('ui.audit.no_entries')) ?></div><?php endif; ?>

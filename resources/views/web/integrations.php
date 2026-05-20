@@ -1,10 +1,4 @@
 <?php
-$topbarLinks = [
-    ['href' => '/organizations/' . $organization->uuid . '/manage', 'label' => __('ui.app.back_to_management')],
-    ['href' => '/api', 'label' => __('ui.home.api')],
-    ['href' => '/rotation-services', 'label' => __('ui.home.rotation_services')],
-    ['href' => '/auth/logout', 'label' => __('ui.app.logout')],
-];
 $renderRotationField = static function (array $field, string $namePrefix, bool $required = true): void {
     $fieldName = isset($field['name']) && is_string($field['name']) ? trim($field['name']) : '';
     if ($fieldName === '') {
@@ -53,90 +47,94 @@ require base_path('resources/views/partials/auth_topbar.php');
 <?php if (!empty($querySuccess)): ?><div class="success" data-toast="true" style="margin-bottom:1rem;"><?= e((string) $querySuccess) ?></div><?php endif; ?>
 
 <section style="margin:0 0 1rem;">
-    <h1 style="margin:0; font-size:2rem;"><?= e(__('ui.integrations.for_org', ['organization' => $organization->name])) ?></h1>
+    <h1 style="margin:0; font-size:2rem;"><?= e(__('ui.organization_manage.integrations')) ?></h1>
+    <div class="muted" style="margin-top:.35rem;"><?= e($organization->name) ?></div>
 </section>
 
-<div class="grid grid-2" style="align-items:start; padding-bottom:2rem; gap:1rem;">
-    <section class="panel" style="padding:1.5rem;">
-        <h2 style="margin:0 0 1rem;"><?= e(__('ui.integrations.create')) ?></h2>
-        <form method="POST" action="/organizations/<?= e($organization->uuid) ?>/integrations" class="grid" style="gap:.75rem;">
-            <div>
-                <label for="integration-name"><?= e(__('ui.integrations.integration_name')) ?></label>
-                <input id="integration-name" name="name" placeholder="<?= e(__('ui.integrations.integration_name_placeholder')) ?>" required>
-            </div>
-            <div>
-                <label for="integration-service"><?= e(__('ui.integrations.rotation_service')) ?></label>
-                <select id="integration-service" name="rotation_service_uuid">
+<div class="grid sidebar-layout" style="align-items:start; padding-bottom:2rem; gap:1rem;">
+    <?php require base_path('resources/views/web/partials/organization_settings_sidebar.php'); ?>
+    <div class="grid grid-2" style="align-items:start; gap:1rem;">
+        <section class="panel" style="padding:1.5rem;">
+            <h2 style="margin:0 0 1rem;"><?= e(__('ui.integrations.create')) ?></h2>
+            <form method="POST" action="/organizations/<?= e($organization->uuid) ?>/integrations" class="grid" style="gap:.75rem;">
+                <div>
+                    <label for="integration-name"><?= e(__('ui.integrations.integration_name')) ?></label>
+                    <input id="integration-name" name="name" placeholder="<?= e(__('ui.integrations.integration_name_placeholder')) ?>" required>
+                </div>
+                <div>
+                    <label for="integration-service"><?= e(__('ui.integrations.rotation_service')) ?></label>
+                    <select id="integration-service" name="rotation_service_uuid">
+                        <?php foreach ($services as $service): ?>
+                            <?php if ($service->isActive && $service->isVerified): ?>
+                                <option value="<?= e($service->uuid) ?>"><?= e($service->name) ?> (<?= e($service->url) ?>)</option>
+                            <?php endif; ?>
+                        <?php endforeach; ?>
+                    </select>
+                </div>
+                <div id="integration-credential-configs" class="grid" style="gap:1rem;">
                     <?php foreach ($services as $service): ?>
                         <?php if ($service->isActive && $service->isVerified): ?>
-                            <option value="<?= e($service->uuid) ?>"><?= e($service->name) ?> (<?= e($service->url) ?>)</option>
+                            <div class="hidden" data-credential-config="<?= e($service->uuid) ?>">
+                                <?php if ($service->integrationFields() !== []): ?>
+                                    <div class="grid" style="gap:1rem;">
+                                        <?php foreach ($service->integrationFields() as $field): ?>
+                                            <?php $renderRotationField($field, 'credentials'); ?>
+                                        <?php endforeach; ?>
+                                    </div>
+                                <?php else: ?>
+                                    <div class="muted"><?= e(__('ui.integrations.no_schema_fields')) ?></div>
+                                <?php endif; ?>
+                            </div>
                         <?php endif; ?>
                     <?php endforeach; ?>
-                </select>
-            </div>
-            <div id="integration-credential-configs" class="grid" style="gap:1rem;">
-                <?php foreach ($services as $service): ?>
-                    <?php if ($service->isActive && $service->isVerified): ?>
-                        <div class="hidden" data-credential-config="<?= e($service->uuid) ?>">
-                            <?php if ($service->integrationFields() !== []): ?>
-                                <div class="grid" style="gap:1rem;">
-                                    <?php foreach ($service->integrationFields() as $field): ?>
-                                        <?php $renderRotationField($field, 'credentials'); ?>
-                                    <?php endforeach; ?>
-                                </div>
-                            <?php else: ?>
-                                <div class="muted"><?= e(__('ui.integrations.no_schema_fields')) ?></div>
-                            <?php endif; ?>
-                        </div>
-                    <?php endif; ?>
-                <?php endforeach; ?>
-            </div>
-            <button type="submit"><?= e(__('ui.integrations.create_submit')) ?></button>
-        </form>
-    </section>
-
-    <section class="panel" style="padding:1.5rem;">
-        <h2 style="margin:0 0 1rem;"><?= e(__('ui.integrations.existing')) ?></h2>
-        <div class="grid" style="gap:.9rem;">
-            <?php foreach ($integrations as $integration): $service = $serviceMap[$integration->rotationServiceId] ?? null; ?>
-                <div class="panel panel-muted" style="padding:1rem; display:grid; gap:.75rem;">
-                    <div>
-                        <div style="font-weight:700;"><?= e($integration->name) ?></div>
-                        <div class="muted" style="font-size:.92rem;"><?= e($service?->name ?? __('ui.integrations.unknown_service')) ?><?= $service ? ' · ' . e($service->url) : '' ?></div>
-                        <div class="muted" style="font-size:.92rem;"><?= e($integration->isActive ? __('ui.app.active') : __('ui.app.inactive')) ?> · <?= __('ui.integrations.updated', ['date' => local_datetime($integration->updatedAt)]) ?></div>
-                    </div>
-
-                    <form method="POST" action="/organizations/<?= e($organization->uuid) ?>/integrations/<?= e($integration->uuid) ?>/update" class="grid" style="gap:.75rem;">
-                        <div>
-                            <label><?= e(__('ui.integrations.name')) ?></label>
-                            <input name="name" value="<?= e($integration->name) ?>" required>
-                        </div>
-                        <label class="inline-check">
-                            <input type="checkbox" name="is_active" value="1" <?= $integration->isActive ? 'checked' : '' ?>>
-                            <span><?= e(__('ui.integrations.active')) ?></span>
-                        </label>
-                        <div>
-                            <label><?= e(__('ui.integrations.replace_credentials_optional')) ?></label>
-                            <?php if ($service !== null && $service->integrationFields() !== []): ?>
-                                <div class="grid" style="gap:1rem;">
-                                    <?php foreach ($service->integrationFields() as $field): ?>
-                                        <?php $renderRotationField($field, 'credentials', false); ?>
-                                    <?php endforeach; ?>
-                                </div>
-                            <?php else: ?>
-                                <div class="muted"><?= e(__('ui.integrations.no_schema_fields')) ?></div>
-                            <?php endif; ?>
-                        </div>
-                        <div class="actions">
-                            <button type="submit"><?= e(__('ui.integrations.save')) ?></button>
-                            <button type="submit" class="danger" formaction="/organizations/<?= e($organization->uuid) ?>/integrations/<?= e($integration->uuid) ?>/delete"><?= e(__('ui.app.delete')) ?></button>
-                        </div>
-                    </form>
                 </div>
-            <?php endforeach; ?>
-            <?php if ($integrations === []): ?><div class="muted"><?= e(__('ui.integrations.no_integrations')) ?></div><?php endif; ?>
-        </div>
-    </section>
+                <button type="submit"><?= e(__('ui.integrations.create_submit')) ?></button>
+            </form>
+        </section>
+
+        <section class="panel" style="padding:1.5rem;">
+            <h2 style="margin:0 0 1rem;"><?= e(__('ui.integrations.existing')) ?></h2>
+            <div class="grid" style="gap:.9rem;">
+                <?php foreach ($integrations as $integration): $service = $serviceMap[$integration->rotationServiceId] ?? null; ?>
+                    <div class="panel panel-muted" style="padding:1rem; display:grid; gap:.75rem;">
+                        <div>
+                            <div style="font-weight:700;"><?= e($integration->name) ?></div>
+                            <div class="muted" style="font-size:.92rem;"><?= e($service?->name ?? __('ui.integrations.unknown_service')) ?><?= $service ? ' · ' . e($service->url) : '' ?></div>
+                            <div class="muted" style="font-size:.92rem;"><?= e($integration->isActive ? __('ui.app.active') : __('ui.app.inactive')) ?> · <?= __('ui.integrations.updated', ['date' => local_datetime($integration->updatedAt)]) ?></div>
+                        </div>
+
+                        <form method="POST" action="/organizations/<?= e($organization->uuid) ?>/integrations/<?= e($integration->uuid) ?>/update" class="grid" style="gap:.75rem;">
+                            <div>
+                                <label><?= e(__('ui.integrations.name')) ?></label>
+                                <input name="name" value="<?= e($integration->name) ?>" required>
+                            </div>
+                            <label class="inline-check">
+                                <input type="checkbox" name="is_active" value="1" <?= $integration->isActive ? 'checked' : '' ?>>
+                                <span><?= e(__('ui.integrations.active')) ?></span>
+                            </label>
+                            <div>
+                                <label><?= e(__('ui.integrations.replace_credentials_optional')) ?></label>
+                                <?php if ($service !== null && $service->integrationFields() !== []): ?>
+                                    <div class="grid" style="gap:1rem;">
+                                        <?php foreach ($service->integrationFields() as $field): ?>
+                                            <?php $renderRotationField($field, 'credentials', false); ?>
+                                        <?php endforeach; ?>
+                                    </div>
+                                <?php else: ?>
+                                    <div class="muted"><?= e(__('ui.integrations.no_schema_fields')) ?></div>
+                                <?php endif; ?>
+                            </div>
+                            <div class="actions">
+                                <button type="submit"><?= e(__('ui.integrations.save')) ?></button>
+                                <button type="submit" class="danger" formaction="/organizations/<?= e($organization->uuid) ?>/integrations/<?= e($integration->uuid) ?>/delete"><?= e(__('ui.app.delete')) ?></button>
+                            </div>
+                        </form>
+                    </div>
+                <?php endforeach; ?>
+                <?php if ($integrations === []): ?><div class="muted"><?= e(__('ui.integrations.no_integrations')) ?></div><?php endif; ?>
+            </div>
+        </section>
+    </div>
 </div>
 
 <script>

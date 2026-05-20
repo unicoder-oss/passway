@@ -98,6 +98,9 @@ $router->post('/rotation-services/:svcUuid/delete', [WebController::class, 'dele
 $router->get('/organizations/:uuid', [WebController::class, 'showOrganization'], [AuthMiddleware::class]);
 $router->get('/organizations/:uuid/search', [WebController::class, 'organizationSearchPartial'], [AuthMiddleware::class]);
 $router->get('/organizations/:uuid/manage', [WebController::class, 'showOrganizationManage'], [AuthMiddleware::class]);
+$router->get('/organizations/:uuid/manage/settings', [WebController::class, 'showOrganizationSettings'], [AuthMiddleware::class]);
+$router->get('/organizations/:uuid/manage/members', [WebController::class, 'showOrganizationMembers'], [AuthMiddleware::class]);
+$router->get('/organizations/:uuid/manage/invites', [WebController::class, 'showOrganizationInvites'], [AuthMiddleware::class]);
 $router->post('/organizations/:uuid/manage', [WebController::class, 'updateOrganizationSettings'], [AuthMiddleware::class]);
 $router->get('/organizations/:uuid/groups', [WebController::class, 'showOrganizationGroups'], [AuthMiddleware::class]);
 $router->post('/organizations/:uuid/groups', [WebController::class, 'createGroup'], [AuthMiddleware::class]);

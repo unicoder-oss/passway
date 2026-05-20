@@ -17,6 +17,8 @@
             --button-fg: #ffffff;
             --button-secondary: #e5e5e5;
             --button-secondary-fg: #161616;
+            --accent-soft: #7a2e8a;
+            --accent-link: #0f5cc0;
             --danger: #8f1d1d;
             --success-bg: #e7f2e9;
             --success-border: #9cb69f;
@@ -39,6 +41,8 @@
                 --button-fg: #111111;
                 --button-secondary: #2a2a2a;
                 --button-secondary-fg: #f3f3f3;
+                --accent-soft: #d78cff;
+                --accent-link: #7ec8ff;
                 --danger: #dc6b6b;
                 --success-bg: #16301d;
                 --success-border: #2e5b38;
@@ -125,6 +129,12 @@
             color: var(--button-secondary-fg);
             border-color: var(--border);
         }
+        .button.secondary.is-active,
+        .button.secondary[aria-current="page"] {
+            background: var(--button);
+            color: var(--button-fg);
+            border-color: var(--button);
+        }
         .button.danger, button.danger {
             background: var(--danger);
             border-color: var(--danger);
@@ -145,6 +155,22 @@
         .grid-2-compact { grid-template-columns: 1.2fr .8fr; }
         .grid-4 { grid-template-columns: repeat(4, minmax(0, 1fr)); }
         .sidebar-layout { grid-template-columns: minmax(240px, 300px) minmax(0, 1fr); }
+        .settings-sidebar {
+            position: sticky;
+            top: 1rem;
+            display: grid;
+            gap: 1rem;
+            align-content: start;
+        }
+        .settings-nav {
+            display: grid;
+            gap: .65rem;
+        }
+        .settings-nav .button {
+            width: 100%;
+            justify-content: flex-start;
+            text-align: left;
+        }
         .field-actions-2 { grid-template-columns: minmax(0, 1fr) auto; align-items: end; }
         .field-actions-3 { grid-template-columns: minmax(0, 1fr) auto auto; align-items: end; }
         .stack-sm { display: grid; gap: .75rem; }
@@ -222,6 +248,19 @@
             font-weight: 600;
         }
         .muted { color: var(--muted); }
+        .audit-title-accent {
+            color: var(--accent-soft);
+        }
+        .audit-title-link {
+            color: var(--accent-link);
+            text-decoration: underline;
+            text-decoration-thickness: .08em;
+            text-underline-offset: .14em;
+        }
+        .audit-title-link:hover,
+        .audit-title-link:focus {
+            opacity: .88;
+        }
         .error {
             border: 1px solid var(--error-border);
             background: var(--error-bg);

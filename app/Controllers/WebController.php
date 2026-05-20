@@ -9,7 +9,9 @@ use Passway\Core\AuthContext;
 use Passway\Core\Request;
 use Passway\Core\Response;
 use Passway\Exceptions\AuthException;
+use Passway\Models\ApprovalRequest;
 use Passway\Models\ApiKey;
+use Passway\Models\AuditLog;
 use Passway\Models\Directory;
 use Passway\Models\Group;
 use Passway\Models\InviteLink;
@@ -329,6 +331,33 @@ final class WebController
 
     public function showOrganizationManage(Request $request): Response
     {
+        $org = $this->findOrgOrFail($request);
+
+        return Response::redirect($this->settingsSectionUrl($org->uuid, 'settings'));
+    }
+
+    public function showOrganizationSettings(Request $request): Response
+    {
+        $user = AuthContext::requireUser();
+        $org = $this->findOrgOrFail($request);
+
+        if (!$this->organizationService->hasPermission($org->id, $user->id, 'reader')) {
+            return Response::redirect('/?error=' . \urlencode(__('ui.messages.access_denied')));
+        }
+
+        return $this->html($this->view->render('web/organization_settings', [
+            'title' => __('ui.titles.manage_organization'),
+            'user' => $user,
+            'organization' => $org,
+            'queryError' => $request->query('error'),
+            'querySuccess' => $request->query('success'),
+            'canManageSettings' => $this->organizationService->hasPermission($org->id, $user->id, 'admin'),
+            'activeSettingsSection' => 'settings',
+        ]));
+    }
+
+    public function showOrganizationMembers(Request $request): Response
+    {
         $user = AuthContext::requireUser();
         $org = $this->findOrgOrFail($request);
 
@@ -337,18 +366,39 @@ final class WebController
         }
 
         $members = $this->organizationService->listMembers($org->id);
-        $invites = $this->inviteService->listActive($org->id);
 
-        return $this->html($this->view->render('web/organization_manage', [
+        return $this->html($this->view->render('web/organization_members', [
             'title' => __('ui.titles.manage_organization'),
             'user' => $user,
             'organization' => $org,
             'members' => $members,
-            'invites' => $invites,
-            'currentRole' => $this->organizationService->getMemberRole($org->id, $user->id),
             'queryError' => $request->query('error'),
             'querySuccess' => $request->query('success'),
             'canManageSettings' => $this->organizationService->hasPermission($org->id, $user->id, 'admin'),
+            'activeSettingsSection' => 'members',
+        ]));
+    }
+
+    public function showOrganizationInvites(Request $request): Response
+    {
+        $user = AuthContext::requireUser();
+        $org = $this->findOrgOrFail($request);
+
+        if (!$this->organizationService->hasPermission($org->id, $user->id, 'reader')) {
+            return Response::redirect('/?error=' . \urlencode(__('ui.messages.access_denied')));
+        }
+
+        $invites = $this->inviteService->listActive($org->id);
+
+        return $this->html($this->view->render('web/organization_invites', [
+            'title' => __('ui.titles.manage_organization'),
+            'user' => $user,
+            'organization' => $org,
+            'invites' => $invites,
+            'queryError' => $request->query('error'),
+            'querySuccess' => $request->query('success'),
+            'canManageSettings' => $this->organizationService->hasPermission($org->id, $user->id, 'admin'),
+            'activeSettingsSection' => 'invites',
         ]));
     }
 
@@ -358,7 +408,7 @@ final class WebController
         $org = $this->findOrgOrFail($request);
 
         if (!$this->organizationService->hasPermission($org->id, $user->id, 'admin')) {
-            return Response::redirect('/organizations/' . \urlencode($org->uuid) . '/manage?error=' . \urlencode(__('ui.messages.access_denied')));
+            return Response::redirect($this->settingsSectionUrl($org->uuid, 'settings', error: __('ui.messages.access_denied')));
         }
 
         $description = $request->input('description');
@@ -388,10 +438,10 @@ final class WebController
                 $this->deleteUploadedFile($avatarPath);
             }
 
-            return Response::redirect('/organizations/' . \urlencode($org->uuid) . '/manage?error=' . \urlencode($e->getMessage()));
+            return Response::redirect($this->settingsSectionUrl($org->uuid, 'settings', error: $e->getMessage()));
         }
 
-        return Response::redirect('/organizations/' . \urlencode($org->uuid) . '/manage?success=' . \urlencode(__('ui.organization_manage.settings_saved')));
+        return Response::redirect($this->settingsSectionUrl($org->uuid, 'settings', success: __('ui.organization_manage.settings_saved')));
     }
 
     public function showOrganizationGroups(Request $request): Response
@@ -421,6 +471,7 @@ final class WebController
             'queryError' => $request->query('error'),
             'querySuccess' => $request->query('success'),
             'canManageGroups' => $this->organizationService->hasPermission($org->id, $user->id, 'admin'),
+            'activeSettingsSection' => 'groups',
         ]));
     }
 
@@ -574,10 +625,10 @@ final class WebController
         try {
             $this->organizationService->updateMemberRole($org->id, $targetUser->id, $role, $user->id);
         } catch (\Throwable $e) {
-            return Response::redirect('/organizations/' . \urlencode($org->uuid) . '/manage?error=' . \urlencode($e->getMessage()));
+            return Response::redirect($this->settingsSectionUrl($org->uuid, 'members', error: $e->getMessage()));
         }
 
-        return Response::redirect('/organizations/' . \urlencode($org->uuid) . '/manage');
+        return Response::redirect($this->settingsSectionUrl($org->uuid, 'members'));
     }
 
     public function removeMember(Request $request): Response
@@ -589,10 +640,10 @@ final class WebController
         try {
             $this->organizationService->removeMember($org->id, $targetUser->id, $user->id);
         } catch (\Throwable $e) {
-            return Response::redirect('/organizations/' . \urlencode($org->uuid) . '/manage?error=' . \urlencode($e->getMessage()));
+            return Response::redirect($this->settingsSectionUrl($org->uuid, 'members', error: $e->getMessage()));
         }
 
-        return Response::redirect('/organizations/' . \urlencode($org->uuid) . '/manage');
+        return Response::redirect($this->settingsSectionUrl($org->uuid, 'members'));
     }
 
     public function createInvite(Request $request): Response
@@ -609,10 +660,10 @@ final class WebController
         try {
             $this->inviteService->createJoinOrgInvite($org->id, $role, $user->id, $ttl);
         } catch (\Throwable $e) {
-            return Response::redirect('/organizations/' . \urlencode($org->uuid) . '/manage?error=' . \urlencode($e->getMessage()));
+            return Response::redirect($this->settingsSectionUrl($org->uuid, 'invites', error: $e->getMessage()));
         }
 
-        return Response::redirect('/organizations/' . \urlencode($org->uuid) . '/manage');
+        return Response::redirect($this->settingsSectionUrl($org->uuid, 'invites'));
     }
 
     public function revokeInvite(Request $request): Response
@@ -624,10 +675,10 @@ final class WebController
         try {
             $this->inviteService->revoke($inviteUuid, $user->id);
         } catch (\Throwable $e) {
-            return Response::redirect('/organizations/' . \urlencode($org->uuid) . '/manage?error=' . \urlencode($e->getMessage()));
+            return Response::redirect($this->settingsSectionUrl($org->uuid, 'invites', error: $e->getMessage()));
         }
 
-        return Response::redirect('/organizations/' . \urlencode($org->uuid) . '/manage');
+        return Response::redirect($this->settingsSectionUrl($org->uuid, 'invites'));
     }
 
     public function showAudit(Request $request): Response
@@ -652,7 +703,7 @@ final class WebController
             'title' => __('ui.titles.audit_log'),
             'user' => $user,
             'organization' => $org,
-            'entries' => $result['entries'],
+            'entries' => $this->buildAuditViewEntries($org, $result['entries']),
             'meta' => [
                 'total' => $result['total'],
                 'limit' => $result['limit'],
@@ -666,6 +717,833 @@ final class WebController
                 'search' => (string) ($request->query('search') ?? ''),
             ],
         ]));
+    }
+
+    /**
+     * @param AuditLog[] $entries
+     * @return array<int, array<string, mixed>>
+     */
+    private function buildAuditViewEntries(Organization $organization, array $entries): array
+    {
+        $lookup = [
+            'users' => [],
+            'api_keys' => [],
+            'organizations' => [],
+            'groups' => [],
+            'directories' => [],
+            'secrets' => [],
+            'integrations' => [],
+            'invites' => [],
+            'approval_requests' => [],
+            'rotation_services' => [],
+        ];
+
+        $presented = [];
+        foreach ($entries as $entry) {
+            $presented[] = $this->presentAuditEntry($organization, $entry, $lookup);
+        }
+
+        return $presented;
+    }
+
+    /**
+     * @param array<string, array<string, object|null>> $lookup
+     * @return array<string, mixed>
+     */
+    private function presentAuditEntry(Organization $organization, AuditLog $entry, array &$lookup): array
+    {
+        $actor = $this->resolveAuditActor($entry, $lookup);
+        $resource = $this->resolveAuditResource($organization, $entry, $lookup);
+        $title = $this->buildAuditTitleParts($entry, $resource, $lookup);
+
+        return [
+            'title_parts' => $title,
+            'timestamp_html' => local_datetime($entry->createdAt),
+            'status' => $entry->success ? __('ui.app.success') : __('ui.app.failed'),
+            'actor_label' => $actor['label'],
+            'actor_href' => $actor['href'],
+            'details' => $this->buildAuditDetailLines($organization, $entry, $lookup),
+            'ip_address' => $entry->ipAddress,
+        ];
+    }
+
+    /**
+     * @param array<string, array<string, object|null>> $lookup
+     * @return array{label:string, href:?string}
+     */
+    private function resolveAuditActor(AuditLog $entry, array &$lookup): array
+    {
+        if ($entry->userId !== null) {
+            $user = $this->auditLookupUser($entry->userId, $lookup);
+            if ($user !== null) {
+                return ['label' => display_name_for_user($user), 'href' => null];
+            }
+
+            return ['label' => __('ui.audit.unknown_user'), 'href' => null];
+        }
+
+        if ($entry->apiKeyId !== null) {
+            $apiKey = $this->auditLookupApiKey($entry->apiKeyId, $lookup);
+            if ($apiKey !== null) {
+                return [
+                    'label' => __('ui.audit.api_key_actor', ['name' => $apiKey->name]),
+                    'href' => null,
+                ];
+            }
+
+            return ['label' => __('ui.audit.api_key_actor_unknown'), 'href' => null];
+        }
+
+        return ['label' => __('ui.audit.system_actor'), 'href' => null];
+    }
+
+    /**
+     * @param array<string, array<string, object|null>> $lookup
+     * @return array{label:?string, href:?string}
+     */
+    private function resolveAuditResource(Organization $organization, AuditLog $entry, array &$lookup): array
+    {
+        $resourceType = $entry->resourceType;
+        if ($resourceType === null) {
+            return ['label' => null, 'href' => null];
+        }
+
+        return match ($resourceType) {
+            'organization' => $this->resolveAuditOrganizationResource($entry, $lookup),
+            'user' => $this->resolveAuditUserResource($entry, $lookup),
+            'group' => $this->resolveAuditGroupResource($organization, $entry, $lookup),
+            'directory' => $this->resolveAuditDirectoryResource($organization, $entry, $lookup),
+            'secret' => $this->resolveAuditSecretResource($organization, $entry, $lookup),
+            'api_key' => $this->resolveAuditApiKeyResource($organization, $entry, $lookup),
+            'integration' => $this->resolveAuditIntegrationResource($organization, $entry, $lookup),
+            'invite' => $this->resolveAuditInviteResource($organization, $entry, $lookup),
+            'approval_request' => $this->resolveAuditApprovalRequestResource($entry, $lookup),
+            'rotation_service' => $this->resolveAuditRotationServiceResource($entry, $lookup),
+            default => ['label' => $this->formatAuditResourceFallback($resourceType, $entry), 'href' => null],
+        };
+    }
+
+    /**
+     * @param array<string, array<string, object|null>> $lookup
+     * @return string[]
+     */
+    private function buildAuditDetailLines(Organization $organization, AuditLog $entry, array &$lookup): array
+    {
+        $details = $entry->details();
+        $lines = [];
+
+        if ($entry->apiKeyId !== null) {
+            $apiKey = $this->auditLookupApiKey($entry->apiKeyId, $lookup);
+            if ($apiKey !== null) {
+                $lines[] = __('ui.audit.via_api_key', ['name' => $apiKey->name]);
+            }
+        }
+
+        if (isset($details['role']) && \is_string($details['role']) && $details['role'] !== ''
+            && !\in_array($entry->action, ['invite.create', 'org.member_role_update'], true)) {
+            $lines[] = __('ui.audit.detail.role', ['role' => $this->translateAuditRole($details['role'])]);
+        }
+
+        if (isset($details['type']) && \is_string($details['type']) && $details['type'] !== ''
+            && !\in_array($entry->action, ['invite.create', 'invite.revoke', 'invite.accept'], true)) {
+            $type = $this->translateAuditType($details['type']);
+            if (str_starts_with($entry->action, 'invite.')) {
+                $lines[] = __('ui.audit.detail.invite_type', ['type' => $type]);
+            } else {
+                $lines[] = __('ui.audit.detail.type', ['type' => $type]);
+            }
+        }
+
+        if (isset($details['request_type']) && \is_string($details['request_type']) && $details['request_type'] !== ''
+            && !\in_array($entry->action, ['approval.request_create'], true)) {
+            $lines[] = __('ui.audit.detail.request_type', [
+                'type' => $this->translateAuditRequestType($details['request_type']),
+            ]);
+        }
+
+        $targetUserId = $details['target_user_id'] ?? null;
+        if (\is_scalar($targetUserId) && (string) $targetUserId !== ''
+            && !\in_array($entry->action, ['group.member_add', 'group.member_remove'], true)) {
+            $user = $this->auditLookupUser((string) $targetUserId, $lookup);
+            $lines[] = __('ui.audit.detail.target_user', [
+                'user' => $user !== null ? display_name_for_user($user) : __('ui.audit.unknown_user'),
+            ]);
+        }
+
+        $newOwnerId = $details['new_owner_id'] ?? null;
+        if (\is_scalar($newOwnerId) && (string) $newOwnerId !== ''
+            && !\in_array($entry->action, ['org.transfer_ownership'], true)) {
+            $user = $this->auditLookupUser((string) $newOwnerId, $lookup);
+            $lines[] = __('ui.audit.detail.new_owner', [
+                'user' => $user !== null ? display_name_for_user($user) : __('ui.audit.unknown_user'),
+            ]);
+        }
+
+        if (isset($details['permission']) && \is_string($details['permission']) && $details['permission'] !== '') {
+            $effect = !empty($details['is_deny'])
+                ? __('ui.audit.permission_effect_deny')
+                : __('ui.audit.permission_effect_allow');
+            $lines[] = __('ui.audit.detail.permission', [
+                'permission' => $this->translateAuditPermission($details['permission']),
+                'effect' => $effect,
+            ]);
+        }
+
+        if (isset($details['subject_type']) && \is_string($details['subject_type']) && isset($details['subject_id']) && \is_scalar($details['subject_id'])) {
+            $lines[] = __('ui.audit.detail.subject', [
+                'subject' => $this->resolveAuditSubjectLabel((string) $details['subject_type'], (string) $details['subject_id'], $lookup),
+            ]);
+        }
+
+        if (isset($details['path']) && \is_string($details['path']) && $details['path'] !== '') {
+            $lines[] = __('ui.audit.detail.path', ['path' => $details['path']]);
+        }
+
+        if (isset($details['bucket']) && \is_string($details['bucket']) && $details['bucket'] !== '') {
+            $lines[] = __('ui.audit.detail.bucket', ['bucket' => $this->translateAuditBucket($details['bucket'])]);
+        }
+
+        if (\array_key_exists('verified', $details)) {
+            $lines[] = !empty($details['verified'])
+                ? __('ui.audit.detail.verified_yes')
+                : __('ui.audit.detail.verified_no');
+        }
+
+        if (isset($details['rotation_service_uuid']) && \is_string($details['rotation_service_uuid']) && $details['rotation_service_uuid'] !== '') {
+            $rotationService = $this->auditLookupRotationServiceByUuid($details['rotation_service_uuid'], $lookup);
+            if ($rotationService !== null) {
+                $lines[] = __('ui.audit.detail.rotation_service', ['name' => $rotationService->name]);
+            }
+        }
+
+        if (isset($details['secret_uuid']) && \is_string($details['secret_uuid']) && $details['secret_uuid'] !== '') {
+            $secret = Secret::findByUuid($details['secret_uuid']);
+            if ($secret !== null) {
+                $lines[] = __('ui.audit.detail.related_secret', ['secret' => $secret->name]);
+            }
+        }
+
+        return $lines;
+    }
+
+    /**
+     * @param array{label:?string, href:?string} $resource
+     * @param array<string, array<string, object|null>> $lookup
+     * @return array<int, array{text:string, href:?string, accent:bool}>
+     */
+    private function buildAuditTitleParts(AuditLog $entry, array $resource, array &$lookup): array
+    {
+        $details = $entry->details();
+
+        return match ($entry->action) {
+            'org.member_remove' => $this->auditSentenceParts([
+                ['text' => __('ui.audit.templates.org_member_remove_before')],
+                $this->auditUserPart($entry->resourceId, $lookup),
+                ['text' => __('ui.audit.templates.org_member_remove_after')],
+            ]),
+            'org.member_add' => $this->auditSentenceParts([
+                ['text' => __('ui.audit.templates.org_member_add_before')],
+                $this->auditUserPart($entry->resourceId, $lookup),
+                ['text' => __('ui.audit.templates.org_member_add_after')],
+            ]),
+            'org.member_role_update' => $this->auditSentenceParts([
+                ['text' => __('ui.audit.templates.org_member_role_update_before')],
+                $this->auditUserPart($entry->resourceId, $lookup),
+                ['text' => __('ui.audit.templates.org_member_role_update_after', [
+                    'role' => $this->translateAuditRole((string) ($details['role'] ?? '')),
+                ])],
+            ]),
+            'group.create' => $this->auditSentenceParts([
+                ['text' => __('ui.audit.templates.group_create_before')],
+                $this->auditResourcePart($resource),
+            ]),
+            'group.delete' => $this->auditSentenceParts([
+                ['text' => __('ui.audit.templates.group_delete_before')],
+                $this->auditResourcePart($resource),
+            ]),
+            'group.member_add' => $this->auditSentenceParts([
+                ['text' => __('ui.audit.templates.group_member_add_before')],
+                $this->auditUserPart($this->scalarToString($details['target_user_id'] ?? null), $lookup),
+                ['text' => __('ui.audit.templates.group_member_add_middle')],
+                $this->auditResourcePart($resource),
+            ]),
+            'group.member_remove' => $this->auditSentenceParts([
+                ['text' => __('ui.audit.templates.group_member_remove_before')],
+                $this->auditUserPart($this->scalarToString($details['target_user_id'] ?? null), $lookup),
+                ['text' => __('ui.audit.templates.group_member_remove_middle')],
+                $this->auditResourcePart($resource),
+            ]),
+            'secret.read' => $this->auditSentenceParts([
+                ['text' => __('ui.audit.templates.secret_read_before')],
+                $this->auditResourcePart($resource),
+            ]),
+            'secret.create' => $this->auditSentenceParts([
+                ['text' => __('ui.audit.templates.secret_create_before')],
+                $this->auditResourcePart($resource),
+            ]),
+            'secret.update' => $this->auditSentenceParts([
+                ['text' => __('ui.audit.templates.secret_update_before')],
+                $this->auditResourcePart($resource),
+            ]),
+            'secret.delete' => $this->auditSentenceParts([
+                ['text' => __('ui.audit.templates.secret_delete_before')],
+                $this->auditResourcePart($resource),
+            ]),
+            'invite.create' => $this->auditSentenceParts([
+                ['text' => __('ui.audit.templates.invite_create', [
+                    'type' => $this->translateAuditType((string) ($details['type'] ?? 'join_org')),
+                    'role' => $this->translateAuditRole((string) ($details['role'] ?? 'reader')),
+                ])],
+            ]),
+            'invite.revoke' => $this->auditSentenceParts([
+                ['text' => __('ui.audit.templates.invite_revoke', [
+                    'type' => $this->translateAuditType((string) ($details['type'] ?? 'join_org')),
+                ])],
+            ]),
+            'invite.accept' => $this->auditSentenceParts([
+                ['text' => __('ui.audit.templates.invite_accept', [
+                    'type' => $this->translateAuditType((string) ($details['type'] ?? 'join_org')),
+                ])],
+            ]),
+            'org.transfer_ownership' => $this->auditSentenceParts([
+                ['text' => __('ui.audit.templates.org_transfer_ownership_before')],
+                $this->auditUserPart($this->scalarToString($details['new_owner_id'] ?? null), $lookup),
+            ]),
+            default => $this->auditDefaultTitleParts($entry, $resource),
+        };
+    }
+
+    /**
+     * @param array<int, array{text:string, href:?string, accent:bool}> $parts
+     * @return array<int, array{text:string, href:?string, accent:bool}>
+     */
+    private function auditSentenceParts(array $parts): array
+    {
+        $normalized = [];
+
+        foreach ($parts as $part) {
+            $text = (string) ($part['text'] ?? '');
+            if ($text === '') {
+                continue;
+            }
+
+            $normalized[] = [
+                'text' => $text,
+                'href' => isset($part['href']) && \is_string($part['href']) && $part['href'] !== '' ? $part['href'] : null,
+                'accent' => !empty($part['accent']),
+            ];
+        }
+
+        return $normalized;
+    }
+
+    /**
+     * @param array{label:?string, href:?string} $resource
+     * @return array{text:string, href:?string, accent:bool}
+     */
+    private function auditResourcePart(array $resource): array
+    {
+        return [
+            'text' => (string) ($resource['label'] ?? ''),
+            'href' => $resource['href'],
+            'accent' => true,
+        ];
+    }
+
+    /**
+     * @param array<string, array<string, object|null>> $lookup
+     * @return array{text:string, href:?string, accent:bool}
+     */
+    private function auditUserPart(?string $userId, array &$lookup): array
+    {
+        if ($userId === null || $userId === '') {
+            return ['text' => __('ui.audit.unknown_user'), 'href' => null, 'accent' => true];
+        }
+
+        $user = $this->auditLookupUser($userId, $lookup);
+        return [
+            'text' => $user !== null ? display_name_for_user($user) : __('ui.audit.unknown_user'),
+            'href' => null,
+            'accent' => true,
+        ];
+    }
+
+    /**
+     * @param array{label:?string, href:?string} $resource
+     * @return array<int, array{text:string, href:?string, accent:bool}>
+     */
+    private function auditDefaultTitleParts(AuditLog $entry, array $resource): array
+    {
+        $parts = [[
+            'text' => $this->translateAuditAction($entry->action),
+            'href' => null,
+            'accent' => false,
+        ]];
+
+        if (($resource['label'] ?? null) !== null) {
+            $parts[] = ['text' => ' ', 'href' => null, 'accent' => false];
+            $parts[] = $this->auditResourcePart($resource);
+        }
+
+        return $parts;
+    }
+
+    private function scalarToString(mixed $value): ?string
+    {
+        if (!\is_scalar($value)) {
+            return null;
+        }
+
+        $value = (string) $value;
+        return $value !== '' ? $value : null;
+    }
+
+    private function translateAuditAction(string $action): string
+    {
+        $key = 'ui.audit.actions.' . \str_replace(['.', '-'], '_', $action);
+        $translated = __($key);
+        return $translated !== $key ? $translated : $action;
+    }
+
+    private function translateAuditRole(string $role): string
+    {
+        $key = 'ui.audit.roles.' . $role;
+        $translated = __($key);
+        return $translated !== $key ? $translated : $role;
+    }
+
+    private function translateAuditType(string $type): string
+    {
+        $key = 'ui.audit.types.' . $type;
+        $translated = __($key);
+        return $translated !== $key ? $translated : $type;
+    }
+
+    private function translateAuditRequestType(string $type): string
+    {
+        $key = 'ui.audit.request_types.' . $type;
+        $translated = __($key);
+        return $translated !== $key ? $translated : $type;
+    }
+
+    private function translateAuditPermission(string $permission): string
+    {
+        $key = 'ui.audit.permissions.' . $permission;
+        $translated = __($key);
+        return $translated !== $key ? $translated : $permission;
+    }
+
+    private function translateAuditBucket(string $bucket): string
+    {
+        $key = 'ui.audit.buckets.' . $bucket;
+        $translated = __($key);
+        return $translated !== $key ? $translated : $bucket;
+    }
+
+    private function translateAuditResourceType(string $resourceType): string
+    {
+        $key = 'ui.audit.resource_types.' . $resourceType;
+        $translated = __($key);
+        return $translated !== $key ? $translated : $resourceType;
+    }
+
+    private function formatAuditResourceFallback(string $resourceType, AuditLog $entry): string
+    {
+        $identifier = $entry->resourceUuid ?? $entry->resourceId ?? __('ui.audit.resource_deleted');
+        return __('ui.audit.resource_fallback', [
+            'type' => $this->translateAuditResourceType($resourceType),
+            'identifier' => $identifier,
+        ]);
+    }
+
+    /**
+     * @param array<string, array<string, object|null>> $lookup
+     * @return array{label:?string, href:?string}
+     */
+    private function resolveAuditOrganizationResource(AuditLog $entry, array &$lookup): array
+    {
+        $organizationId = $entry->resourceId ?? $entry->organizationId;
+        if ($organizationId === null) {
+            return ['label' => $this->formatAuditResourceFallback('organization', $entry), 'href' => null];
+        }
+
+        $organization = $this->auditLookupOrganization($organizationId, $lookup);
+        if ($organization === null) {
+            return ['label' => $this->formatAuditResourceFallback('organization', $entry), 'href' => null];
+        }
+
+        return [
+            'label' => $organization->name,
+            'href' => '/organizations/' . \urlencode($organization->uuid),
+        ];
+    }
+
+    /**
+     * @param array<string, array<string, object|null>> $lookup
+     * @return array{label:?string, href:?string}
+     */
+    private function resolveAuditUserResource(AuditLog $entry, array &$lookup): array
+    {
+        if ($entry->resourceId === null) {
+            return ['label' => $this->formatAuditResourceFallback('user', $entry), 'href' => null];
+        }
+
+        $user = $this->auditLookupUser($entry->resourceId, $lookup);
+        if ($user === null) {
+            return ['label' => $this->formatAuditResourceFallback('user', $entry), 'href' => null];
+        }
+
+        return ['label' => display_name_for_user($user), 'href' => null];
+    }
+
+    /**
+     * @param array<string, array<string, object|null>> $lookup
+     * @return array{label:?string, href:?string}
+     */
+    private function resolveAuditGroupResource(Organization $organization, AuditLog $entry, array &$lookup): array
+    {
+        if ($entry->resourceId === null) {
+            return ['label' => $this->formatAuditResourceFallback('group', $entry), 'href' => null];
+        }
+
+        $group = $this->auditLookupGroup($entry->resourceId, $lookup);
+        if ($group === null) {
+            return ['label' => $this->formatAuditResourceFallback('group', $entry), 'href' => null];
+        }
+
+        return [
+            'label' => $group->name,
+            'href' => '/organizations/' . \urlencode($organization->uuid) . '/groups/' . \urlencode($group->uuid),
+        ];
+    }
+
+    /**
+     * @param array<string, array<string, object|null>> $lookup
+     * @return array{label:?string, href:?string}
+     */
+    private function resolveAuditDirectoryResource(Organization $organization, AuditLog $entry, array &$lookup): array
+    {
+        if ($entry->resourceId === null) {
+            return ['label' => $this->formatAuditResourceFallback('directory', $entry), 'href' => null];
+        }
+
+        $directory = $this->auditLookupDirectory($entry->resourceId, $lookup);
+        if ($directory === null) {
+            return ['label' => $this->formatAuditResourceFallback('directory', $entry), 'href' => null];
+        }
+
+        $isRootSecretsDir = $this->isRootSecretDirectoryUuid($organization, $directory->uuid);
+
+        return [
+            'label' => $isRootSecretsDir ? __('ui.organization.root_level') : $directory->name,
+            'href' => $this->organizationUrl($organization->uuid, $isRootSecretsDir ? null : $directory->uuid),
+        ];
+    }
+
+    /**
+     * @param array<string, array<string, object|null>> $lookup
+     * @return array{label:?string, href:?string}
+     */
+    private function resolveAuditSecretResource(Organization $organization, AuditLog $entry, array &$lookup): array
+    {
+        if ($entry->resourceId === null) {
+            return ['label' => $this->formatAuditResourceFallback('secret', $entry), 'href' => null];
+        }
+
+        $secret = $this->auditLookupSecret($entry->resourceId, $lookup);
+        if ($secret === null) {
+            return ['label' => $this->formatAuditResourceFallback('secret', $entry), 'href' => null];
+        }
+
+        $directory = $this->auditLookupDirectory($secret->directoryId, $lookup);
+        if ($directory === null) {
+            return ['label' => $secret->name, 'href' => null];
+        }
+
+        return [
+            'label' => $secret->name,
+            'href' => $this->secretUrl($organization->uuid, $directory->uuid, $secret->uuid),
+        ];
+    }
+
+    /**
+     * @param array<string, array<string, object|null>> $lookup
+     * @return array{label:?string, href:?string}
+     */
+    private function resolveAuditApiKeyResource(Organization $organization, AuditLog $entry, array &$lookup): array
+    {
+        $apiKeyId = $entry->resourceId ?? $entry->apiKeyId;
+        if ($apiKeyId === null) {
+            return ['label' => $this->formatAuditResourceFallback('api_key', $entry), 'href' => null];
+        }
+
+        $apiKey = $this->auditLookupApiKey($apiKeyId, $lookup);
+        if ($apiKey === null) {
+            return ['label' => $this->formatAuditResourceFallback('api_key', $entry), 'href' => null];
+        }
+
+        return [
+            'label' => $apiKey->name,
+            'href' => '/organizations/' . \urlencode($organization->uuid) . '/api-keys',
+        ];
+    }
+
+    /**
+     * @param array<string, array<string, object|null>> $lookup
+     * @return array{label:?string, href:?string}
+     */
+    private function resolveAuditIntegrationResource(Organization $organization, AuditLog $entry, array &$lookup): array
+    {
+        if ($entry->resourceId === null) {
+            return ['label' => $this->formatAuditResourceFallback('integration', $entry), 'href' => null];
+        }
+
+        $integration = $this->auditLookupIntegration($entry->resourceId, $lookup);
+        if ($integration === null) {
+            return ['label' => $this->formatAuditResourceFallback('integration', $entry), 'href' => null];
+        }
+
+        return [
+            'label' => $integration->name,
+            'href' => '/organizations/' . \urlencode($organization->uuid) . '/integrations',
+        ];
+    }
+
+    /**
+     * @param array<string, array<string, object|null>> $lookup
+     * @return array{label:?string, href:?string}
+     */
+    private function resolveAuditInviteResource(Organization $organization, AuditLog $entry, array &$lookup): array
+    {
+        if ($entry->resourceId === null) {
+            return ['label' => $this->formatAuditResourceFallback('invite', $entry), 'href' => null];
+        }
+
+        $invite = $this->auditLookupInvite($entry->resourceId, $lookup);
+        if ($invite === null) {
+            return ['label' => $this->formatAuditResourceFallback('invite', $entry), 'href' => null];
+        }
+
+        return [
+            'label' => __('ui.audit.invite_label', ['type' => $this->translateAuditType($invite->type)]),
+            'href' => '/organizations/' . \urlencode($organization->uuid) . '/manage/invites',
+        ];
+    }
+
+    /**
+     * @param array<string, array<string, object|null>> $lookup
+     * @return array{label:?string, href:?string}
+     */
+    private function resolveAuditApprovalRequestResource(AuditLog $entry, array &$lookup): array
+    {
+        if ($entry->resourceId === null) {
+            return ['label' => $this->formatAuditResourceFallback('approval_request', $entry), 'href' => null];
+        }
+
+        $request = $this->auditLookupApprovalRequest($entry->resourceId, $lookup);
+        if ($request === null) {
+            return ['label' => $this->formatAuditResourceFallback('approval_request', $entry), 'href' => null];
+        }
+
+        return [
+            'label' => __('ui.audit.approval_request_label', [
+                'type' => $this->translateAuditRequestType($request->requestType),
+            ]),
+            'href' => null,
+        ];
+    }
+
+    /**
+     * @param array<string, array<string, object|null>> $lookup
+     * @return array{label:?string, href:?string}
+     */
+    private function resolveAuditRotationServiceResource(AuditLog $entry, array &$lookup): array
+    {
+        if ($entry->resourceId === null) {
+            return ['label' => $this->formatAuditResourceFallback('rotation_service', $entry), 'href' => null];
+        }
+
+        $rotationService = $this->auditLookupRotationService($entry->resourceId, $lookup);
+        if ($rotationService === null) {
+            return ['label' => $this->formatAuditResourceFallback('rotation_service', $entry), 'href' => null];
+        }
+
+        return ['label' => $rotationService->name, 'href' => null];
+    }
+
+    /**
+     * @param array<string, array<string, object|null>> $lookup
+     */
+    private function resolveAuditSubjectLabel(string $subjectType, string $subjectId, array &$lookup): string
+    {
+        if ($subjectType === 'user') {
+            $user = $this->auditLookupUser($subjectId, $lookup);
+            return $user !== null ? display_name_for_user($user) : __('ui.audit.unknown_user');
+        }
+
+        if ($subjectType === 'group') {
+            $group = $this->auditLookupGroup($subjectId, $lookup);
+            return $group !== null ? $group->name : __('ui.audit.unknown_group');
+        }
+
+        return __('ui.audit.resource_fallback', [
+            'type' => $this->translateAuditResourceType($subjectType),
+            'identifier' => $subjectId,
+        ]);
+    }
+
+    /**
+     * @param array<string, array<string, object|null>> $lookup
+     */
+    private function auditLookupUser(string $userId, array &$lookup): ?User
+    {
+        if (!\array_key_exists($userId, $lookup['users'])) {
+            $lookup['users'][$userId] = User::findById($userId);
+        }
+
+        $user = $lookup['users'][$userId];
+        return $user instanceof User ? $user : null;
+    }
+
+    /**
+     * @param array<string, array<string, object|null>> $lookup
+     */
+    private function auditLookupApiKey(string $apiKeyId, array &$lookup): ?ApiKey
+    {
+        if (!\array_key_exists($apiKeyId, $lookup['api_keys'])) {
+            $lookup['api_keys'][$apiKeyId] = ApiKey::findById($apiKeyId);
+        }
+
+        $apiKey = $lookup['api_keys'][$apiKeyId];
+        return $apiKey instanceof ApiKey ? $apiKey : null;
+    }
+
+    /**
+     * @param array<string, array<string, object|null>> $lookup
+     */
+    private function auditLookupOrganization(string $organizationId, array &$lookup): ?Organization
+    {
+        if (!\array_key_exists($organizationId, $lookup['organizations'])) {
+            $lookup['organizations'][$organizationId] = Organization::findById($organizationId);
+        }
+
+        $organization = $lookup['organizations'][$organizationId];
+        return $organization instanceof Organization ? $organization : null;
+    }
+
+    /**
+     * @param array<string, array<string, object|null>> $lookup
+     */
+    private function auditLookupGroup(string $groupId, array &$lookup): ?Group
+    {
+        if (!\array_key_exists($groupId, $lookup['groups'])) {
+            $lookup['groups'][$groupId] = Group::findById($groupId);
+        }
+
+        $group = $lookup['groups'][$groupId];
+        return $group instanceof Group ? $group : null;
+    }
+
+    /**
+     * @param array<string, array<string, object|null>> $lookup
+     */
+    private function auditLookupDirectory(string $directoryId, array &$lookup): ?Directory
+    {
+        if (!\array_key_exists($directoryId, $lookup['directories'])) {
+            $lookup['directories'][$directoryId] = Directory::findById($directoryId);
+        }
+
+        $directory = $lookup['directories'][$directoryId];
+        return $directory instanceof Directory ? $directory : null;
+    }
+
+    /**
+     * @param array<string, array<string, object|null>> $lookup
+     */
+    private function auditLookupSecret(string $secretId, array &$lookup): ?Secret
+    {
+        if (!\array_key_exists($secretId, $lookup['secrets'])) {
+            $lookup['secrets'][$secretId] = Secret::findById($secretId);
+        }
+
+        $secret = $lookup['secrets'][$secretId];
+        return $secret instanceof Secret ? $secret : null;
+    }
+
+    /**
+     * @param array<string, array<string, object|null>> $lookup
+     */
+    private function auditLookupIntegration(string $integrationId, array &$lookup): ?OrganizationIntegration
+    {
+        if (!\array_key_exists($integrationId, $lookup['integrations'])) {
+            $lookup['integrations'][$integrationId] = OrganizationIntegration::findById($integrationId);
+        }
+
+        $integration = $lookup['integrations'][$integrationId];
+        return $integration instanceof OrganizationIntegration ? $integration : null;
+    }
+
+    /**
+     * @param array<string, array<string, object|null>> $lookup
+     */
+    private function auditLookupInvite(string $inviteId, array &$lookup): ?InviteLink
+    {
+        if (!\array_key_exists($inviteId, $lookup['invites'])) {
+            $invite = InviteLink::findByUuid($inviteId);
+            if ($invite === null && ctype_digit($inviteId)) {
+                $invite = Database::getInstance()->fetchOne('SELECT * FROM invite_links WHERE id = ?', [(int) $inviteId]);
+                $invite = \is_array($invite) ? InviteLink::fromRow($invite) : null;
+            }
+            $lookup['invites'][$inviteId] = $invite;
+        }
+
+        $invite = $lookup['invites'][$inviteId];
+        return $invite instanceof InviteLink ? $invite : null;
+    }
+
+    /**
+     * @param array<string, array<string, object|null>> $lookup
+     */
+    private function auditLookupApprovalRequest(string $requestId, array &$lookup): ?ApprovalRequest
+    {
+        if (!\array_key_exists($requestId, $lookup['approval_requests'])) {
+            $lookup['approval_requests'][$requestId] = ApprovalRequest::findById($requestId);
+        }
+
+        $request = $lookup['approval_requests'][$requestId];
+        return $request instanceof ApprovalRequest ? $request : null;
+    }
+
+    /**
+     * @param array<string, array<string, object|null>> $lookup
+     */
+    private function auditLookupRotationService(string $rotationServiceId, array &$lookup): ?RotationServiceModel
+    {
+        if (!\array_key_exists($rotationServiceId, $lookup['rotation_services'])) {
+            $lookup['rotation_services'][$rotationServiceId] = RotationServiceModel::findById($rotationServiceId);
+        }
+
+        $rotationService = $lookup['rotation_services'][$rotationServiceId];
+        return $rotationService instanceof RotationServiceModel ? $rotationService : null;
+    }
+
+    /**
+     * @param array<string, array<string, object|null>> $lookup
+     */
+    private function auditLookupRotationServiceByUuid(string $uuid, array &$lookup): ?RotationServiceModel
+    {
+        foreach ($lookup['rotation_services'] as $rotationService) {
+            if ($rotationService instanceof RotationServiceModel && $rotationService->uuid === $uuid) {
+                return $rotationService;
+            }
+        }
+
+        $rotationService = RotationServiceModel::findByUuid($uuid);
+        if ($rotationService !== null) {
+            $lookup['rotation_services'][$rotationService->id] = $rotationService;
+        }
+
+        return $rotationService;
     }
 
     public function showProfile(Request $request): Response
@@ -851,7 +1729,7 @@ final class WebController
         try {
             $keys = $this->apiKeyService->listForOrg($org->id, $user->id);
         } catch (\Throwable $e) {
-            return Response::redirect('/organizations/' . \urlencode($org->uuid) . '/manage?error=' . \urlencode($e->getMessage()));
+            return Response::redirect($this->settingsSectionUrl($org->uuid, 'api-keys', error: $e->getMessage()));
         }
 
         return $this->html($this->view->render('web/api_keys', [
@@ -862,6 +1740,7 @@ final class WebController
             'createdRawKey' => null,
             'queryError' => $request->query('error'),
             'querySuccess' => $request->query('success'),
+            'activeSettingsSection' => 'api-keys',
         ]));
     }
 
@@ -895,6 +1774,7 @@ final class WebController
             'createdKeyUuid' => $apiKey->uuid,
             'queryError' => null,
             'querySuccess' => __('ui.api_keys.created_copy_now'),
+            'activeSettingsSection' => 'api-keys',
         ]));
     }
 
@@ -1027,7 +1907,7 @@ final class WebController
         try {
             $integrations = $this->organizationIntegrationService->listForOrg($org->id, $user->id);
         } catch (\Throwable $e) {
-            return Response::redirect('/organizations/' . \urlencode($org->uuid) . '/manage?error=' . \urlencode($e->getMessage()));
+            return Response::redirect($this->settingsSectionUrl($org->uuid, 'integrations', error: $e->getMessage()));
         }
 
         return $this->html($this->view->render('web/integrations', [
@@ -1039,6 +1919,7 @@ final class WebController
             'serviceMap' => $this->buildRotationServiceMap(),
             'queryError' => $request->query('error'),
             'querySuccess' => $request->query('success'),
+            'activeSettingsSection' => 'integrations',
         ]));
     }
 
@@ -1540,6 +2421,33 @@ final class WebController
         }
 
         return $url;
+    }
+
+    private function settingsSectionUrl(string $orgUuid, string $section, ?string $error = null, ?string $success = null): string
+    {
+        $basePath = match ($section) {
+            'settings' => '/organizations/' . \urlencode($orgUuid) . '/manage/settings',
+            'members' => '/organizations/' . \urlencode($orgUuid) . '/manage/members',
+            'invites' => '/organizations/' . \urlencode($orgUuid) . '/manage/invites',
+            'groups' => '/organizations/' . \urlencode($orgUuid) . '/groups',
+            'api-keys' => '/organizations/' . \urlencode($orgUuid) . '/api-keys',
+            'integrations' => '/organizations/' . \urlencode($orgUuid) . '/integrations',
+            default => '/organizations/' . \urlencode($orgUuid) . '/manage/settings',
+        };
+
+        $params = [];
+        if ($error !== null && $error !== '') {
+            $params['error'] = $error;
+        }
+        if ($success !== null && $success !== '') {
+            $params['success'] = $success;
+        }
+
+        if ($params === []) {
+            return $basePath;
+        }
+
+        return $basePath . '?' . http_build_query($params);
     }
 
     /**
