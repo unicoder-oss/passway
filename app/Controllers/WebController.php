@@ -18,6 +18,7 @@ use Passway\Models\OrganizationMember;
 use Passway\Models\Passkey;
 use Passway\Models\RotationService as RotationServiceModel;
 use Passway\Models\Secret;
+use Passway\Models\Template;
 use Passway\Models\User;
 use Passway\Services\AuditService;
 use Passway\Services\ApiKeyService;
@@ -140,7 +141,10 @@ final class WebController
         $name = \trim((string) ($request->input('name') ?? ''));
         $type = \trim((string) ($request->input('type') ?? 'static'));
         $value = (string) ($request->input('value') ?? '');
+        $generatedValue = $request->input('generated_value');
+        $generatedValue = \is_string($generatedValue) ? $generatedValue : null;
         $templateUuid = \trim((string) ($request->input('template_uuid') ?? ''));
+        $templateOverrides = $this->parseTemplateOverridesRequestInput($request->input('template_overrides'));
         $rotationIntegrationUuid = \trim((string) ($request->input('rotation_integration_uuid') ?? ''));
         $rotationSchedule = \trim((string) ($request->input('rotation_schedule') ?? ''));
 
@@ -152,8 +156,9 @@ final class WebController
                     $name,
                     $templateUuid,
                     $user->id,
-                    [],
+                    $templateOverrides,
                     $rotationSchedule !== '' ? $rotationSchedule : null,
+                    $generatedValue,
                 );
             } else {
                 $this->secretService->create(
@@ -189,6 +194,18 @@ final class WebController
         $searchDirectories = [];
         $searchSecrets = [];
         $search = \trim((string) ($request->query('q') ?? ''));
+        $canManageOrganization = $this->organizationService->hasPermission($org->id, $user->id, 'admin');
+        $canViewAudit = $canManageOrganization;
+        $canEditContent = $this->organizationService->hasPermission($org->id, $user->id, 'moderator');
+        $rootSecretDirectory = $this->findRootSecretDirectory($org->id);
+
+        if ($rootSecretDirectory === null && $canEditContent) {
+            try {
+                $rootSecretDirectory = $this->getOrCreateRootSecretDirectory($org, $user);
+            } catch (\Throwable $e) {
+                return Response::redirect($this->organizationUrl($org->uuid, error: $e->getMessage()));
+            }
+        }
 
         try {
             $dirUuid = $request->query('dir');
@@ -200,7 +217,6 @@ final class WebController
                 $secrets = $this->secretService->listInDirectory($currentDir->uuid, $org->id, $user->id);
             } else {
                 $directories = $this->filterVisibleDirectories($this->directoryService->listChildren($org->id, null, $user->id));
-                $rootSecretDirectory = $this->findRootSecretDirectory($org->id);
                 if ($rootSecretDirectory !== null) {
                     $secrets = $this->secretService->listInDirectory($rootSecretDirectory->uuid, $org->id, $user->id);
                 }
@@ -239,7 +255,7 @@ final class WebController
             'organization' => $org,
             'currentDir' => $currentDir,
             'currentDirStats' => $currentDir !== null ? $this->buildCurrentDirectoryStats($currentDir) : null,
-            'rootSecretDirectory' => $this->findRootSecretDirectory($org->id),
+            'rootSecretDirectory' => $rootSecretDirectory,
             'directories' => $directories,
             'directoryPaths' => $directoryPaths,
             'secrets' => $secrets,
@@ -249,9 +265,9 @@ final class WebController
             'currentDirPath' => $currentDirPath,
             'templates' => $this->templateService->listAvailable($org->id),
             'integrations' => $this->listActiveIntegrationsForOrg($org->id),
-            'canManageOrganization' => $this->organizationService->hasPermission($org->id, $user->id, 'admin'),
-            'canViewAudit' => $this->organizationService->hasPermission($org->id, $user->id, 'admin'),
-            'canEditContent' => $this->organizationService->hasPermission($org->id, $user->id, 'moderator'),
+            'canManageOrganization' => $canManageOrganization,
+            'canViewAudit' => $canViewAudit,
+            'canEditContent' => $canEditContent,
             'queryError' => $request->query('error'),
             'search' => $search,
         ]));
@@ -912,6 +928,29 @@ final class WebController
             return Response::redirect($this->organizationUrl($org->uuid, $dirUuid, $e->getMessage()));
         }
 
+        $displayValue = $value;
+        $templateDetails = null;
+        $templateOverrides = [];
+        $templateParameterSchema = [];
+        $templateExtraFields = [];
+
+        if ($secret->type === 'template' && $secret->templateId !== null) {
+            $template = Template::findById($secret->templateId);
+            if ($template !== null) {
+                $templateOverrides = $this->secretService->getTemplateOverrides($secret->uuid, $org->id, $user->id);
+                $templateView = $this->templateService->describeValue($template->uuid, $value, $org->id, $templateOverrides);
+                $displayValue = $templateView['display_value'];
+                $templateParameterSchema = $templateView['parameter_schema'];
+                $templateExtraFields = $templateView['extra_fields'];
+                $templateOverrides = $templateView['overrides'];
+                $templateDetails = [
+                    'uuid' => $template->uuid,
+                    'name' => $template->name,
+                    'type' => $template->type,
+                ];
+            }
+        }
+
         return $this->html($this->view->render('web/secret_show', [
             'title' => __('ui.titles.secret_details'),
             'user' => $user,
@@ -919,9 +958,14 @@ final class WebController
             'directory' => $dir,
             'secret' => $secret,
             'value' => $value,
+            'displayValue' => $displayValue,
             'versions' => $versions,
             'integrations' => $this->listActiveIntegrationsForOrg($org->id),
             'selectedIntegration' => $secret->rotationIntegrationId !== null ? OrganizationIntegration::findById($secret->rotationIntegrationId) : null,
+            'templateDetails' => $templateDetails,
+            'templateOverrides' => $templateOverrides,
+            'templateParameterSchema' => $templateParameterSchema,
+            'templateExtraFields' => $templateExtraFields,
             'error' => $request->query('error'),
         ]));
     }
@@ -970,6 +1014,28 @@ final class WebController
         try {
             $this->secretService->assertCanRotate($secUuid, $org->id, $user->id);
             $this->rotationService->rotateSecretNow($secUuid, $org->id);
+        } catch (\Throwable $e) {
+            return Response::redirect($this->secretUrl($org->uuid, $dirUuid, $secUuid, $e->getMessage()));
+        }
+
+        return Response::redirect($this->secretUrl($org->uuid, $dirUuid, $secUuid));
+    }
+
+    public function regenerateTemplateSecret(Request $request): Response
+    {
+        $user = AuthContext::requireUser();
+        $org = $this->findOrgOrFail($request);
+        $dirUuid = (string) $request->routeParam('dirUuid');
+        $secUuid = (string) $request->routeParam('secUuid');
+
+        try {
+            $this->secretService->regenerateFromTemplate(
+                $secUuid,
+                $org->id,
+                $user->id,
+                $this->parseTemplateOverridesRequestInput($request->input('template_overrides')),
+                \is_string($request->input('generated_value')) ? (string) $request->input('generated_value') : null,
+            );
         } catch (\Throwable $e) {
             return Response::redirect($this->secretUrl($org->uuid, $dirUuid, $secUuid, $e->getMessage()));
         }
@@ -1346,6 +1412,20 @@ final class WebController
         }
 
         return $decoded;
+    }
+
+    /** @return array<string, mixed> */
+    private function parseTemplateOverridesRequestInput(mixed $input): array
+    {
+        if ($input === null) {
+            return [];
+        }
+
+        if (\is_array($input)) {
+            return $input;
+        }
+
+        return $this->parseJsonObjectInput((string) $input, true);
     }
 
     /** @return array{directories: int, secrets: int} */

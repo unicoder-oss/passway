@@ -86,39 +86,7 @@ final class RotationServiceTest extends DatabaseTestCase
         );
     }
 
-    public function test_rotate_template_secret_replaces_value_and_records_history(): void
-    {
-        $owner = $this->createTestUser();
-        $org = $this->orgService->create('Org', $owner->id);
-        $dir = $this->dirService->create($org->id, null, 'Secrets', $owner->id);
-        $template = Database::getInstance()->fetchOne(
-            'SELECT uuid FROM templates WHERE type = ? ORDER BY id ASC LIMIT 1',
-            ['password']
-        );
-
-        $secret = $this->secretService->createFromTemplate(
-            $org->id,
-            $dir->uuid,
-            'Generated secret',
-            (string) $template['uuid'],
-            $owner->id,
-            ['min_length' => 16, 'max_length' => 16]
-        );
-
-        ['value' => $before] = $this->secretService->get($secret->uuid, $org->id, $owner->id);
-        $rotated = $this->rotationService->rotateTemplateSecret($secret->uuid, $org->id);
-        ['value' => $after] = $this->secretService->get($secret->uuid, $org->id, $owner->id);
-
-        $this->assertNotSame($before, $after);
-        $this->assertSame(2, $rotated->version);
-        $this->assertNotNull($rotated->lastRotatedAt);
-
-        $versions = SecretVersion::findBySecretId($secret->id);
-        $this->assertCount(1, $versions);
-        $this->assertSame('scheduled', $versions[0]->rotationType);
-    }
-
-    public function test_run_due_rotates_due_template_secret(): void
+    public function test_run_due_skips_due_template_secret(): void
     {
         $owner = $this->createTestUser();
         $org = $this->orgService->create('Org', $owner->id);
@@ -153,8 +121,8 @@ final class RotationServiceTest extends DatabaseTestCase
             new \DateTimeImmutable('2026-05-02 02:30:00', new \DateTimeZone('UTC'))
         );
 
-        $this->assertSame(1, $result['rotated']);
-        $this->assertSame(0, $result['skipped']);
+        $this->assertSame(0, $result['rotated']);
+        $this->assertSame(1, $result['skipped']);
         $this->assertSame(0, $result['failed']);
     }
 
@@ -215,7 +183,7 @@ final class RotationServiceTest extends DatabaseTestCase
         $this->assertSame('api', $versions[0]->rotationType);
     }
 
-    public function test_rotate_secret_now_dispatches_template_rotation(): void
+    public function test_rotate_secret_now_rejects_template_secret(): void
     {
         $owner = $this->createTestUser();
         $org = $this->orgService->create('Org', $owner->id);
@@ -233,9 +201,7 @@ final class RotationServiceTest extends DatabaseTestCase
             $owner->id,
         );
 
-        $rotated = $this->rotationService->rotateSecretNow($secret->uuid, $org->id);
-
-        $this->assertSame(2, $rotated->version);
-        $this->assertNotNull($rotated->lastRotatedAt);
+        $this->expectException(\RuntimeException::class);
+        $this->rotationService->rotateSecretNow($secret->uuid, $org->id);
     }
 }

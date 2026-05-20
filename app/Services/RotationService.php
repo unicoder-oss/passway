@@ -38,18 +38,12 @@ final class RotationService
 
         foreach ($this->schedulerService->findDueSecrets($now) as $secret) {
             try {
-                if ($secret->type !== 'template') {
-                    if ($secret->type !== 'dynamic') {
-                        $result['skipped']++;
-                        continue;
-                    }
-
-                    $this->rotateDynamicSecret($secret->uuid, $secret->organizationId);
-                    $result['rotated']++;
+                if ($secret->type !== 'dynamic') {
+                    $result['skipped']++;
                     continue;
                 }
 
-                $this->rotateTemplateSecret($secret->uuid, $secret->organizationId);
+                $this->rotateDynamicSecret($secret->uuid, $secret->organizationId);
                 $result['rotated']++;
             } catch (\Throwable $e) {
                 $result['failed']++;
@@ -149,9 +143,8 @@ final class RotationService
         }
 
         return match ($secret->type) {
-            'template' => $this->rotateTemplateSecret($secretUuid, $orgId),
             'dynamic'  => $this->rotateDynamicSecret($secretUuid, $orgId),
-            default    => throw new \RuntimeException(__('ui.backend.rotation_runtime.manual_only_template_dynamic')),
+            default    => throw new \RuntimeException(__('ui.backend.rotation_runtime.manual_only_dynamic')),
         };
     }
 }

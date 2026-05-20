@@ -77,6 +77,29 @@ require base_path('resources/views/partials/auth_topbar.php');
                 font-size: .92rem;
                 overflow-wrap: anywhere;
             }
+            .secret-kind-group {
+                display: flex;
+                gap: .75rem;
+                flex-wrap: wrap;
+            }
+            .secret-kind-button {
+                min-width: 150px;
+                background: var(--button-secondary);
+                color: var(--button-secondary-fg);
+                border-color: var(--border);
+            }
+            .secret-kind-button.is-active {
+                background: var(--button);
+                color: var(--button-fg);
+                border-color: var(--button);
+            }
+            .template-extra-field {
+                padding: .9rem 1rem;
+                border: 1px solid var(--border);
+                background: var(--panel-subtle);
+                display: grid;
+                gap: .5rem;
+            }
         </style>
 
         <div style="display:flex; justify-content:space-between; gap:1rem; align-items:flex-end; flex-wrap:wrap;">
@@ -263,35 +286,56 @@ require base_path('resources/views/partials/auth_topbar.php');
         <div class="modal-body">
             <div>
                 <h3 style="margin:0 0 .35rem;"><?= e(__('ui.organization.add_secret_here')) ?></h3>
-                <div class="wizard-meta" id="secret-wizard-meta"><?= e(__('ui.organization.wizard_step', ['current' => '1', 'total' => '3'])) ?></div>
+                <div class="wizard-meta" id="secret-wizard-meta"><?= e(__('ui.organization.wizard_step', ['current' => '1', 'total' => '2'])) ?></div>
             </div>
             <form id="secret-modal-form" method="POST" action="<?= e($secretAction) ?>" class="grid" style="gap:1rem;">
+                <input type="hidden" id="modal-secret-type" name="type" value="static">
+                <input type="hidden" id="modal-template-overrides" name="template_overrides" value="{}">
+                <input type="hidden" id="modal-generated-value" name="generated_value" value="">
                 <section class="wizard-step" data-step="1">
                     <div>
                         <label for="modal-secret-name"><?= e(__('ui.home.secret_name')) ?></label>
                         <input id="modal-secret-name" name="name" placeholder="<?= e(__('ui.home.secret_name_placeholder')) ?>" required>
                     </div>
                     <div>
-                        <label for="modal-secret-type"><?= e(__('ui.home.type')) ?></label>
-                        <select id="modal-secret-type" name="type">
-                            <option value="static"><?= e(__('ui.home.types.static')) ?></option>
-                            <option value="template"><?= e(__('ui.home.types.template')) ?></option>
-                            <option value="dynamic"><?= e(__('ui.home.types.dynamic')) ?></option>
-                        </select>
+                        <label><?= e(__('ui.home.type')) ?></label>
+                        <div class="secret-kind-group">
+                            <button type="button" class="secret-kind-button is-active" data-secret-mode="static"><?= e(__('ui.home.types.static')) ?></button>
+                            <button type="button" class="secret-kind-button" data-secret-mode="dynamic"><?= e(__('ui.home.types.dynamic')) ?></button>
+                        </div>
                     </div>
                 </section>
 
                 <section class="wizard-step hidden" data-step="2">
-                    <div data-secret-field="template">
-                        <label for="modal-template-uuid"><?= e(__('ui.home.template')) ?></label>
-                        <select id="modal-template-uuid" name="template_uuid">
-                            <option value=""><?= e(__('ui.app.none')) ?></option>
-                            <?php foreach ($templates as $template): ?><option value="<?= e($template->uuid) ?>"><?= e($template->name) ?></option><?php endforeach; ?>
-                        </select>
+                    <div data-secret-flow="static" class="grid" style="gap:1rem;">
+                        <div>
+                            <label for="modal-template-uuid"><?= e(__('ui.home.template')) ?></label>
+                            <select id="modal-template-uuid" name="template_uuid">
+                                <option value=""><?= e(__('ui.home.no_template')) ?></option>
+                                <?php foreach ($templates as $template): ?><option value="<?= e($template->uuid) ?>"><?= e($template->name) ?></option><?php endforeach; ?>
+                            </select>
+                        </div>
+                        <div id="modal-static-value-field">
+                            <label for="modal-secret-value"><?= e(__('ui.home.value')) ?></label>
+                            <textarea id="modal-secret-value" class="mono" name="value" rows="6" placeholder="<?= e(__('ui.home.value_placeholder')) ?>"></textarea>
+                        </div>
+                        <div id="modal-template-preview-field" class="hidden">
+                            <label for="modal-generated-display"><?= e(__('ui.home.generated_value')) ?></label>
+                            <div class="grid field-actions-2" style="gap:.75rem; align-items:start;">
+                                <textarea id="modal-generated-display" class="mono" rows="8" readonly></textarea>
+                                <button type="button" class="secondary" id="modal-regenerate-button"><?= e(__('ui.home.regenerate')) ?></button>
+                            </div>
+                            <div class="wizard-meta" id="modal-template-status"></div>
+                        </div>
+                        <div id="modal-template-params" class="grid hidden"></div>
+                        <div id="modal-template-extra-fields" class="grid hidden"></div>
                     </div>
-                    <div data-secret-field="value">
-                        <label for="modal-secret-value"><?= e(__('ui.home.value')) ?></label>
-                        <input id="modal-secret-value" class="mono" name="value" placeholder="<?= e(__('ui.home.value_placeholder')) ?>">
+
+                    <div data-secret-flow="dynamic" class="grid hidden" style="gap:1rem;">
+                        <div>
+                            <label for="modal-dynamic-secret-value"><?= e(__('ui.home.value')) ?></label>
+                            <textarea id="modal-dynamic-secret-value" class="mono" name="value" rows="6" placeholder="<?= e(__('ui.home.value_placeholder')) ?>"></textarea>
+                        </div>
                     </div>
                 </section>
 
@@ -394,46 +438,273 @@ require base_path('resources/views/partials/auth_topbar.php');
 
         const steps = Array.from(wizardForm.querySelectorAll('[data-step]'));
         const typeField = document.getElementById('modal-secret-type');
+        const secretModal = document.getElementById('secret-modal');
         const meta = document.getElementById('secret-wizard-meta');
         const review = document.getElementById('secret-review');
         const nextButton = document.getElementById('secret-next-button');
         const prevButton = document.getElementById('secret-prev-button');
         const submitButton = document.getElementById('secret-submit-button');
+        const modeButtons = Array.from(wizardForm.querySelectorAll('[data-secret-mode]'));
+        const templateSelect = document.getElementById('modal-template-uuid');
+        const staticValueField = document.getElementById('modal-static-value-field');
+        const staticValueInput = document.getElementById('modal-secret-value');
+        const dynamicValueInput = document.getElementById('modal-dynamic-secret-value');
+        const previewField = document.getElementById('modal-template-preview-field');
+        const previewDisplay = document.getElementById('modal-generated-display');
+        const previewStatus = document.getElementById('modal-template-status');
+        const regenerateButton = document.getElementById('modal-regenerate-button');
+        const templateParams = document.getElementById('modal-template-params');
+        const templateExtraFields = document.getElementById('modal-template-extra-fields');
+        const templateOverridesInput = document.getElementById('modal-template-overrides');
+        const generatedValueInput = document.getElementById('modal-generated-value');
+        const previewUrl = <?= json_encode('/api/v1/organizations/' . $organization->uuid . '/directories/' . $secretDirUuid . '/secrets/template-preview') ?>;
         let currentStep = 1;
+        let secretMode = 'static';
+        let previewRequestId = 0;
+
+        const getStepCount = () => secretMode === 'dynamic' ? 3 : 2;
+        const isTemplateSelected = () => secretMode === 'static' && templateSelect.value !== '';
+        const getBackendType = () => {
+            if (secretMode === 'dynamic') {
+                return 'dynamic';
+            }
+
+            return templateSelect.value !== '' ? 'template' : 'static';
+        };
+
+        const setMode = (mode) => {
+            secretMode = mode === 'dynamic' ? 'dynamic' : 'static';
+            typeField.value = getBackendType();
+            modeButtons.forEach((button) => {
+                button.classList.toggle('is-active', button.getAttribute('data-secret-mode') === secretMode);
+            });
+            currentStep = Math.min(currentStep, getStepCount());
+        };
+
+        const renderExtraFields = (fields) => {
+            templateExtraFields.innerHTML = '';
+            templateExtraFields.classList.toggle('hidden', fields.length === 0);
+
+            fields.forEach((field) => {
+                const wrapper = document.createElement('div');
+                wrapper.className = 'template-extra-field';
+                const label = document.createElement('label');
+                label.textContent = field.label;
+                const textarea = document.createElement('textarea');
+                textarea.className = 'mono';
+                textarea.rows = 4;
+                textarea.readOnly = true;
+                textarea.value = field.value;
+                wrapper.appendChild(label);
+                wrapper.appendChild(textarea);
+                templateExtraFields.appendChild(wrapper);
+            });
+        };
+
+        const schedulePreviewRefresh = () => {
+            if (!isTemplateSelected()) {
+                return;
+            }
+
+            void refreshTemplatePreview(false);
+        };
+
+        const collectTemplateOverrides = () => {
+            const overrides = {};
+            templateParams.querySelectorAll('[data-template-param]').forEach((input) => {
+                const name = input.getAttribute('data-template-param');
+                if (!name) {
+                    return;
+                }
+
+                if (input.type === 'checkbox') {
+                    overrides[name] = input.checked;
+                    return;
+                }
+
+                overrides[name] = input.value;
+            });
+
+            return overrides;
+        };
+
+        const renderParameterSchema = (schema) => {
+            const currentValues = collectTemplateOverrides();
+            templateParams.innerHTML = '';
+            templateParams.classList.toggle('hidden', schema.length === 0);
+
+            if (schema.length === 0) {
+                return;
+            }
+
+            const heading = document.createElement('div');
+            heading.className = 'wizard-meta';
+            heading.textContent = <?= json_encode((string) __('ui.home.template_parameters')) ?>;
+            templateParams.appendChild(heading);
+
+            schema.forEach((field) => {
+                const wrapper = document.createElement('div');
+                const inputId = `template-param-${field.name}`;
+                const value = Object.prototype.hasOwnProperty.call(currentValues, field.name)
+                    ? currentValues[field.name]
+                    : field.value;
+                const label = document.createElement('label');
+
+                if (field.type === 'boolean') {
+                    label.style.display = 'flex';
+                    label.style.gap = '.65rem';
+                    label.style.alignItems = 'center';
+                    label.style.margin = '0';
+                    const input = document.createElement('input');
+                    input.id = inputId;
+                    input.type = 'checkbox';
+                    input.setAttribute('data-template-param', field.name);
+                    input.checked = Boolean(value);
+                    const span = document.createElement('span');
+                    span.textContent = field.label;
+                    label.appendChild(input);
+                    label.appendChild(span);
+                    wrapper.appendChild(label);
+                } else {
+                    label.htmlFor = inputId;
+                    label.textContent = field.label;
+                    const input = document.createElement('input');
+                    input.id = inputId;
+                    input.type = field.type;
+                    input.value = String(value ?? '');
+                    input.setAttribute('data-template-param', field.name);
+                    if (field.min !== undefined) {
+                        input.min = String(field.min);
+                    }
+                    if (field.max !== undefined) {
+                        input.max = String(field.max);
+                    }
+                    wrapper.appendChild(label);
+                    wrapper.appendChild(input);
+                }
+
+                templateParams.appendChild(wrapper);
+            });
+
+            templateParams.querySelectorAll('[data-template-param]').forEach((input) => {
+                input.addEventListener(input.type === 'checkbox' ? 'change' : 'input', schedulePreviewRefresh);
+            });
+        };
+
+        const clearTemplatePreview = () => {
+            generatedValueInput.value = '';
+            templateOverridesInput.value = '{}';
+            previewDisplay.value = '';
+            previewStatus.textContent = '';
+            previewField.classList.add('hidden');
+            templateParams.innerHTML = '';
+            templateParams.classList.add('hidden');
+            templateExtraFields.innerHTML = '';
+            templateExtraFields.classList.add('hidden');
+        };
+
+        const refreshTemplatePreview = async (isManual) => {
+            if (!isTemplateSelected()) {
+                clearTemplatePreview();
+                return;
+            }
+
+            previewRequestId += 1;
+            const requestId = previewRequestId;
+            previewStatus.textContent = <?= json_encode((string) __('ui.home.template_generating')) ?>;
+            regenerateButton.disabled = true;
+
+            try {
+                const response = await fetch(previewUrl, {
+                    method: 'POST',
+                    headers: {
+                        'Content-Type': 'application/json',
+                        'Accept': 'application/json',
+                        'X-Requested-With': 'XMLHttpRequest',
+                    },
+                    body: JSON.stringify({
+                        template_uuid: templateSelect.value,
+                        template_overrides: collectTemplateOverrides(),
+                    }),
+                });
+                const payload = await response.json();
+
+                if (requestId !== previewRequestId) {
+                    return;
+                }
+
+                if (!response.ok || !payload.success) {
+                    throw new Error(payload.error || <?= json_encode((string) __('ui.home.template_preview_error')) ?>);
+                }
+
+                const data = payload.data;
+                generatedValueInput.value = data.value;
+                templateOverridesInput.value = JSON.stringify(data.template_overrides);
+                previewDisplay.value = data.display_value;
+                previewField.classList.remove('hidden');
+                previewStatus.textContent = isManual ? <?= json_encode((string) __('ui.home.regenerated')) ?> : '';
+                renderParameterSchema(data.parameter_schema || []);
+                renderExtraFields(data.extra_fields || []);
+            } catch (error) {
+                if (requestId !== previewRequestId) {
+                    return;
+                }
+
+                generatedValueInput.value = '';
+                previewStatus.textContent = error instanceof Error ? error.message : <?= json_encode((string) __('ui.home.template_preview_error')) ?>;
+            } finally {
+                if (requestId === previewRequestId) {
+                    regenerateButton.disabled = false;
+                }
+            }
+        };
 
         const syncTypeFields = () => {
-            const type = typeField.value;
-            wizardForm.querySelectorAll('[data-secret-field="template"]').forEach((element) => {
-                element.classList.toggle('hidden', type !== 'template');
+            const templateSelected = isTemplateSelected();
+
+            typeField.value = getBackendType();
+            wizardForm.querySelectorAll('[data-secret-flow="static"]').forEach((element) => {
+                element.classList.toggle('hidden', secretMode !== 'static');
             });
-            wizardForm.querySelectorAll('[data-secret-field="value"]').forEach((element) => {
-                element.classList.toggle('hidden', type === 'template');
+            wizardForm.querySelectorAll('[data-secret-flow="dynamic"]').forEach((element) => {
+                element.classList.toggle('hidden', secretMode !== 'dynamic');
             });
+
+            staticValueField.classList.toggle('hidden', templateSelected);
+            previewField.classList.toggle('hidden', !templateSelected || generatedValueInput.value === '');
+            staticValueInput.disabled = secretMode !== 'static' || templateSelected;
+            dynamicValueInput.disabled = secretMode !== 'dynamic';
+
+            if (!templateSelected) {
+                clearTemplatePreview();
+            }
         };
 
         const updateReview = () => {
             const name = document.getElementById('modal-secret-name').value.trim() || '...';
-            const type = typeField.value;
+            const type = getBackendType();
             const schedule = document.getElementById('modal-rotation-schedule').value.trim();
             review.textContent = `${name} / ${type}${schedule !== '' ? ' / ' + schedule : ''}`;
         };
 
         const renderStep = () => {
             steps.forEach((step, index) => {
-                step.classList.toggle('hidden', index + 1 !== currentStep);
+                const stepNumber = index + 1;
+                const isVisibleStep = stepNumber <= getStepCount();
+                step.classList.toggle('hidden', !isVisibleStep || stepNumber !== currentStep);
             });
             prevButton.classList.toggle('hidden', currentStep === 1);
-            nextButton.classList.toggle('hidden', currentStep === steps.length);
-            submitButton.classList.toggle('hidden', currentStep !== steps.length);
+            nextButton.classList.toggle('hidden', currentStep === getStepCount());
+            submitButton.classList.toggle('hidden', currentStep !== getStepCount());
             meta.textContent = `<?= e(__('ui.organization.wizard_step', ['current' => ':current', 'total' => ':total'])) ?>`
                 .replace(':current', String(currentStep))
-                .replace(':total', String(steps.length));
+                .replace(':total', String(getStepCount()));
             syncTypeFields();
             updateReview();
         };
 
         nextButton.addEventListener('click', () => {
-            if (currentStep < steps.length) {
+            if (currentStep < getStepCount()) {
                 currentStep += 1;
                 renderStep();
             }
@@ -444,8 +715,42 @@ require base_path('resources/views/partials/auth_topbar.php');
                 renderStep();
             }
         });
-        typeField.addEventListener('change', renderStep);
+
+        modeButtons.forEach((button) => {
+            button.addEventListener('click', () => {
+                setMode(button.getAttribute('data-secret-mode'));
+                renderStep();
+            });
+        });
+        templateSelect.addEventListener('change', () => {
+            syncTypeFields();
+            updateReview();
+            if (isTemplateSelected()) {
+                void refreshTemplatePreview(false);
+            }
+        });
+        regenerateButton.addEventListener('click', () => {
+            void refreshTemplatePreview(true);
+        });
+        wizardForm.addEventListener('submit', (event) => {
+            if (isTemplateSelected() && generatedValueInput.value === '') {
+                event.preventDefault();
+                void refreshTemplatePreview(true);
+            }
+        });
         wizardForm.addEventListener('input', updateReview);
+
+        if (secretModal) {
+            secretModal.addEventListener('close', () => {
+                wizardForm.reset();
+                currentStep = 1;
+                setMode('static');
+                clearTemplatePreview();
+                renderStep();
+            });
+        }
+
+        setMode('static');
         renderStep();
     })();
     </script>

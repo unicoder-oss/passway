@@ -75,6 +75,9 @@ final class SecretController
         $rotationSchedule = $request->input('rotation_schedule') !== null
             ? \trim((string) $request->input('rotation_schedule'))
             : null;
+        $templateOverrides = $this->parseTemplateOverridesInput($request->input('template_overrides'));
+        $generatedValue = $request->input('generated_value');
+        $generatedValue = \is_string($generatedValue) ? $generatedValue : null;
 
         if ($name === '') {
             return Response::validationError(['name' => [__('ui.backend.common.name_required')]]);
@@ -93,8 +96,9 @@ final class SecretController
                     $name,
                     $templateUuid,
                     $user->id,
-                    [],
+                    $templateOverrides,
                     $rotationSchedule !== '' ? $rotationSchedule : null,
+                    $generatedValue,
                 )
                 : $this->secretService->create(
                     $org->id,
@@ -115,6 +119,40 @@ final class SecretController
         }
 
         return Response::success($this->serializeMeta($secret), 201);
+    }
+
+    // ------------------------------------------------------------------ //
+    //  POST .../secrets/template-preview                                  //
+    // ------------------------------------------------------------------ //
+
+    public function previewTemplate(Request $request): Response
+    {
+        $user = AuthContext::requireUser();
+        $org = $this->findOrgOrFail($request);
+        $dirUuid = (string) $request->routeParam('dirUuid');
+        $templateUuid = \trim((string) ($request->input('template_uuid') ?? ''));
+
+        if ($templateUuid === '') {
+            return Response::validationError(['template_uuid' => [__('ui.backend.secret.template_not_found')]]);
+        }
+
+        try {
+            $preview = $this->secretService->previewTemplate(
+                $org->id,
+                $dirUuid,
+                $user->id,
+                $templateUuid,
+                $this->parseTemplateOverridesInput($request->input('template_overrides')),
+            );
+        } catch (AuthException $e) {
+            return Response::error($e->getMessage(), $e->getCode() ?: 403);
+        } catch (\InvalidArgumentException $e) {
+            return Response::validationError(['template_overrides' => [$e->getMessage()]]);
+        } catch (\RuntimeException $e) {
+            return Response::error($e->getMessage(), 422);
+        }
+
+        return Response::success($preview);
     }
 
     // ------------------------------------------------------------------ //
@@ -139,6 +177,47 @@ final class SecretController
         }
 
         return Response::success($this->serializeWithValue($secret, $value));
+    }
+
+    // ------------------------------------------------------------------ //
+    //  POST .../secrets/:secUuid/regenerate                               //
+    // ------------------------------------------------------------------ //
+
+    public function regenerate(Request $request): Response
+    {
+        $user = AuthContext::requireUser();
+        $org = $this->findOrgOrFail($request);
+        $secUuid = (string) $request->routeParam('secUuid');
+
+        try {
+            $result = $this->secretService->regenerateFromTemplate(
+                $secUuid,
+                $org->id,
+                $user->id,
+                $this->parseTemplateOverridesInput($request->input('template_overrides')),
+                \is_string($request->input('generated_value')) ? (string) $request->input('generated_value') : null,
+            );
+        } catch (AuthException $e) {
+            return Response::error($e->getMessage(), $e->getCode() ?: 403);
+        } catch (\InvalidArgumentException $e) {
+            return Response::validationError(['template_overrides' => [$e->getMessage()]]);
+        } catch (\RuntimeException $e) {
+            return Response::error($e->getMessage(), 422);
+        }
+
+        return Response::success(\array_merge(
+            $this->serializeMeta($result['secret']),
+            [
+                'value' => $result['value'],
+                'display_value' => $result['display_value'],
+                'extra_fields' => $result['extra_fields'],
+                'template_uuid' => $result['template_uuid'],
+                'template_name' => $result['template_name'],
+                'template_type' => $result['template_type'],
+                'parameter_schema' => $result['parameter_schema'],
+                'template_overrides' => $result['template_overrides'],
+            ]
+        ));
     }
 
     // ------------------------------------------------------------------ //
@@ -300,5 +379,28 @@ final class SecretController
             'status'        => $v->status,
             'created_at'    => $v->createdAt,
         ];
+    }
+
+    /** @return array<string, mixed> */
+    private function parseTemplateOverridesInput(mixed $input): array
+    {
+        if ($input === null || $input === '') {
+            return [];
+        }
+
+        if (\is_array($input)) {
+            return $input;
+        }
+
+        if (!\is_string($input)) {
+            throw new \InvalidArgumentException(__('ui.backend.web.credentials_json_object'));
+        }
+
+        $decoded = \json_decode($input, true);
+        if (!\is_array($decoded)) {
+            throw new \InvalidArgumentException(__('ui.backend.web.credentials_json_object'));
+        }
+
+        return $decoded;
     }
 }

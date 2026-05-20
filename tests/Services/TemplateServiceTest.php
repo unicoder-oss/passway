@@ -74,4 +74,34 @@ final class TemplateServiceTest extends DatabaseTestCase
         $this->assertStringStartsWith('ssh-ed25519 ', (string) $decoded['public_key']);
         $this->assertSame('ed25519', $decoded['algorithm']);
     }
+
+    public function test_preview_password_returns_parameter_schema(): void
+    {
+        $template = Database::getInstance()->fetchOne(
+            'SELECT uuid FROM templates WHERE type = ? ORDER BY id ASC LIMIT 1',
+            ['password']
+        );
+
+        $preview = $this->svc->preview((string) $template['uuid'], null, ['length' => 24, 'use_special' => false]);
+
+        $this->assertSame(24, $preview['overrides']['min_length']);
+        $this->assertSame(24, $preview['overrides']['max_length']);
+        $this->assertFalse($preview['overrides']['use_special']);
+        $this->assertNotEmpty($preview['parameter_schema']);
+    }
+
+    public function test_preview_ssh_key_exposes_public_key_extra_field(): void
+    {
+        $template = Database::getInstance()->fetchOne(
+            'SELECT uuid FROM templates WHERE type = ? AND name = ? LIMIT 1',
+            ['ssh_key', 'SSH Key Ed25519']
+        );
+
+        $preview = $this->svc->preview((string) $template['uuid']);
+
+        $this->assertStringStartsWith('-----BEGIN OPENSSH PRIVATE KEY-----', $preview['display_value']);
+        $this->assertCount(1, $preview['extra_fields']);
+        $this->assertSame('public_key', $preview['extra_fields'][0]['key']);
+        $this->assertStringStartsWith('ssh-ed25519 ', $preview['extra_fields'][0]['value']);
+    }
 }

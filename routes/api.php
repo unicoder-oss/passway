@@ -228,10 +228,14 @@ $router->group('/api/v1', function (\Passway\Core\Router $router) {
             [SecretController::class, 'list'], [AuthMiddleware::class]);
         $router->post('/:uuid/directories/:dirUuid/secrets',
             [SecretController::class, 'create'], [AuthMiddleware::class]);
+        $router->post('/:uuid/directories/:dirUuid/secrets/template-preview',
+            [SecretController::class, 'previewTemplate'], [AuthMiddleware::class]);
         $router->get('/:uuid/directories/:dirUuid/secrets/:secUuid',
             [SecretController::class, 'show'], [AuthMiddleware::class]);
         $router->patch('/:uuid/directories/:dirUuid/secrets/:secUuid',
             [SecretController::class, 'update'], [AuthMiddleware::class]);
+        $router->post('/:uuid/directories/:dirUuid/secrets/:secUuid/regenerate',
+            [SecretController::class, 'regenerate'], [AuthMiddleware::class]);
         $router->post('/:uuid/directories/:dirUuid/secrets/:secUuid/rotate',
             [SecretController::class, 'rotate'], [AuthMiddleware::class]);
         $router->delete('/:uuid/directories/:dirUuid/secrets/:secUuid',

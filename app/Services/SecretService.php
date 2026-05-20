@@ -9,6 +9,7 @@ use Passway\Exceptions\AuthException;
 use Passway\Models\Directory;
 use Passway\Models\OrganizationIntegration;
 use Passway\Models\Secret;
+use Passway\Models\SecretMetadata;
 use Passway\Models\SecretVersion;
 use Passway\Models\Template;
 
@@ -36,6 +37,8 @@ final class SecretService
 
     /** Максимальное число хранимых версий на секрет */
     private const MAX_VERSIONS = 10;
+
+    private const TEMPLATE_OVERRIDES_METADATA_KEY = 'template_overrides';
 
     public function __construct(
         private readonly OrganizationService $organizationService,
@@ -84,6 +87,17 @@ final class SecretService
             throw new \InvalidArgumentException(
                 __('ui.backend.secret.invalid_type', ['allowed' => \implode(', ', self::VALID_TYPES)])
             );
+        }
+
+        $rotationIntegrationUuid = $rotationIntegrationUuid !== null && \trim($rotationIntegrationUuid) !== ''
+            ? \trim($rotationIntegrationUuid)
+            : null;
+        $rotationSchedule = $rotationSchedule !== null && \trim($rotationSchedule) !== ''
+            ? $rotationSchedule
+            : null;
+
+        if ($type !== 'dynamic' && ($rotationIntegrationUuid !== null || $rotationSchedule !== null)) {
+            throw new \InvalidArgumentException(__('ui.backend.secret.rotation_supported_for_dynamic_only'));
         }
 
         $dir = $this->findDirInOrg($dirUuid, $orgId);
@@ -142,7 +156,12 @@ final class SecretService
         string $userId,
         array $overrides = [],
         ?string $rotationSchedule = null,
+        ?string $providedValue = null,
     ): Secret {
+        if ($rotationSchedule !== null && \trim($rotationSchedule) !== '') {
+            throw new \InvalidArgumentException(__('ui.backend.secret.template_rotation_not_supported'));
+        }
+
         $template = Template::findByUuid($templateUuid);
         if ($template === null) {
             throw new \RuntimeException(__('ui.backend.secret.template_not_found'));
@@ -159,7 +178,11 @@ final class SecretService
             throw new \InvalidArgumentException(__('ui.backend.secret.name_too_long'));
         }
 
-        $value = $this->getTemplateService()->generate($templateUuid, $orgId, $overrides);
+        $preview = $this->getTemplateService()->preview($templateUuid, $orgId, $overrides);
+        $value = $providedValue !== null && $providedValue !== ''
+            ? $providedValue
+            : $preview['value'];
+        $overrides = $preview['overrides'];
         $rotationSchedule = $this->normalizeRotationSchedule($rotationSchedule);
 
         $dir = $this->findDirInOrg($dirUuid, $orgId);
@@ -190,6 +213,8 @@ final class SecretService
 
         $secret = Secret::findByUuid($uuid)
             ?? throw new \RuntimeException(__('ui.backend.secret.failed_load_created'));
+
+        $this->storeTemplateOverrides($secret->id, $overrides);
 
         $this->getAuditService()->record(
             action: 'secret.create',
@@ -265,6 +290,90 @@ final class SecretService
         return ['secret' => $secret, 'value' => $value];
     }
 
+    /** @return array<string, mixed> */
+    public function getTemplateOverrides(string $secretUuid, string $orgId, string $userId): array
+    {
+        $secret = $this->findSecretInOrg($secretUuid, $orgId);
+        $this->assertCan('read', $userId, 'directory', $secret->directoryId, $orgId);
+
+        return $this->loadTemplateOverrides($secret->id);
+    }
+
+    /**
+     * @param array<string, mixed> $overrides
+     * @return array<string, mixed>
+     */
+    public function previewTemplate(
+        string $orgId,
+        string $dirUuid,
+        string $userId,
+        string $templateUuid,
+        array $overrides = [],
+    ): array {
+        $dir = $this->findDirInOrg($dirUuid, $orgId);
+        $this->assertCan('write', $userId, 'directory', $dir->id, $orgId);
+
+        return $this->formatTemplatePreview(
+            $this->getTemplateService()->preview($templateUuid, $orgId, $overrides)
+        );
+    }
+
+    /**
+     * @param array<string, mixed>|null $overrides
+     * @return array<string, mixed>
+     */
+    public function regenerateFromTemplate(
+        string $secretUuid,
+        string $orgId,
+        string $userId,
+        ?array $overrides = null,
+        ?string $providedValue = null,
+    ): array {
+        $secret = $this->findSecretInOrg($secretUuid, $orgId);
+        $this->assertCan('write', $userId, 'directory', $secret->directoryId, $orgId);
+
+        if ($secret->type !== 'template') {
+            throw new \InvalidArgumentException(__('ui.backend.secret.template_regenerate_only'));
+        }
+        if ($secret->templateId === null) {
+            throw new \RuntimeException(__('ui.backend.rotation_runtime.template_missing_id'));
+        }
+
+        $template = Template::findById($secret->templateId)
+            ?? throw new \RuntimeException(__('ui.backend.secret.template_not_found'));
+        $storedOverrides = $this->loadTemplateOverrides($secret->id);
+        $preview = $this->getTemplateService()->preview(
+            $template->uuid,
+            $orgId,
+            $overrides ?? $storedOverrides
+        );
+        $targetValue = $providedValue !== null && $providedValue !== '' ? $providedValue : $preview['value'];
+        $currentValue = $this->encryptionService->decrypt($secret->encryptedValue, $secret->nonce, $secret->uuid);
+
+        if ($targetValue === $currentValue && $preview['overrides'] === $storedOverrides) {
+            return \array_merge(
+                ['secret' => $secret],
+                $this->formatTemplatePreview(
+                    $this->getTemplateService()->describeValue($template->uuid, $currentValue, $orgId, $storedOverrides)
+                )
+            );
+        }
+
+        $this->storeTemplateOverrides($secret->id, $preview['overrides']);
+        $updated = $this->rotateValue(
+            $secretUuid,
+            $orgId,
+            $targetValue,
+            $userId,
+            'manual'
+        );
+
+        return \array_merge(
+            ['secret' => $updated],
+            $this->formatTemplatePreview($preview)
+        );
+    }
+
     /**
      * История версий секрета (зашифрованные записи, без расшифровки).
      *
@@ -317,6 +426,10 @@ final class SecretService
         }
 
         if ($newValue !== null) {
+            if ($secret->type === 'template') {
+                throw new \InvalidArgumentException(__('ui.backend.secret.template_manual_value_not_supported'));
+            }
+
             // Сохранить текущую версию в историю перед перезаписью
             $this->saveVersionHistory($secret, $userId);
 
@@ -426,6 +539,10 @@ final class SecretService
     ): Secret {
         $secret = $this->findSecretInOrg($secretUuid, $orgId);
         $this->assertCan('write', $userId, 'directory', $secret->directoryId, $orgId);
+
+        if ($secret->type !== 'dynamic') {
+            throw new \InvalidArgumentException(__('ui.backend.secret.rotation_supported_for_dynamic_only'));
+        }
 
         $secret->update([
             'rotation_integration_id' => ($id = $this->resolveRotationIntegrationId($rotationIntegrationUuid, $orgId)) !== null
@@ -590,6 +707,64 @@ final class SecretService
     private function getTemplateService(): TemplateService
     {
         return $this->templateService ?? new TemplateService();
+    }
+
+    /**
+     * @param array{
+     *   value:string,
+     *   display_value:string,
+     *   extra_fields:array<int, array{key:string, label:string, value:string}>,
+     *   parameter_schema:array<int, array<string, mixed>>,
+     *   overrides:array<string, mixed>,
+     *   template:Template
+     * } $preview
+     * @return array<string, mixed>
+     */
+    private function formatTemplatePreview(array $preview): array
+    {
+        /** @var Template $template */
+        $template = $preview['template'];
+
+        return [
+            'template_uuid' => $template->uuid,
+            'template_name' => $template->name,
+            'template_type' => $template->type,
+            'value' => $preview['value'],
+            'display_value' => $preview['display_value'],
+            'extra_fields' => $preview['extra_fields'],
+            'parameter_schema' => $preview['parameter_schema'],
+            'template_overrides' => $preview['overrides'],
+        ];
+    }
+
+    /** @param array<string, mixed> $overrides */
+    private function storeTemplateOverrides(string $secretId, array $overrides): void
+    {
+        $payload = $this->encodeJsonObject($overrides);
+        SecretMetadata::upsert($secretId, self::TEMPLATE_OVERRIDES_METADATA_KEY, $payload);
+    }
+
+    /** @return array<string, mixed> */
+    private function loadTemplateOverrides(string $secretId): array
+    {
+        $metadata = SecretMetadata::findBySecretIdAndKey($secretId, self::TEMPLATE_OVERRIDES_METADATA_KEY);
+        if ($metadata === null || $metadata->value === null || \trim($metadata->value) === '') {
+            return [];
+        }
+
+        $decoded = \json_decode($metadata->value, true);
+        return \is_array($decoded) ? $decoded : [];
+    }
+
+    /** @param array<string, mixed> $payload */
+    private function encodeJsonObject(array $payload): string
+    {
+        $encoded = \json_encode($payload, \JSON_UNESCAPED_SLASHES);
+        if ($encoded === false) {
+            throw new \RuntimeException(__('ui.backend.secret.metadata_encode_failed'));
+        }
+
+        return $encoded;
     }
 
     private function getAuditService(): AuditService

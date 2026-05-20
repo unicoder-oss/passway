@@ -26,6 +26,70 @@ final class TemplateService
      */
     public function generate(string $templateUuid, ?string $orgId = null, array $overrides = []): string
     {
+        $preview = $this->preview($templateUuid, $orgId, $overrides);
+        return $preview['value'];
+    }
+
+    /**
+     * @param array<string, mixed> $overrides
+     * @return array{
+     *   value:string,
+     *   display_value:string,
+     *   extra_fields:array<int, array{key:string, label:string, value:string}>,
+     *   parameter_schema:array<int, array<string, mixed>>,
+     *   overrides:array<string, mixed>,
+     *   template:Template
+     * }
+     */
+    public function preview(string $templateUuid, ?string $orgId = null, array $overrides = []): array
+    {
+        $template = $this->resolveTemplate($templateUuid, $orgId);
+        $config = \array_replace($template->config(), $this->normalizeOverrides($template, $overrides));
+
+        $value = match ($template->type) {
+            'password' => $this->generatePassword($config),
+            'ssh_key'  => $this->generateSshKeyPair($config),
+            default    => throw new \InvalidArgumentException(__('ui.backend.template.unsupported_type', ['type' => $template->type])),
+        };
+
+        return [
+            'value' => $value,
+            'display_value' => $this->extractDisplayValue($template, $value),
+            'extra_fields' => $this->extractExtraFields($template, $value),
+            'parameter_schema' => $this->buildParameterSchema($template, $config),
+            'overrides' => $config,
+            'template' => $template,
+        ];
+    }
+
+    /**
+     * @param array<string, mixed> $overrides
+     * @return array{
+     *   value:string,
+     *   display_value:string,
+     *   extra_fields:array<int, array{key:string, label:string, value:string}>,
+     *   parameter_schema:array<int, array<string, mixed>>,
+     *   overrides:array<string, mixed>,
+     *   template:Template
+     * }
+     */
+    public function describeValue(string $templateUuid, string $value, ?string $orgId = null, array $overrides = []): array
+    {
+        $template = $this->resolveTemplate($templateUuid, $orgId);
+        $config = \array_replace($template->config(), $this->normalizeOverrides($template, $overrides));
+
+        return [
+            'value' => $value,
+            'display_value' => $this->extractDisplayValue($template, $value),
+            'extra_fields' => $this->extractExtraFields($template, $value),
+            'parameter_schema' => $this->buildParameterSchema($template, $config),
+            'overrides' => $config,
+            'template' => $template,
+        ];
+    }
+
+    private function resolveTemplate(string $templateUuid, ?string $orgId = null): Template
+    {
         $template = Template::findByUuid($templateUuid);
         if ($template === null) {
             throw new \RuntimeException(__('ui.backend.template.not_found'));
@@ -35,13 +99,144 @@ final class TemplateService
             throw new \RuntimeException(__('ui.backend.template.wrong_org'));
         }
 
-        $config = \array_replace($template->config(), $overrides);
+        return $template;
+    }
 
-        return match ($template->type) {
-            'password' => $this->generatePassword($config),
-            'ssh_key'  => $this->generateSshKeyPair($config),
-            default    => throw new \InvalidArgumentException(__('ui.backend.template.unsupported_type', ['type' => $template->type])),
-        };
+    /** @param array<string, mixed> $overrides
+     *  @return array<string, mixed>
+     */
+    private function normalizeOverrides(Template $template, array $overrides): array
+    {
+        if ($template->type !== 'password') {
+            return $overrides;
+        }
+
+        if (isset($overrides['length']) && $overrides['length'] !== '') {
+            $length = (int) $overrides['length'];
+            $overrides['min_length'] = $length;
+            $overrides['max_length'] = $length;
+            unset($overrides['length']);
+        }
+
+        foreach (['min_length', 'max_length'] as $field) {
+            if (isset($overrides[$field]) && $overrides[$field] !== '') {
+                $overrides[$field] = (int) $overrides[$field];
+            }
+        }
+
+        foreach (['use_upper', 'use_lower', 'use_digits', 'use_special'] as $field) {
+            if (isset($overrides[$field])) {
+                $overrides[$field] = $this->toBool($overrides[$field]);
+            }
+        }
+
+        if (isset($overrides['special_chars'])) {
+            $overrides['special_chars'] = (string) $overrides['special_chars'];
+        }
+
+        return $overrides;
+    }
+
+    /** @param array<string, mixed> $config
+     *  @return array<int, array<string, mixed>>
+     */
+    private function buildParameterSchema(Template $template, array $config): array
+    {
+        if ($template->type !== 'password') {
+            return [];
+        }
+
+        return [
+            [
+                'name' => 'length',
+                'type' => 'number',
+                'label' => __('ui.secret.template_length'),
+                'min' => 8,
+                'max' => 128,
+                'value' => (int) ($config['min_length'] ?? 16),
+            ],
+            [
+                'name' => 'use_upper',
+                'type' => 'boolean',
+                'label' => __('ui.secret.template_use_upper'),
+                'value' => (bool) ($config['use_upper'] ?? true),
+            ],
+            [
+                'name' => 'use_lower',
+                'type' => 'boolean',
+                'label' => __('ui.secret.template_use_lower'),
+                'value' => (bool) ($config['use_lower'] ?? true),
+            ],
+            [
+                'name' => 'use_digits',
+                'type' => 'boolean',
+                'label' => __('ui.secret.template_use_digits'),
+                'value' => (bool) ($config['use_digits'] ?? true),
+            ],
+            [
+                'name' => 'use_special',
+                'type' => 'boolean',
+                'label' => __('ui.secret.template_use_special'),
+                'value' => (bool) ($config['use_special'] ?? true),
+            ],
+            [
+                'name' => 'special_chars',
+                'type' => 'text',
+                'label' => __('ui.secret.template_special_chars'),
+                'value' => (string) ($config['special_chars'] ?? '!@#$%^&*()-_=+[]{}|;:,.<>?'),
+            ],
+        ];
+    }
+
+    /** @return array<int, array{key:string, label:string, value:string}> */
+    private function extractExtraFields(Template $template, string $value): array
+    {
+        if ($template->type !== 'ssh_key') {
+            return [];
+        }
+
+        $decoded = \json_decode($value, true);
+        if (!\is_array($decoded)) {
+            return [];
+        }
+
+        $publicKey = $decoded['public_key'] ?? null;
+        if (!\is_string($publicKey) || $publicKey === '') {
+            return [];
+        }
+
+        return [[
+            'key' => 'public_key',
+            'label' => __('ui.secret.public_key'),
+            'value' => $publicKey,
+        ]];
+    }
+
+    private function extractDisplayValue(Template $template, string $value): string
+    {
+        if ($template->type !== 'ssh_key') {
+            return $value;
+        }
+
+        $decoded = \json_decode($value, true);
+        if (!\is_array($decoded) || !isset($decoded['private_key']) || !\is_string($decoded['private_key'])) {
+            return $value;
+        }
+
+        return $decoded['private_key'];
+    }
+
+    private function toBool(mixed $value): bool
+    {
+        if (\is_bool($value)) {
+            return $value;
+        }
+
+        if (\is_string($value)) {
+            return \in_array(\strtolower($value), ['1', 'true', 'on', 'yes'], true);
+        }
+
+        return (bool) $value;
     }
 
     /** @param array<string, mixed> $config */

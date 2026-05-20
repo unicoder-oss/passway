@@ -398,6 +398,27 @@ final class SecretServiceTest extends DatabaseTestCase
         $this->svc->update($secret->uuid, $org->id, $observer->id, 'NewName', null);
     }
 
+    public function test_update_template_value_throws(): void
+    {
+        $owner = $this->createTestUser();
+        $org = $this->orgSvc->create('Org', $owner->id);
+        $dir = $this->dirSvc->create($org->id, null, 'Dir', $owner->id);
+        $template = Database::getInstance()->fetchOne(
+            'SELECT uuid FROM templates WHERE type = ? ORDER BY id ASC LIMIT 1',
+            ['password']
+        );
+        $secret = $this->svc->createFromTemplate(
+            $org->id,
+            $dir->uuid,
+            'Template secret',
+            (string) $template['uuid'],
+            $owner->id,
+        );
+
+        $this->expectException(\InvalidArgumentException::class);
+        $this->svc->update($secret->uuid, $org->id, $owner->id, null, 'manual-value');
+    }
+
     public function test_update_prunes_history_to_max_versions(): void
     {
         $owner  = $this->createTestUser();
@@ -513,6 +534,134 @@ final class SecretServiceTest extends DatabaseTestCase
 
         $this->expectException(AuthException::class);
         $this->svc->assertCanRotate($secret->uuid, $org->id, $observer->id);
+    }
+
+    public function test_create_static_with_rotation_config_throws(): void
+    {
+        $owner = $this->createTestUser();
+        $org = $this->orgSvc->create('Org', $owner->id);
+        $dir = $this->dirSvc->create($org->id, null, 'Dir', $owner->id);
+
+        $this->expectException(\InvalidArgumentException::class);
+        $this->svc->create($org->id, $dir->uuid, 'Secret', 'static', 'value', $owner->id, null, '0 3 * * *');
+    }
+
+    public function test_create_template_with_rotation_schedule_throws(): void
+    {
+        $owner = $this->createTestUser();
+        $org = $this->orgSvc->create('Org', $owner->id);
+        $dir = $this->dirSvc->create($org->id, null, 'Dir', $owner->id);
+        $template = Database::getInstance()->fetchOne(
+            'SELECT uuid FROM templates WHERE type = ? ORDER BY id ASC LIMIT 1',
+            ['password']
+        );
+
+        $this->expectException(\InvalidArgumentException::class);
+        $this->svc->createFromTemplate(
+            $org->id,
+            $dir->uuid,
+            'Template secret',
+            (string) $template['uuid'],
+            $owner->id,
+            [],
+            '0 3 * * *',
+        );
+    }
+
+    public function test_create_template_persists_overrides_in_metadata(): void
+    {
+        $owner = $this->createTestUser();
+        $org = $this->orgSvc->create('Org', $owner->id);
+        $dir = $this->dirSvc->create($org->id, null, 'Dir', $owner->id);
+        $template = Database::getInstance()->fetchOne(
+            'SELECT uuid FROM templates WHERE type = ? ORDER BY id ASC LIMIT 1',
+            ['password']
+        );
+
+        $secret = $this->svc->createFromTemplate(
+            $org->id,
+            $dir->uuid,
+            'Template secret',
+            (string) $template['uuid'],
+            $owner->id,
+            ['min_length' => 24, 'max_length' => 24, 'use_special' => false],
+        );
+
+        $overrides = $this->svc->getTemplateOverrides($secret->uuid, $org->id, $owner->id);
+
+        $this->assertSame(24, $overrides['min_length']);
+        $this->assertSame(24, $overrides['max_length']);
+        $this->assertFalse($overrides['use_special']);
+    }
+
+    public function test_configure_rotation_rejects_static_secret(): void
+    {
+        $owner = $this->createTestUser();
+        $org = $this->orgSvc->create('Org', $owner->id);
+        $dir = $this->dirSvc->create($org->id, null, 'Dir', $owner->id);
+        $secret = $this->svc->create($org->id, $dir->uuid, 'Secret', 'static', 'value', $owner->id);
+
+        $this->expectException(\InvalidArgumentException::class);
+        $this->svc->configureRotation($secret->uuid, $org->id, $owner->id, null, '0 3 * * *');
+    }
+
+    public function test_preview_template_returns_display_value_and_overrides(): void
+    {
+        $owner = $this->createTestUser();
+        $org = $this->orgSvc->create('Org', $owner->id);
+        $dir = $this->dirSvc->create($org->id, null, 'Dir', $owner->id);
+        $template = Database::getInstance()->fetchOne(
+            'SELECT uuid FROM templates WHERE type = ? ORDER BY id ASC LIMIT 1',
+            ['password']
+        );
+
+        $preview = $this->svc->previewTemplate(
+            $org->id,
+            $dir->uuid,
+            $owner->id,
+            (string) $template['uuid'],
+            ['length' => 24, 'use_special' => false],
+        );
+
+        $this->assertSame(24, $preview['template_overrides']['min_length']);
+        $this->assertSame(24, $preview['template_overrides']['max_length']);
+        $this->assertFalse($preview['template_overrides']['use_special']);
+        $this->assertNotSame('', $preview['display_value']);
+    }
+
+    public function test_regenerate_from_template_updates_value_and_persists_overrides(): void
+    {
+        $owner = $this->createTestUser();
+        $org = $this->orgSvc->create('Org', $owner->id);
+        $dir = $this->dirSvc->create($org->id, null, 'Dir', $owner->id);
+        $template = Database::getInstance()->fetchOne(
+            'SELECT uuid FROM templates WHERE type = ? ORDER BY id ASC LIMIT 1',
+            ['password']
+        );
+        $secret = $this->svc->createFromTemplate(
+            $org->id,
+            $dir->uuid,
+            'Template secret',
+            (string) $template['uuid'],
+            $owner->id,
+            ['min_length' => 16, 'max_length' => 16],
+        );
+        ['value' => $before] = $this->svc->get($secret->uuid, $org->id, $owner->id);
+
+        $result = $this->svc->regenerateFromTemplate(
+            $secret->uuid,
+            $org->id,
+            $owner->id,
+            ['length' => 24, 'use_special' => false],
+        );
+        ['value' => $after] = $this->svc->get($secret->uuid, $org->id, $owner->id);
+        $overrides = $this->svc->getTemplateOverrides($secret->uuid, $org->id, $owner->id);
+
+        $this->assertNotSame($before, $after);
+        $this->assertSame(24, $overrides['min_length']);
+        $this->assertSame(24, $overrides['max_length']);
+        $this->assertFalse($overrides['use_special']);
+        $this->assertSame(2, $result['secret']->version);
     }
 
     public function test_create_and_read_write_audit_log_entries(): void
