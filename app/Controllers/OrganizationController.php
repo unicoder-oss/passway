@@ -11,6 +11,7 @@ use Passway\Exceptions\AuthException;
 use Passway\Models\Organization;
 use Passway\Models\OrganizationMember;
 use Passway\Models\User;
+use Passway\Services\ApiKeyAccessService;
 use Passway\Services\OrganizationService;
 
 /**
@@ -28,6 +29,7 @@ final class OrganizationController
 {
     public function __construct(
         private readonly OrganizationService $organizationService,
+        private readonly ApiKeyAccessService $apiKeyAccessService,
     ) {}
 
     // ------------------------------------------------------------------ //
@@ -77,6 +79,15 @@ final class OrganizationController
     {
         $user = AuthContext::requireUser();
         $org  = $this->findOrgOrFail($request);
+
+        if (AuthContext::isApiKeyRequest()) {
+            $apiKey = AuthContext::getApiKey();
+            if ($apiKey === null || !$this->apiKeyAccessService->canOrganization($apiKey->id, $org->id, 'read')) {
+                return Response::forbidden(__('ui.backend.organization.not_member'));
+            }
+
+            return Response::success($this->serializeOrg($org));
+        }
 
         if (!$this->organizationService->hasPermission($org->id, $user->id, 'observer')) {
             return Response::forbidden(__('ui.backend.organization.not_member'));

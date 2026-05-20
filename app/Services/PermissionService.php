@@ -4,6 +4,7 @@ declare(strict_types=1);
 
 namespace Passway\Services;
 
+use Passway\Core\AuthContext;
 use Passway\Core\Database;
 use Passway\Exceptions\AuthException;
 use Passway\Models\Directory;
@@ -39,6 +40,7 @@ final class PermissionService
     public function __construct(
         private readonly OrganizationService $organizationService,
         private readonly GroupService        $groupService,
+        private readonly ?ApiKeyAccessService $apiKeyAccessService = null,
         private readonly ?AuditService       $auditService = null,
     ) {}
 
@@ -62,6 +64,11 @@ final class PermissionService
         string $resourceId,
         string $orgId,
     ): bool {
+        $apiKey = AuthContext::getApiKey();
+        if ($apiKey !== null) {
+            return $this->getApiKeyAccessService()->can($apiKey->id, $permission, $resourceType, $resourceId, $orgId);
+        }
+
         // 1. Роль в организации — ранний выход
         $minRole = self::PERM_TO_ORG_ROLE[$permission] ?? 'moderator';
         if ($this->organizationService->hasPermission($orgId, $userId, $minRole)) {
@@ -332,5 +339,10 @@ final class PermissionService
     private function getAuditService(): AuditService
     {
         return $this->auditService ?? new AuditService(new LoggerService(), $this->organizationService);
+    }
+
+    private function getApiKeyAccessService(): ApiKeyAccessService
+    {
+        return $this->apiKeyAccessService ?? new ApiKeyAccessService();
     }
 }

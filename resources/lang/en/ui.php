@@ -336,7 +336,6 @@ return [
         'create' => 'Create API Key',
         'name' => 'Name',
         'name_placeholder' => 'CI deployment',
-        'environment' => 'Environment',
         'expires_at_optional' => 'Expires at (optional)',
         'existing' => 'Existing Keys',
         'prefix' => 'Prefix :prefix',
@@ -348,11 +347,6 @@ return [
         'status_active' => 'active',
         'status_revoked' => 'revoked',
         'last_used' => 'Last used :date',
-        'environments' => [
-            'production' => 'production',
-            'staging' => 'staging',
-            'development' => 'development',
-        ],
     ],
     'api_key_permissions' => [
         'for_key' => 'Permissions for :name',
@@ -532,7 +526,6 @@ return [
         ],
         'apikey' => [
             'name_required' => 'Name is required.',
-            'invalid_environment' => 'Invalid environment. Allowed: :allowed.',
             'requires_admin_create' => 'Only admin or above can create API keys.',
             'failed_load_created_key' => 'Failed to retrieve created API key.',
             'requires_admin_list' => 'Only admin or above can list API keys.',
@@ -547,6 +540,7 @@ return [
             'key_not_found' => 'API key not found.',
             'resource_type_required' => 'resource_type is required.',
             'permission_required' => 'permission is required.',
+            'route_not_allowed' => 'This route is not available to API keys.',
         ],
         'directory' => [
             'name_empty' => 'Directory name cannot be empty.',
@@ -605,6 +599,7 @@ return [
             'rotation_integration_inactive' => 'Rotation integration is inactive.',
             'rotation_schedule_invalid' => 'Rotation schedule must be a 5-field cron expression.',
             'type_required' => 'Invalid type. Allowed: :allowed.',
+            'rotation_integration_immutable' => 'Changing rotation integration through the API is not supported. Only the schedule may be changed.',
             'update_requires_field' => 'At least one of name or value must be provided.',
             'rotation_supported_for_dynamic_only' => 'Rotation settings are supported only for dynamic secrets.',
             'template_manual_value_not_supported' => 'Template secrets can only be updated by regenerating them from their template.',

@@ -5,6 +5,7 @@ declare(strict_types=1);
 namespace Passway\Core;
 
 use Passway\Exceptions\AuthException;
+use Passway\Models\ApiKey;
 use Passway\Models\User;
 
 /**
@@ -18,6 +19,7 @@ use Passway\Models\User;
 final class AuthContext
 {
     private static ?User $user = null;
+    private static ?ApiKey $apiKey = null;
 
     /**
      * Установить аутентифицированного пользователя (вызывается из AuthMiddleware).
@@ -25,6 +27,11 @@ final class AuthContext
     public static function setUser(?User $user): void
     {
         self::$user = $user;
+    }
+
+    public static function setApiKey(?ApiKey $apiKey): void
+    {
+        self::$apiKey = $apiKey;
     }
 
     /**
@@ -35,12 +42,22 @@ final class AuthContext
         return self::$user;
     }
 
+    public static function getApiKey(): ?ApiKey
+    {
+        return self::$apiKey;
+    }
+
     /**
      * Проверить, аутентифицирован ли пользователь.
      */
     public static function isAuthenticated(): bool
     {
-        return self::$user !== null;
+        return self::$user !== null || self::$apiKey !== null;
+    }
+
+    public static function isApiKeyRequest(): bool
+    {
+        return self::$apiKey !== null;
     }
 
     /**
@@ -63,5 +80,6 @@ final class AuthContext
     public static function reset(): void
     {
         self::$user = null;
+        self::$apiKey = null;
     }
 }

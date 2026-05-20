@@ -29,14 +29,6 @@ require base_path('resources/views/partials/auth_topbar.php');
                 <input id="key-name" name="name" placeholder="<?= e(__('ui.api_keys.name_placeholder')) ?>" required>
             </div>
             <div>
-                <label for="key-environment"><?= e(__('ui.api_keys.environment')) ?></label>
-                <select id="key-environment" name="environment">
-                    <option value="production"><?= e(__('ui.api_keys.environments.production')) ?></option>
-                    <option value="staging"><?= e(__('ui.api_keys.environments.staging')) ?></option>
-                    <option value="development"><?= e(__('ui.api_keys.environments.development')) ?></option>
-                </select>
-            </div>
-            <div>
                 <label for="key-expires"><?= e(__('ui.api_keys.expires_at_optional')) ?></label>
                 <input id="key-expires" name="expires_at" placeholder="2026-12-31 23:59:59">
             </div>
@@ -51,7 +43,7 @@ require base_path('resources/views/partials/auth_topbar.php');
                 <div class="panel panel-muted" style="padding:1rem; display:grid; gap:.75rem;">
                     <div>
                         <div style="font-weight:700;"><?= e($key->name) ?></div>
-                        <div class="muted" style="font-size:.92rem;"><?= e(__('ui.api_keys.prefix', ['prefix' => $key->keyPrefix])) ?> · <?= e(__('ui.api_keys.environments.' . $key->environment)) ?> · <?= e($key->isActive ? __('ui.api_key_permissions.status_active') : __('ui.api_key_permissions.status_revoked')) ?></div>
+                        <div class="muted" style="font-size:.92rem;"><?= e(__('ui.api_keys.prefix', ['prefix' => $key->keyPrefix])) ?> · <?= e($key->isActive ? __('ui.api_key_permissions.status_active') : __('ui.api_key_permissions.status_revoked')) ?></div>
                         <div class="muted" style="font-size:.92rem;"><?= __('ui.api_keys.created', ['created_at' => local_datetime($key->createdAt)]) ?><?= $key->expiresAt ? __('ui.api_keys.expires_suffix', ['date' => local_datetime($key->expiresAt)]) : '' ?></div>
                         <div class="muted" style="font-size:.92rem;"><?= __('ui.api_keys.last_used', ['date' => $key->lastUsedAt !== null ? local_datetime($key->lastUsedAt) : e(__('ui.app.never'))]) ?></div>
                     </div>

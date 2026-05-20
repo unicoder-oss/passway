@@ -4,6 +4,7 @@ declare(strict_types=1);
 
 namespace Passway\Services;
 
+use Passway\Core\AuthContext;
 use Passway\Core\Database;
 use Passway\Exceptions\AuthException;
 use Passway\Models\Directory;
@@ -32,6 +33,7 @@ final class DirectoryService
     public function __construct(
         private readonly OrganizationService $organizationService,
         private readonly PermissionService   $permissionService,
+        private readonly ?ApiKeyAccessService $apiKeyAccessService = null,
     ) {}
 
     // ------------------------------------------------------------------ //
@@ -330,6 +332,23 @@ final class DirectoryService
      */
     private function assertHasPermission(string $orgId, string $userId, string $minRole): void
     {
+        $apiKey = AuthContext::getApiKey();
+        if ($apiKey !== null) {
+            $permission = match ($minRole) {
+                'observer' => 'read',
+                default => 'write',
+            };
+
+            if (!$this->getApiKeyAccessService()->canOrganization($apiKey->id, $orgId, $permission)) {
+                throw new AuthException(
+                    __('ui.backend.directory.requires_role', ['role' => $minRole]),
+                    403
+                );
+            }
+
+            return;
+        }
+
         if (!$this->organizationService->hasPermission($orgId, $userId, $minRole)) {
             throw new AuthException(
                 __('ui.backend.directory.requires_role', ['role' => $minRole]),
@@ -354,5 +373,10 @@ final class DirectoryService
                 403
             );
         }
+    }
+
+    private function getApiKeyAccessService(): ApiKeyAccessService
+    {
+        return $this->apiKeyAccessService ?? new ApiKeyAccessService();
     }
 }

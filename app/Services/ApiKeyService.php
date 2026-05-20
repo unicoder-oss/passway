@@ -51,26 +51,18 @@ final class ApiKeyService
         string  $name,
         string  $orgId,
         string  $userId,
-        string  $environment = 'production',
         ?string $expiresAt   = null,
     ): array {
         if (trim($name) === '') {
             throw new \InvalidArgumentException(__('ui.backend.apikey.name_required'));
         }
 
-        if (!in_array($environment, ApiKey::VALID_ENVIRONMENTS, true)) {
-            throw new \InvalidArgumentException(
-                __('ui.backend.apikey.invalid_environment', ['allowed' => implode(', ', ApiKey::VALID_ENVIRONMENTS)])
-            );
-        }
-
         if (!$this->organizationService->hasPermission($orgId, $userId, 'admin')) {
             throw new AuthException(__('ui.backend.apikey.requires_admin_create'), 403);
         }
 
-        $envPrefix = ApiKey::ENV_PREFIXES[$environment];
         $random    = bin2hex(random_bytes(32)); // 64 hex chars
-        $rawKey    = self::KEY_PREFIX . '_' . $envPrefix . '_' . $random;
+        $rawKey    = self::KEY_PREFIX . '_' . $random;
         $keyHash   = hash('sha256', $rawKey);
         $keyPrefix = substr($rawKey, 0, 12);
         $uuid      = generate_uuid();
@@ -83,7 +75,6 @@ final class ApiKeyService
             'name'            => trim($name),
             'key_hash'        => $keyHash,
             'key_prefix'      => $keyPrefix,
-            'environment'     => $environment,
             'is_active'       => 1,
             'expires_at'      => $expiresAt,
         ]);
@@ -100,7 +91,6 @@ final class ApiKeyService
             resourceType: 'api_key',
             resourceId: $apiKey->id,
             resourceUuid: $apiKey->uuid,
-            details: ['environment' => $environment],
         );
 
         return ['key' => $apiKey, 'raw' => $rawKey];
@@ -324,6 +314,24 @@ final class ApiKeyService
      */
     public function validate(string $rawKey): ?User
     {
+        $apiKey = $this->findValidApiKey($rawKey);
+
+        if ($apiKey === null) {
+            return null;
+        }
+
+        $user = $this->findActiveOwner($apiKey);
+        if ($user === null) {
+            return null;
+        }
+
+        $apiKey->touchLastUsed();
+
+        return $user;
+    }
+
+    public function findValidApiKey(string $rawKey): ?ApiKey
+    {
         $hash   = hash('sha256', $rawKey);
         $apiKey = ApiKey::findByHash($hash);
 
@@ -331,16 +339,29 @@ final class ApiKeyService
             return null;
         }
 
+        if ($this->findActiveOwner($apiKey) === null) {
+            return null;
+        }
+
+        return $apiKey;
+    }
+
+    public function findOwner(ApiKey $apiKey): ?User
+    {
         if ($apiKey->userId === null) {
             return null;
         }
 
         $user = User::findById($apiKey->userId);
+        return $user;
+    }
+
+    private function findActiveOwner(ApiKey $apiKey): ?User
+    {
+        $user = $this->findOwner($apiKey);
         if ($user === null || !$user->isActive) {
             return null;
         }
-
-        $apiKey->touchLastUsed();
 
         return $user;
     }
@@ -351,9 +372,8 @@ final class ApiKeyService
         ?string $userAgent,
         ?string $path = null,
     ): ?User {
-        $hash   = hash('sha256', $rawKey);
-        $apiKey = ApiKey::findByHash($hash);
-        $user   = $this->validate($rawKey);
+        $apiKey = $this->findValidApiKey($rawKey);
+        $user   = $apiKey !== null ? $this->findActiveOwner($apiKey) : null;
 
         if ($user === null || $apiKey === null) {
             $this->getAuditService()->record(
@@ -365,6 +385,8 @@ final class ApiKeyService
             );
             return null;
         }
+
+        $apiKey->touchLastUsed();
 
         $this->getAuditService()->record(
             action: 'auth.api_key_success',

@@ -251,6 +251,12 @@ final class SecretController
         $rotationIntegrationUuid = $request->input('rotation_integration_uuid');
         $rotationSchedule = $request->input('rotation_schedule');
 
+        if ($rotationIntegrationUuid !== null) {
+            return Response::validationError([
+                'rotation_integration_uuid' => [__('ui.backend.secret.rotation_integration_immutable')],
+            ]);
+        }
+
         if ($newName === null && $newValue === null && $rotationIntegrationUuid === null && $rotationSchedule === null) {
             return Response::validationError([
                 'name' => [__('ui.backend.secret.update_requires_field')],

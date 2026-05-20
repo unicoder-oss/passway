@@ -19,7 +19,7 @@ require base_path('resources/views/partials/auth_topbar.php');
         <div>
             <h2 style="margin:0 0 .6rem;"><?= e(__('ui.api_key_permissions.key_summary')) ?></h2>
             <div class="muted"><?= e(__('ui.api_key_permissions.owner', ['owner' => $owner?->email ?? __('ui.api_key_permissions.unknown_owner')])) ?></div>
-            <div class="muted"><?= e(__('ui.api_keys.prefix', ['prefix' => $apiKey->keyPrefix])) ?> · <?= e(__('ui.api_keys.environments.' . $apiKey->environment)) ?> · <?= e($apiKey->isActive ? __('ui.api_key_permissions.status_active') : __('ui.api_key_permissions.status_revoked')) ?></div>
+            <div class="muted"><?= e(__('ui.api_keys.prefix', ['prefix' => $apiKey->keyPrefix])) ?> · <?= e($apiKey->isActive ? __('ui.api_key_permissions.status_active') : __('ui.api_key_permissions.status_revoked')) ?></div>
             <div class="muted"><?= __('ui.api_key_permissions.created', ['created_at' => local_datetime($apiKey->createdAt)]) ?><?= $apiKey->expiresAt ? __('ui.api_key_permissions.expires_suffix', ['date' => local_datetime($apiKey->expiresAt)]) : '' ?></div>
         </div>
 

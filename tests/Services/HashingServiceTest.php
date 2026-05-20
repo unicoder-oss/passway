@@ -96,7 +96,7 @@ final class HashingServiceTest extends TestCase
 
     public function test_hash_api_key_returns_64_hex_chars(): void
     {
-        $apiKey = 'sv_prod_' . bin2hex(random_bytes(32));
+        $apiKey = 'sv_' . bin2hex(random_bytes(32));
         $hash   = $this->svc->hashApiKey($apiKey);
 
         $this->assertSame(64, strlen($hash));

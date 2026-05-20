@@ -13,13 +13,10 @@ namespace Passway\Services;
 final readonly class ApiKeyData
 {
     public function __construct(
-        /** Полный API-ключ: sv_{env}_{64hex} — показывается один раз */
+        /** Полный API-ключ: sv_{64hex} — показывается один раз */
         public string $fullKey,
 
-        /** Видимый префикс: sv_prod_ — хранится в БД */
+        /** Видимый префикс ключа — хранится в БД */
         public string $keyPrefix,
-
-        /** Окружение: production | staging | development */
-        public string $environment,
     ) {}
 }

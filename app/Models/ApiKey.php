@@ -14,16 +14,6 @@ use Passway\Core\Database;
  */
 final class ApiKey
 {
-    /** @var array<string> */
-    public const VALID_ENVIRONMENTS = ['production', 'staging', 'development'];
-
-    /** @var array<string,string> */
-    public const ENV_PREFIXES = [
-        'production'  => 'prod',
-        'staging'     => 'stg',
-        'development' => 'dev',
-    ];
-
     public function __construct(
         public readonly string  $id,
         public readonly string  $uuid,
@@ -32,7 +22,6 @@ final class ApiKey
         public readonly string  $name,
         public readonly string  $keyHash,
         public readonly string  $keyPrefix,
-        public readonly string  $environment,
         public readonly bool    $isActive,
         public readonly ?string $lastUsedAt,
         public readonly ?string $expiresAt,
@@ -120,7 +109,6 @@ final class ApiKey
             name:           (string) $row['name'],
             keyHash:        (string) $row['key_hash'],
             keyPrefix:      (string) $row['key_prefix'],
-            environment:    (string) $row['environment'],
             isActive:       (bool)(int) $row['is_active'],
             lastUsedAt:     $row['last_used_at'] !== null ? (string) $row['last_used_at'] : null,
             expiresAt:      $row['expires_at'] !== null ? (string) $row['expires_at'] : null,

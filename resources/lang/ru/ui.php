@@ -336,7 +336,6 @@ return [
         'create' => 'Создать API-ключ',
         'name' => 'Название',
         'name_placeholder' => 'CI deployment',
-        'environment' => 'Окружение',
         'expires_at_optional' => 'Истекает (необязательно)',
         'existing' => 'Существующие ключи',
         'prefix' => 'Префикс :prefix',
@@ -348,11 +347,6 @@ return [
         'status_active' => 'активен',
         'status_revoked' => 'отозван',
         'last_used' => 'Последнее использование :date',
-        'environments' => [
-            'production' => 'production',
-            'staging' => 'staging',
-            'development' => 'development',
-        ],
     ],
     'api_key_permissions' => [
         'for_key' => 'Права для :name',
@@ -532,7 +526,6 @@ return [
         ],
         'apikey' => [
             'name_required' => 'Название обязательно.',
-            'invalid_environment' => 'Недопустимое окружение. Разрешено: :allowed.',
             'requires_admin_create' => 'Только admin и выше могут создавать API-ключи.',
             'failed_load_created_key' => 'Не удалось получить созданный API-ключ.',
             'requires_admin_list' => 'Только admin и выше могут просматривать API-ключи.',
@@ -547,6 +540,7 @@ return [
             'key_not_found' => 'API-ключ не найден.',
             'resource_type_required' => 'resource_type обязателен.',
             'permission_required' => 'permission обязателен.',
+            'route_not_allowed' => 'Этот маршрут недоступен для API-ключей.',
         ],
         'directory' => [
             'name_empty' => 'Название каталога не может быть пустым.',
@@ -605,6 +599,7 @@ return [
             'rotation_integration_inactive' => 'Интеграция ротации неактивна.',
             'rotation_schedule_invalid' => 'Расписание ротации должно быть cron-выражением из 5 полей.',
             'type_required' => 'Недопустимый тип. Разрешено: :allowed.',
+            'rotation_integration_immutable' => 'Изменение integration rotation через API не поддерживается. Можно менять только расписание.',
             'update_requires_field' => 'Необходимо указать хотя бы одно из полей: name или value.',
             'rotation_supported_for_dynamic_only' => 'Настройки ротации поддерживаются только для динамических секретов.',
             'template_manual_value_not_supported' => 'Шаблонные секреты можно обновлять только через повторную генерацию по шаблону.',

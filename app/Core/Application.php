@@ -156,6 +156,10 @@ final class Application
             fn() => new \Passway\Services\LoggerService()
         );
         $this->container->singleton(
+            \Passway\Services\ApiKeyAccessService::class,
+            fn() => new \Passway\Services\ApiKeyAccessService()
+        );
+        $this->container->singleton(
             \Passway\Services\AuditService::class,
             fn($c) => new \Passway\Services\AuditService(
                 $c->make(\Passway\Services\LoggerService::class),
@@ -268,6 +272,7 @@ final class Application
             fn($c) => new \Passway\Services\PermissionService(
                 $c->make(\Passway\Services\OrganizationService::class),
                 $c->make(\Passway\Services\GroupService::class),
+                $c->make(\Passway\Services\ApiKeyAccessService::class),
                 $c->make(\Passway\Services\AuditService::class),
             )
         );
@@ -376,6 +381,7 @@ final class Application
             fn($c) => new \Passway\Services\DirectoryService(
                 $c->make(\Passway\Services\OrganizationService::class),
                 $c->make(\Passway\Services\PermissionService::class),
+                $c->make(\Passway\Services\ApiKeyAccessService::class),
             )
         );
         $this->container->singleton(
@@ -404,6 +410,7 @@ final class Application
             \Passway\Controllers\OrganizationController::class,
             fn($c) => new \Passway\Controllers\OrganizationController(
                 $c->make(\Passway\Services\OrganizationService::class),
+                $c->make(\Passway\Services\ApiKeyAccessService::class),
             )
         );
         $this->container->singleton(

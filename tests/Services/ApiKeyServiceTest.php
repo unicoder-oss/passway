@@ -47,32 +47,21 @@ final class ApiKeyServiceTest extends DatabaseTestCase
         ['key' => $apiKey, 'raw' => $raw] = $this->svc->create('CI key', $org->id, $owner->id);
 
         $this->assertInstanceOf(ApiKey::class, $apiKey);
-        $this->assertStringStartsWith('sv_prod_', $raw);
-        $this->assertSame(72, strlen($raw)); // sv_prod_ (8) + 64 hex = 72
+        $this->assertStringStartsWith('sv_', $raw);
+        $this->assertSame(67, strlen($raw)); // sv_ (3) + 64 hex = 67
         $this->assertSame('CI key', $apiKey->name);
-        $this->assertSame('production', $apiKey->environment);
         $this->assertTrue($apiKey->isActive);
         $this->assertSame(hash('sha256', $raw), $apiKey->keyHash);
     }
 
-    public function test_create_staging_key(): void
+    public function test_create_returns_plain_format_without_environment(): void
     {
         $owner = $this->createTestUser();
         $org   = $this->orgSvc->create('Org', $owner->id);
 
-        ['raw' => $raw] = $this->svc->create('Stg key', $org->id, $owner->id, 'staging');
+        ['raw' => $raw] = $this->svc->create('Key', $org->id, $owner->id);
 
-        $this->assertStringStartsWith('sv_stg_', $raw);
-    }
-
-    public function test_create_development_key(): void
-    {
-        $owner = $this->createTestUser();
-        $org   = $this->orgSvc->create('Org', $owner->id);
-
-        ['raw' => $raw] = $this->svc->create('Dev key', $org->id, $owner->id, 'development');
-
-        $this->assertStringStartsWith('sv_dev_', $raw);
+        $this->assertMatchesRegularExpression('/^sv_[0-9a-f]{64}$/', $raw);
     }
 
     public function test_create_fails_for_non_admin(): void
@@ -84,15 +73,6 @@ final class ApiKeyServiceTest extends DatabaseTestCase
 
         $this->expectException(AuthException::class);
         $this->svc->create('Key', $org->id, $user->id);
-    }
-
-    public function test_create_fails_with_invalid_environment(): void
-    {
-        $owner = $this->createTestUser();
-        $org   = $this->orgSvc->create('Org', $owner->id);
-
-        $this->expectException(\InvalidArgumentException::class);
-        $this->svc->create('Key', $org->id, $owner->id, 'invalid');
     }
 
     public function test_create_fails_with_empty_name(): void
@@ -114,7 +94,7 @@ final class ApiKeyServiceTest extends DatabaseTestCase
         $org   = $this->orgSvc->create('Org', $owner->id);
 
         $this->svc->create('Key A', $org->id, $owner->id);
-        $this->svc->create('Key B', $org->id, $owner->id, 'staging');
+        $this->svc->create('Key B', $org->id, $owner->id);
 
         $keys = $this->svc->listForOrg($org->id, $owner->id);
 
@@ -211,7 +191,7 @@ final class ApiKeyServiceTest extends DatabaseTestCase
 
     public function test_validate_returns_null_for_wrong_key(): void
     {
-        $user = $this->svc->validate('sv_prod_' . str_repeat('0', 64));
+        $user = $this->svc->validate('sv_' . str_repeat('0', 64));
 
         $this->assertNull($user);
     }
@@ -237,7 +217,7 @@ final class ApiKeyServiceTest extends DatabaseTestCase
 
     public function test_validate_for_request_writes_fail_audit_log(): void
     {
-        $user = $this->svc->validateForRequest('sv_prod_' . str_repeat('0', 64), '1.2.3.4', 'Agent', '/api/v1/secrets');
+        $user = $this->svc->validateForRequest('sv_' . str_repeat('0', 64), '1.2.3.4', 'Agent', '/api/v1/secrets');
 
         $this->assertNull($user);
 

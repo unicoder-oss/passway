@@ -687,7 +687,6 @@ final class WebController
         $user = AuthContext::requireUser();
         $org = $this->findOrgOrFail($request);
         $name = \trim((string) ($request->input('name') ?? ''));
-        $environment = \trim((string) ($request->input('environment') ?? 'production'));
         $expiresAt = \trim((string) ($request->input('expires_at') ?? ''));
 
         try {
@@ -695,7 +694,6 @@ final class WebController
                 $name,
                 $org->id,
                 $user->id,
-                $environment,
                 $expiresAt !== '' ? $expiresAt : null,
             );
             $keys = $this->apiKeyService->listForOrg($org->id, $user->id);

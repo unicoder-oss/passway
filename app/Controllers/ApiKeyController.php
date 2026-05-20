@@ -58,7 +58,6 @@ final class ApiKeyController
         $org  = $this->findOrgOrFail($request);
 
         $name        = \trim((string) ($request->input('name') ?? ''));
-        $environment = \trim((string) ($request->input('environment') ?? 'production'));
         $expiresAt   = $request->input('expires_at') !== null
             ? \trim((string) $request->input('expires_at'))
             : null;
@@ -72,13 +71,12 @@ final class ApiKeyController
                 $name,
                 $org->id,
                 $user->id,
-                $environment,
                 $expiresAt !== '' ? $expiresAt : null,
             );
         } catch (AuthException $e) {
             return Response::error($e->getMessage(), $e->getCode() ?: 403);
         } catch (\InvalidArgumentException $e) {
-            return Response::validationError(['environment' => [$e->getMessage()]]);
+            return Response::validationError(['name' => [$e->getMessage()]]);
         }
 
         // Возвращаем сырой ключ ОДИН РАЗ
@@ -237,7 +235,6 @@ final class ApiKeyController
             'uuid'         => $k->uuid,
             'name'         => $k->name,
             'key_prefix'   => $k->keyPrefix,
-            'environment'  => $k->environment,
             'is_active'    => $k->isActive,
             'last_used_at' => $k->lastUsedAt,
             'expires_at'   => $k->expiresAt,

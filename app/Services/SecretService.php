@@ -4,6 +4,7 @@ declare(strict_types=1);
 
 namespace Passway\Services;
 
+use Passway\Core\AuthContext;
 use Passway\Core\Database;
 use Passway\Exceptions\AuthException;
 use Passway\Models\Directory;
@@ -349,8 +350,16 @@ final class SecretService
 
         // requires_approval: пользователи ниже moderator должны использовать ApprovalService::useToken()
         if ($secret->requiresApproval
+            && !AuthContext::isApiKeyRequest()
             && !$this->organizationService->hasPermission($orgId, $userId, 'moderator')
         ) {
+            throw new AuthException(
+                __('ui.backend.secret.requires_approval'),
+                403
+            );
+        }
+
+        if ($secret->requiresApproval && AuthContext::isApiKeyRequest()) {
             throw new AuthException(
                 __('ui.backend.secret.requires_approval'),
                 403

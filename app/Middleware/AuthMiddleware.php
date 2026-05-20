@@ -8,6 +8,7 @@ use Closure;
 use Passway\Core\AuthContext;
 use Passway\Core\Request;
 use Passway\Core\Response;
+use Passway\Models\ApiKey;
 use Passway\Services\AuditService;
 use Passway\Services\ApiKeyService;
 use Passway\Services\SessionService;
@@ -63,6 +64,7 @@ final class AuthMiddleware
         if ($rawToken !== null) {
             $user = $this->sessionService->validate($rawToken);
             if ($user !== null && $user->isActive) {
+                AuthContext::setApiKey(null);
                 AuthContext::setUser($user);
                 return $next($request);
             }
@@ -81,13 +83,19 @@ final class AuthMiddleware
         $apiKey = $request->header('X-Api-Key') ?? $request->apiKey();
 
         if ($apiKey !== null && \is_string($apiKey) && $apiKey !== '') {
+            $authenticatedKey = $this->apiKeyService->findValidApiKey($apiKey);
             $user = $this->apiKeyService->validateForRequest(
                 $apiKey,
                 $request->ip(),
                 $request->header('User-Agent'),
                 $request->path(),
             );
-            if ($user !== null && $user->isActive) {
+            if ($user !== null && $user->isActive && $authenticatedKey !== null) {
+                if (!$this->isApiKeyRouteAllowed($request, $authenticatedKey)) {
+                    return Response::forbidden(__('ui.backend.apikey.route_not_allowed'));
+                }
+
+                AuthContext::setApiKey($authenticatedKey);
                 AuthContext::setUser($user);
                 return $next($request);
             }
@@ -95,6 +103,7 @@ final class AuthMiddleware
 
         // ---- 401 ----
         AuthContext::setUser(null);
+        AuthContext::setApiKey(null);
 
         $this->auditService->record(
             action: 'auth.unauthorized',
@@ -109,5 +118,24 @@ final class AuthMiddleware
         }
 
         return Response::redirect('/auth/login');
+    }
+
+    private function isApiKeyRouteAllowed(Request $request, ApiKey $apiKey): bool
+    {
+        if (!$request->isApi()) {
+            return false;
+        }
+
+        $path = $request->path();
+
+        if (preg_match('#^/api/v1/organizations/[^/]+$#', $path) === 1) {
+            return true;
+        }
+
+        if (preg_match('#^/api/v1/organizations/[^/]+/directories(?:/[^/]+(?:/secrets(?:/template-preview|/[^/]+(?:/(?:regenerate|rotate|versions))?)?)?)?$#', $path) === 1) {
+            return true;
+        }
+
+        return false;
     }
 }

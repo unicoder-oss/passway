@@ -95,7 +95,7 @@ final class HashingService
 
     /**
      * Захешировать API-ключ для хранения в БД.
-     * Формат ключа: sv_{env}_{64 hex} — суффикс 64 hex = 32 байта.
+     * Формат ключа: sv_{64 hex}.
      *
      * @return string SHA-256 hex (64 символа)
      */

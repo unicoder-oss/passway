@@ -41,34 +41,22 @@ final class TokenService
     /**
      * Сгенерировать API-ключ.
      *
-     * Формат: sv_{env}_{64 hex}
-     *   - sv_prod_  → production
-     *   - sv_stg_   → staging
-     *   - sv_dev_   → development
+     * Формат: sv_{64 hex}
      *
      * Полный ключ передаётся пользователю ОДИН раз при создании.
      * В БД хранятся только: SHA-256 хеш (key_hash) и префикс (key_prefix).
      *
-     * @param string $environment  production | staging | development
      * @return ApiKeyData          Полный ключ + метаданные
      */
-    public function generateApiKey(string $environment = 'production'): ApiKeyData
+    public function generateApiKey(): ApiKeyData
     {
-        $envCode = match ($environment) {
-            'production'  => 'prod',
-            'staging'     => 'stg',
-            'development' => 'dev',
-            default       => 'prod',
-        };
-
         $random   = bin2hex(random_bytes(32)); // 64 hex
-        $fullKey  = "sv_{$envCode}_{$random}";
-        $prefix   = "sv_{$envCode}_";
+        $fullKey  = "sv_{$random}";
+        $prefix   = substr($fullKey, 0, 12);
 
         return new ApiKeyData(
             fullKey:     $fullKey,
             keyPrefix:   $prefix,
-            environment: $environment,
         );
     }
 
@@ -125,26 +113,10 @@ final class TokenService
     // ------------------------------------------------------------------ //
 
     /**
-     * Извлечь окружение из API-ключа по префиксу.
-     *
-     * @param string $keyOrPrefix  Полный ключ или только префикс
-     * @return string|null         production | staging | development | null
-     */
-    public function extractEnvironmentFromApiKey(string $keyOrPrefix): ?string
-    {
-        return match (true) {
-            str_starts_with($keyOrPrefix, 'sv_prod_') => 'production',
-            str_starts_with($keyOrPrefix, 'sv_stg_')  => 'staging',
-            str_starts_with($keyOrPrefix, 'sv_dev_')  => 'development',
-            default                                    => null,
-        };
-    }
-
-    /**
      * Проверить, что строка имеет формат API-ключа (для быстрой валидации).
      */
     public function looksLikeApiKey(string $value): bool
     {
-        return (bool) preg_match('/^sv_(prod|stg|dev)_[0-9a-f]{64}$/', $value);
+        return (bool) preg_match('/^sv_[0-9a-f]{64}$/', $value);
     }
 }
