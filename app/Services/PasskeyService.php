@@ -45,6 +45,8 @@ final class PasskeyService
 {
     private readonly string $rpId;
     private readonly string $rpName;
+    /** @var string[] */
+    private readonly array $securedRelyingPartyIds;
     private readonly PublicKeyCredentialLoader $loader;
     private readonly AuthenticatorAttestationResponseValidator $attestationValidator;
     private readonly AuthenticatorAssertionResponseValidator $assertionValidator;
@@ -53,6 +55,7 @@ final class PasskeyService
     {
         $this->rpId   = (string) ($_ENV['WEBAUTHN_RP_ID'] ?? 'localhost');
         $this->rpName = (string) ($_ENV['APP_NAME'] ?? 'Passway');
+        $this->securedRelyingPartyIds = $this->buildSecuredRelyingPartyIds();
 
         // Поддержка только "none" attestation — достаточно для большинства use-cases.
         // Для аппаратных ключей с верификацией аттестации нужен MetadataService.
@@ -102,7 +105,8 @@ final class PasskeyService
         $excludeCredentials = $this->buildExcludeCredentials($user);
 
         $authenticatorSelection = AuthenticatorSelectionCriteria::create(
-            userVerification: AuthenticatorSelectionCriteria::USER_VERIFICATION_REQUIREMENT_REQUIRED,
+            userVerification: AuthenticatorSelectionCriteria::USER_VERIFICATION_REQUIREMENT_PREFERRED,
+            residentKey: AuthenticatorSelectionCriteria::RESIDENT_KEY_REQUIREMENT_PREFERRED,
         );
 
         $options = PublicKeyCredentialCreationOptions::create(
@@ -160,6 +164,7 @@ final class PasskeyService
                 authenticatorAttestationResponse:      $publicKeyCredential->response,
                 publicKeyCredentialCreationOptions:    $creationOptions,
                 request:                               $this->rpId,
+                securedRelyingPartyId:                 $this->securedRelyingPartyIds,
             );
         } catch (AuthenticatorResponseVerificationException | InvalidDataException $e) {
             throw new AuthException(__('ui.backend.passkey.registration_failed', ['message' => $e->getMessage()]));
@@ -267,6 +272,7 @@ final class PasskeyService
                 publicKeyCredentialRequestOptions:   $requestOptions,
                 request:                             $this->rpId,
                 userHandle:                          $user->uuid,
+                securedRelyingPartyId:               $this->securedRelyingPartyIds,
             );
         } catch (AuthenticatorResponseVerificationException | InvalidDataException $e) {
             throw new AuthException(__('ui.backend.passkey.authentication_failed', ['message' => $e->getMessage()]));
@@ -394,9 +400,12 @@ final class PasskeyService
                 ],
                 $options->excludeCredentials
             ),
-            'authenticatorSelection' => $options->authenticatorSelection !== null ? [
+            'authenticatorSelection' => $options->authenticatorSelection !== null ? \array_filter([
+                'authenticatorAttachment' => $options->authenticatorSelection->authenticatorAttachment,
                 'userVerification' => $options->authenticatorSelection->userVerification,
-            ] : null,
+                'residentKey' => $options->authenticatorSelection->residentKey,
+                'requireResidentKey' => null,
+            ], static fn($value) => $value !== null) : null,
             'attestation' => $options->attestation ?? 'none',
         ];
     }
@@ -429,5 +438,11 @@ final class PasskeyService
         if (\session_status() === PHP_SESSION_NONE) {
             \session_start();
         }
+    }
+
+    /** @return string[] */
+    private function buildSecuredRelyingPartyIds(): array
+    {
+        return $this->rpId === 'localhost' ? ['localhost'] : [];
     }
 }
