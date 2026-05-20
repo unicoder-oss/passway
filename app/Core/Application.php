@@ -48,6 +48,7 @@ final class Application
     public function run(): void
     {
         $request = Request::fromGlobals();
+        set_request_locale(resolve_request_locale($request));
 
         try {
             // Глобальная проверка setup — до маршрутизации
@@ -59,6 +60,10 @@ final class Application
         } catch (Throwable $e) {
             $response = $this->handleException($e, $request);
         }
+
+        $response = $response
+            ->withHeader('Content-Language', app_locale())
+            ->withHeader('Vary', locale_vary_header($request));
 
         $response->send();
     }

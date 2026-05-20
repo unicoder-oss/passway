@@ -20,7 +20,7 @@ $currentDirOwnerAction = $currentDir !== null
     : null;
 $templateNamesById = [];
 foreach ($templates as $template) {
-    $templateNamesById[$template->id] = $template->name;
+    $templateNamesById[$template->id] = $template->displayName();
 }
 $renderRotationField = static function (array $field, string $namePrefix, bool $required = true): void {
     $fieldName = isset($field['name']) && is_string($field['name']) ? trim($field['name']) : '';
@@ -593,7 +593,7 @@ require base_path('resources/views/partials/auth_topbar.php');
                             <label for="modal-template-uuid"><?= e(__('ui.home.template')) ?></label>
                             <select id="modal-template-uuid" name="template_uuid">
                                 <option value=""><?= e(__('ui.home.no_template')) ?></option>
-                                <?php foreach ($templates as $template): ?><option value="<?= e($template->uuid) ?>"><?= e($template->name) ?></option><?php endforeach; ?>
+                                <?php foreach ($templates as $template): ?><option value="<?= e($template->uuid) ?>"><?= e($template->displayName()) ?></option><?php endforeach; ?>
                             </select>
                         </div>
                         <div id="modal-static-value-field">
@@ -1047,6 +1047,7 @@ require base_path('resources/views/partials/auth_topbar.php');
                 })).filter((rule) => !(rule.subject_type === 'user' && rule.subject_uuid === currentDirectoryOwnerUuid));
                 renderDirectoryAclRules();
                 directoryAclStatus.textContent = directoryAclLabels.accessSaved;
+                directoryAclModal?.close();
             } catch (error) {
                 directoryAclStatus.textContent = error instanceof Error ? error.message : <?= json_encode((string) __('ui.organization.acl_save_failed')) ?>;
             } finally {

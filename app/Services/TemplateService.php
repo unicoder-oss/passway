@@ -17,7 +17,17 @@ final class TemplateService
     /** @return Template[] */
     public function listAvailable(?string $orgId = null, ?string $type = null): array
     {
-        return Template::findAvailableForOrg($orgId, $type);
+        $templates = Template::findAvailableForOrg($orgId, $type);
+
+        usort($templates, static function (Template $left, Template $right): int {
+            if ($left->isSystem !== $right->isSystem) {
+                return $left->isSystem ? -1 : 1;
+            }
+
+            return strcasecmp($left->displayName(), $right->displayName());
+        });
+
+        return $templates;
     }
 
     /**

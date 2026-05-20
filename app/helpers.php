@@ -8,6 +8,7 @@ declare(strict_types=1);
  */
 
 use Passway\Core\Config;
+use Passway\Core\Request;
 
 if (!function_exists('config')) {
     /**
@@ -190,13 +191,157 @@ if (!function_exists('app_fallback_locale')) {
     }
 }
 
+if (!function_exists('supported_locales')) {
+    /** @return string[] */
+    function supported_locales(): array
+    {
+        return ['en', 'ru'];
+    }
+}
+
+if (!function_exists('api_locale_header_name')) {
+    function api_locale_header_name(): string
+    {
+        return 'X-Passway-Locale';
+    }
+}
+
+if (!function_exists('normalize_locale_code')) {
+    function normalize_locale_code(?string $locale): ?string
+    {
+        $locale = strtolower(trim((string) $locale));
+        $locale = preg_replace('/[^a-z0-9_-]/', '', $locale);
+        if ($locale === null || $locale === '') {
+            return null;
+        }
+
+        $candidates = [$locale];
+        if (str_contains($locale, '-')) {
+            $candidates[] = (string) strstr($locale, '-', true);
+        }
+        if (str_contains($locale, '_')) {
+            $candidates[] = (string) strstr($locale, '_', true);
+        }
+
+        foreach ($candidates as $candidate) {
+            if (in_array($candidate, supported_locales(), true)) {
+                return $candidate;
+            }
+        }
+
+        return null;
+    }
+}
+
+if (!function_exists('default_ui_locale')) {
+    function default_ui_locale(): string
+    {
+        return normalize_locale_code((string) env('APP_LOCALE', app_fallback_locale())) ?? app_fallback_locale();
+    }
+}
+
+if (!function_exists('set_request_locale')) {
+    function set_request_locale(string $locale): void
+    {
+        $normalized = normalize_locale_code($locale) ?? app_fallback_locale();
+        $GLOBALS['passway_request_locale'] = $normalized;
+    }
+}
+
+if (!function_exists('reset_request_locale')) {
+    function reset_request_locale(): void
+    {
+        unset($GLOBALS['passway_request_locale']);
+    }
+}
+
+if (!function_exists('request_locale')) {
+    function request_locale(): string
+    {
+        $locale = $GLOBALS['passway_request_locale'] ?? null;
+        if (is_string($locale) && $locale !== '') {
+            return $locale;
+        }
+
+        return default_ui_locale();
+    }
+}
+
 if (!function_exists('app_locale')) {
     function app_locale(): string
     {
-        $locale = strtolower(trim((string) env('APP_LOCALE', app_fallback_locale())));
-        $locale = preg_replace('/[^a-z0-9_-]/', '', $locale);
+        return request_locale();
+    }
+}
 
-        return $locale !== '' ? $locale : app_fallback_locale();
+if (!function_exists('resolve_browser_locale')) {
+    function resolve_browser_locale(?string $header): ?string
+    {
+        $header = trim((string) $header);
+        if ($header === '') {
+            return null;
+        }
+
+        $candidates = [];
+        foreach (explode(',', $header) as $index => $part) {
+            $part = trim($part);
+            if ($part === '') {
+                continue;
+            }
+
+            $segments = array_map('trim', explode(';', $part));
+            $code = array_shift($segments);
+            if (!is_string($code) || $code === '') {
+                continue;
+            }
+
+            $quality = 1.0;
+            foreach ($segments as $segment) {
+                if (str_starts_with($segment, 'q=')) {
+                    $quality = (float) substr($segment, 2);
+                }
+            }
+
+            $normalized = normalize_locale_code($code);
+            if ($normalized === null) {
+                continue;
+            }
+
+            $candidates[] = ['locale' => $normalized, 'quality' => $quality, 'index' => $index];
+        }
+
+        if ($candidates === []) {
+            return null;
+        }
+
+        usort($candidates, static function (array $left, array $right): int {
+            if ($left['quality'] === $right['quality']) {
+                return $left['index'] <=> $right['index'];
+            }
+
+            return $left['quality'] < $right['quality'] ? 1 : -1;
+        });
+
+        return $candidates[0]['locale'];
+    }
+}
+
+if (!function_exists('resolve_request_locale')) {
+    function resolve_request_locale(Request $request): string
+    {
+        if ($request->isApi()) {
+            $headerLocale = normalize_locale_code($request->header(api_locale_header_name()));
+            return $headerLocale ?? app_fallback_locale();
+        }
+
+        return resolve_browser_locale($request->header('Accept-Language')) ?? default_ui_locale();
+    }
+}
+
+if (!function_exists('locale_vary_header')) {
+    function locale_vary_header(Request $request): string
+    {
+        return $request->isApi() ? api_locale_header_name() : 'Accept-Language';
     }
 }
 

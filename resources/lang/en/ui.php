@@ -45,6 +45,30 @@ return [
         'organization_group_details' => 'Group Members',
         'secret_details' => 'Secret Details',
     ],
+    'templates' => [
+        'system' => [
+            'password' => [
+                'default' => [
+                    'name' => 'Password',
+                    'description' => 'Generate a secure random password',
+                ],
+                'strong_no_special' => [
+                    'name' => 'Strong Password (No Special)',
+                    'description' => 'Password with letters and digits only',
+                ],
+            ],
+            'ssh_key' => [
+                'rsa_4096' => [
+                    'name' => 'SSH Key RSA-4096',
+                    'description' => 'Generate RSA 4096-bit SSH key pair',
+                ],
+                'ed25519' => [
+                    'name' => 'SSH Key Ed25519',
+                    'description' => 'Generate Ed25519 SSH key pair (recommended)',
+                ],
+            ],
+        ],
+    ],
     'auth' => [
         'login' => [
             'heading' => 'Secure Access',
@@ -183,7 +207,7 @@ return [
         'no_template' => 'No template',
         'value' => 'Value',
         'secret_value' => 'Secret value',
-        'value_placeholder' => 'Only for static/dynamic',
+        'value_placeholder' => 'Enter secret value',
         'generated_value' => 'Generated value',
         'regenerate' => 'Regenerate',
         'regenerated' => 'Generated again',
@@ -206,10 +230,10 @@ return [
     'organization_manage' => [
         'manage' => 'Manage :organization',
         'roles' => [
-            'owner' => 'owner',
-            'reader' => 'reader',
-            'editor' => 'editor',
-            'admin' => 'admin',
+            'owner' => 'Owner',
+            'reader' => 'Reader',
+            'editor' => 'Editor',
+            'admin' => 'Admin',
         ],
         'audit_log' => 'Audit Log',
         'api_keys' => 'API Keys',
@@ -638,6 +662,10 @@ return [
         'auth_heading' => 'Authentication',
         'auth_api_key' => 'API key: send `X-Api-Key: sv_<64hex>`.',
         'auth_api_key_generate' => 'You can create a new key in the organization UI at `/organizations/:uuid/api-keys`.',
+        'locale_heading' => 'Response locale',
+        'locale_default' => 'By default the API responds in English.',
+        'locale_override' => 'To request another language, send the `X-Passway-Locale` header with a supported locale code.',
+        'locale_supported' => 'Supported codes: :codes.',
         'access' => [
             'public' => 'Public',
             'api_key' => 'API key',

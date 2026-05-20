@@ -65,6 +65,12 @@ require base_path('resources/views/partials/auth_topbar.php');
                 <div class="muted"><?= e(__('ui.api_docs.auth_api_key')) ?></div>
                 <div class="muted"><?= e(__('ui.api_docs.auth_api_key_generate')) ?></div>
             </div>
+            <div>
+                <h2 style="margin:0 0 .5rem;"><?= e(__('ui.api_docs.locale_heading')) ?></h2>
+                <div class="muted"><?= e(__('ui.api_docs.locale_default')) ?></div>
+                <div class="muted"><?= e(__('ui.api_docs.locale_override')) ?></div>
+                <div class="muted"><?= e(__('ui.api_docs.locale_supported', ['codes' => implode(', ', supported_locales())])) ?></div>
+            </div>
         </div>
     </section>
 

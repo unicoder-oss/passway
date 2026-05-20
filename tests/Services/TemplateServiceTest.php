@@ -25,7 +25,14 @@ final class TemplateServiceTest extends DatabaseTestCase
     protected function setUp(): void
     {
         parent::setUp();
+        reset_request_locale();
         $this->svc = new TemplateService();
+    }
+
+    protected function tearDown(): void
+    {
+        reset_request_locale();
+        parent::tearDown();
     }
 
     public function test_list_available_returns_system_templates(): void
@@ -34,6 +41,31 @@ final class TemplateServiceTest extends DatabaseTestCase
 
         $this->assertGreaterThanOrEqual(4, \count($templates));
         $this->assertContains('Password', \array_map(fn($t) => $t->name, $templates));
+    }
+
+    public function test_list_available_localizes_system_template_names(): void
+    {
+        set_request_locale('ru');
+
+        $templates = $this->svc->listAvailable();
+
+        $this->assertContains('Пароль', \array_map(fn($t) => $t->displayName(), $templates));
+    }
+
+    public function test_system_templates_have_stable_system_keys(): void
+    {
+        $templates = $this->svc->listAvailable();
+        $passwordTemplate = null;
+
+        foreach ($templates as $template) {
+            if ($template->type === 'password' && $template->name === 'Password') {
+                $passwordTemplate = $template;
+                break;
+            }
+        }
+
+        $this->assertNotNull($passwordTemplate);
+        $this->assertSame('password.default', $passwordTemplate->systemKey);
     }
 
     public function test_generate_password_respects_overrides(): void

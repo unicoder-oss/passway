@@ -1145,6 +1145,7 @@ $renderReadonlyRotationField = static function (array $field, array $values): vo
             })).filter((rule) => !(rule.subject_type === 'user' && rule.subject_uuid === secretOwnerUuid));
             renderAclRules();
             secretAclStatus.textContent = aclLabels.accessSaved;
+            secretAclModal?.close();
         } catch (error) {
             secretAclStatus.textContent = error instanceof Error ? error.message : <?= json_encode((string) __('ui.secret.acl_save_failed')) ?>;
         } finally {

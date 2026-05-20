@@ -2229,7 +2229,7 @@ final class WebController
                 $templateOverrides = $templateView['overrides'];
                 $templateDetails = [
                     'uuid' => $template->uuid,
-                    'name' => $template->name,
+                    'name' => $template->displayName(),
                     'type' => $template->type,
                 ];
             }

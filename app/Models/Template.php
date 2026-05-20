@@ -18,6 +18,7 @@ final class Template
         public readonly string $uuid,
         public readonly ?string $organizationId,
         public readonly string $name,
+        public readonly ?string $systemKey,
         public readonly string $type,
         public readonly ?string $description,
         public readonly string $configJson,
@@ -35,6 +36,7 @@ final class Template
             uuid:           (string) $row['uuid'],
             organizationId: $row['organization_id'] !== null ? (string) $row['organization_id'] : null,
             name:           (string) $row['name'],
+            systemKey:      $row['system_key'] !== null ? (string) $row['system_key'] : null,
             type:           (string) $row['type'],
             description:    $row['description'] !== null ? (string) $row['description'] : null,
             configJson:     (string) $row['config_json'],
@@ -50,6 +52,30 @@ final class Template
     {
         $decoded = \json_decode($this->configJson, true);
         return \is_array($decoded) ? $decoded : [];
+    }
+
+    public function displayName(): string
+    {
+        if ($this->systemKey === null || $this->systemKey === '') {
+            return $this->name;
+        }
+
+        $key = 'ui.templates.system.' . $this->systemKey . '.name';
+        $translated = __($key);
+
+        return $translated !== $key ? $translated : $this->name;
+    }
+
+    public function displayDescription(): ?string
+    {
+        if ($this->systemKey === null || $this->systemKey === '') {
+            return $this->description;
+        }
+
+        $key = 'ui.templates.system.' . $this->systemKey . '.description';
+        $translated = __($key);
+
+        return $translated !== $key ? $translated : $this->description;
     }
 
     public static function findById(string $id): ?self

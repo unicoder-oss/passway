@@ -29,6 +29,7 @@ final class CreateTemplatesRotationsTables extends Migration
             // NULL = системный шаблон
             'organization_id  BIGINT',
             'name             VARCHAR(255) NOT NULL',
+            'system_key       VARCHAR(120)',
             // password | ssh_key
             'type             VARCHAR(50) NOT NULL',
             'description      TEXT',
@@ -153,6 +154,7 @@ final class CreateTemplatesRotationsTables extends Migration
             [
                 'uuid'        => $uuid1,
                 'name'        => 'Password',
+                'system_key'  => 'password.default',
                 'type'        => 'password',
                 'description' => 'Generate a secure random password',
                 'config_json' => json_encode([
@@ -169,6 +171,7 @@ final class CreateTemplatesRotationsTables extends Migration
             [
                 'uuid'        => $uuid2,
                 'name'        => 'Strong Password (No Special)',
+                'system_key'  => 'password.strong_no_special',
                 'type'        => 'password',
                 'description' => 'Password with letters and digits only',
                 'config_json' => json_encode([
@@ -184,6 +187,7 @@ final class CreateTemplatesRotationsTables extends Migration
             [
                 'uuid'        => $uuid3,
                 'name'        => 'SSH Key RSA-4096',
+                'system_key'  => 'ssh_key.rsa_4096',
                 'type'        => 'ssh_key',
                 'description' => 'Generate RSA 4096-bit SSH key pair',
                 'config_json' => json_encode([
@@ -196,6 +200,7 @@ final class CreateTemplatesRotationsTables extends Migration
             [
                 'uuid'        => $uuid4,
                 'name'        => 'SSH Key Ed25519',
+                'system_key'  => 'ssh_key.ed25519',
                 'type'        => 'ssh_key',
                 'description' => 'Generate Ed25519 SSH key pair (recommended)',
                 'config_json' => json_encode([
@@ -209,19 +214,19 @@ final class CreateTemplatesRotationsTables extends Migration
         foreach ($templates as $tpl) {
             if ($this->driver === 'pgsql') {
                 $this->db->getPdo()->prepare("
-                    INSERT INTO templates (uuid, organization_id, name, type, description, config_json, is_system)
-                    VALUES (?, NULL, ?, ?, ?, ?, ?)
+                    INSERT INTO templates (uuid, organization_id, name, system_key, type, description, config_json, is_system)
+                    VALUES (?, NULL, ?, ?, ?, ?, ?, ?)
                     ON CONFLICT (uuid) DO NOTHING
                 ")->execute([
-                    $tpl['uuid'], $tpl['name'], $tpl['type'],
+                    $tpl['uuid'], $tpl['name'], $tpl['system_key'], $tpl['type'],
                     $tpl['description'], $tpl['config_json'], $tpl['is_system'],
                 ]);
             } else {
                 $this->db->getPdo()->prepare("
-                    INSERT OR IGNORE INTO templates (uuid, organization_id, name, type, description, config_json, is_system)
-                    VALUES (?, NULL, ?, ?, ?, ?, ?)
+                    INSERT OR IGNORE INTO templates (uuid, organization_id, name, system_key, type, description, config_json, is_system)
+                    VALUES (?, NULL, ?, ?, ?, ?, ?, ?)
                 ")->execute([
-                    $tpl['uuid'], $tpl['name'], $tpl['type'],
+                    $tpl['uuid'], $tpl['name'], $tpl['system_key'], $tpl['type'],
                     $tpl['description'], $tpl['config_json'], $tpl['is_system'],
                 ]);
             }

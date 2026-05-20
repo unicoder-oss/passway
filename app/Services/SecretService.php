@@ -1075,7 +1075,7 @@ final class SecretService
 
         return [
             'template_uuid' => $template->uuid,
-            'template_name' => $template->name,
+            'template_name' => $template->displayName(),
             'template_type' => $template->type,
             'value' => $preview['value'],
             'display_value' => $preview['display_value'],
