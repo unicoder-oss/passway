@@ -1,0 +1,422 @@
+<?php
+
+declare(strict_types=1);
+
+namespace Passway\Tests\Services;
+
+use Passway\Core\Database;
+use Passway\Exceptions\AuthException;
+use Passway\Models\ApiKey;
+use Passway\Models\ApiKeyPermission;
+use Passway\Services\ApiKeyService;
+use Passway\Services\OrganizationService;
+use Passway\Tests\DatabaseTestCase;
+
+/**
+ * Тесты ApiKeyService: создание, листинг, отзыв API-ключей,
+ * управление правами, валидация, rate limiting.
+ *
+ * @requires extension pdo_sqlite
+ */
+final class ApiKeyServiceTest extends DatabaseTestCase
+{
+    private ApiKeyService       $svc;
+    private OrganizationService $orgSvc;
+
+    protected function setUp(): void
+    {
+        parent::setUp();
+
+        $this->orgSvc = new OrganizationService();
+        $this->svc    = new ApiKeyService($this->orgSvc);
+
+        Database::getInstance()->query(
+            "UPDATE system_config SET value = 'team' WHERE key = 'deploy_mode'"
+        );
+    }
+
+    // ------------------------------------------------------------------ //
+    //  create()                                                           //
+    // ------------------------------------------------------------------ //
+
+    public function test_create_returns_key_and_raw_string(): void
+    {
+        $owner = $this->createTestUser();
+        $org   = $this->orgSvc->create('Org', $owner->id);
+
+        ['key' => $apiKey, 'raw' => $raw] = $this->svc->create('CI key', $org->id, $owner->id);
+
+        $this->assertInstanceOf(ApiKey::class, $apiKey);
+        $this->assertStringStartsWith('sv_prod_', $raw);
+        $this->assertSame(72, strlen($raw)); // sv_prod_ (8) + 64 hex = 72
+        $this->assertSame('CI key', $apiKey->name);
+        $this->assertSame('production', $apiKey->environment);
+        $this->assertTrue($apiKey->isActive);
+        $this->assertSame(hash('sha256', $raw), $apiKey->keyHash);
+    }
+
+    public function test_create_staging_key(): void
+    {
+        $owner = $this->createTestUser();
+        $org   = $this->orgSvc->create('Org', $owner->id);
+
+        ['raw' => $raw] = $this->svc->create('Stg key', $org->id, $owner->id, 'staging');
+
+        $this->assertStringStartsWith('sv_stg_', $raw);
+    }
+
+    public function test_create_development_key(): void
+    {
+        $owner = $this->createTestUser();
+        $org   = $this->orgSvc->create('Org', $owner->id);
+
+        ['raw' => $raw] = $this->svc->create('Dev key', $org->id, $owner->id, 'development');
+
+        $this->assertStringStartsWith('sv_dev_', $raw);
+    }
+
+    public function test_create_fails_for_non_admin(): void
+    {
+        $owner = $this->createTestUser();
+        $user  = $this->createTestUser('user@example.com');
+        $org   = $this->orgSvc->create('Org', $owner->id);
+        $this->orgSvc->addMember($org->id, $user->id, 'user', $owner->id);
+
+        $this->expectException(AuthException::class);
+        $this->svc->create('Key', $org->id, $user->id);
+    }
+
+    public function test_create_fails_with_invalid_environment(): void
+    {
+        $owner = $this->createTestUser();
+        $org   = $this->orgSvc->create('Org', $owner->id);
+
+        $this->expectException(\InvalidArgumentException::class);
+        $this->svc->create('Key', $org->id, $owner->id, 'invalid');
+    }
+
+    public function test_create_fails_with_empty_name(): void
+    {
+        $owner = $this->createTestUser();
+        $org   = $this->orgSvc->create('Org', $owner->id);
+
+        $this->expectException(\InvalidArgumentException::class);
+        $this->svc->create('', $org->id, $owner->id);
+    }
+
+    // ------------------------------------------------------------------ //
+    //  listForOrg()                                                       //
+    // ------------------------------------------------------------------ //
+
+    public function test_list_for_org_returns_created_keys(): void
+    {
+        $owner = $this->createTestUser();
+        $org   = $this->orgSvc->create('Org', $owner->id);
+
+        $this->svc->create('Key A', $org->id, $owner->id);
+        $this->svc->create('Key B', $org->id, $owner->id, 'staging');
+
+        $keys = $this->svc->listForOrg($org->id, $owner->id);
+
+        $this->assertCount(2, $keys);
+    }
+
+    public function test_list_for_org_fails_for_non_admin(): void
+    {
+        $owner = $this->createTestUser();
+        $user  = $this->createTestUser('user@example.com');
+        $org   = $this->orgSvc->create('Org', $owner->id);
+        $this->orgSvc->addMember($org->id, $user->id, 'user', $owner->id);
+
+        $this->expectException(AuthException::class);
+        $this->svc->listForOrg($org->id, $user->id);
+    }
+
+    // ------------------------------------------------------------------ //
+    //  get()                                                              //
+    // ------------------------------------------------------------------ //
+
+    public function test_get_by_uuid(): void
+    {
+        $owner = $this->createTestUser();
+        $org   = $this->orgSvc->create('Org', $owner->id);
+
+        ['key' => $created] = $this->svc->create('Key', $org->id, $owner->id);
+
+        $found = $this->svc->get($created->uuid, $org->id, $owner->id);
+
+        $this->assertSame($created->uuid, $found->uuid);
+    }
+
+    public function test_get_fails_for_wrong_org(): void
+    {
+        $owner = $this->createTestUser();
+        $org1  = $this->orgSvc->create('Org1', $owner->id);
+        $org2  = $this->orgSvc->create('Org2', $owner->id);
+
+        ['key' => $key] = $this->svc->create('Key', $org1->id, $owner->id);
+
+        $this->expectException(\RuntimeException::class);
+        $this->svc->get($key->uuid, $org2->id, $owner->id);
+    }
+
+    // ------------------------------------------------------------------ //
+    //  revoke()                                                           //
+    // ------------------------------------------------------------------ //
+
+    public function test_revoke_deactivates_key(): void
+    {
+        $owner = $this->createTestUser();
+        $org   = $this->orgSvc->create('Org', $owner->id);
+
+        ['key' => $key] = $this->svc->create('Key', $org->id, $owner->id);
+        $this->assertTrue($key->isActive);
+
+        $this->svc->revoke($key->uuid, $org->id, $owner->id);
+
+        $updated = ApiKey::findByUuid($key->uuid);
+        $this->assertNotNull($updated);
+        $this->assertFalse($updated->isActive);
+    }
+
+    public function test_revoke_fails_for_non_admin_non_owner(): void
+    {
+        $owner = $this->createTestUser();
+        $user  = $this->createTestUser('user@example.com');
+        $org   = $this->orgSvc->create('Org', $owner->id);
+        $this->orgSvc->addMember($org->id, $user->id, 'user', $owner->id);
+
+        ['key' => $key] = $this->svc->create('Key', $org->id, $owner->id);
+
+        $this->expectException(AuthException::class);
+        $this->svc->revoke($key->uuid, $org->id, $user->id);
+    }
+
+    // ------------------------------------------------------------------ //
+    //  validate()                                                         //
+    // ------------------------------------------------------------------ //
+
+    public function test_validate_returns_user_for_valid_key(): void
+    {
+        $owner = $this->createTestUser();
+        $org   = $this->orgSvc->create('Org', $owner->id);
+
+        ['raw' => $raw] = $this->svc->create('Key', $org->id, $owner->id);
+
+        $user = $this->svc->validate($raw);
+
+        $this->assertNotNull($user);
+        $this->assertSame($owner->id, $user->id);
+    }
+
+    public function test_validate_returns_null_for_wrong_key(): void
+    {
+        $user = $this->svc->validate('sv_prod_' . str_repeat('0', 64));
+
+        $this->assertNull($user);
+    }
+
+    public function test_validate_for_request_writes_success_audit_log(): void
+    {
+        $owner = $this->createTestUser();
+        $org   = $this->orgSvc->create('Org', $owner->id);
+
+        ['raw' => $raw, 'key' => $apiKey] = $this->svc->create('Key', $org->id, $owner->id);
+
+        $user = $this->svc->validateForRequest($raw, '1.2.3.4', 'Agent', '/api/v1/secrets');
+
+        $this->assertNotNull($user);
+
+        $row = Database::getInstance()->fetchOne(
+            "SELECT * FROM audit_log WHERE action = 'auth.api_key_success' AND resource_uuid = ? ORDER BY id DESC LIMIT 1",
+            [$apiKey->uuid]
+        );
+
+        $this->assertNotNull($row);
+    }
+
+    public function test_validate_for_request_writes_fail_audit_log(): void
+    {
+        $user = $this->svc->validateForRequest('sv_prod_' . str_repeat('0', 64), '1.2.3.4', 'Agent', '/api/v1/secrets');
+
+        $this->assertNull($user);
+
+        $row = Database::getInstance()->fetchOne(
+            "SELECT * FROM audit_log WHERE action = 'auth.api_key_fail' ORDER BY id DESC LIMIT 1"
+        );
+
+        $this->assertNotNull($row);
+        $this->assertSame('0', (string) $row['success']);
+    }
+
+    public function test_validate_returns_null_for_revoked_key(): void
+    {
+        $owner = $this->createTestUser();
+        $org   = $this->orgSvc->create('Org', $owner->id);
+
+        ['key' => $key, 'raw' => $raw] = $this->svc->create('Key', $org->id, $owner->id);
+        $this->svc->revoke($key->uuid, $org->id, $owner->id);
+
+        $user = $this->svc->validate($raw);
+
+        $this->assertNull($user);
+    }
+
+    public function test_validate_updates_last_used_at(): void
+    {
+        $owner = $this->createTestUser();
+        $org   = $this->orgSvc->create('Org', $owner->id);
+
+        ['key' => $key, 'raw' => $raw] = $this->svc->create('Key', $org->id, $owner->id);
+        $this->assertNull($key->lastUsedAt);
+
+        $this->svc->validate($raw);
+
+        $updated = ApiKey::findByUuid($key->uuid);
+        $this->assertNotNull($updated?->lastUsedAt);
+    }
+
+    // ------------------------------------------------------------------ //
+    //  Permissions                                                        //
+    // ------------------------------------------------------------------ //
+
+    public function test_add_and_list_permissions(): void
+    {
+        $owner = $this->createTestUser();
+        $org   = $this->orgSvc->create('Org', $owner->id);
+
+        ['key' => $key] = $this->svc->create('Key', $org->id, $owner->id);
+
+        $perm = $this->svc->addPermission(
+            $key->uuid, 'directory', null, 'read', $org->id, $owner->id
+        );
+
+        $this->assertInstanceOf(ApiKeyPermission::class, $perm);
+        $this->assertSame('directory', $perm->resourceType);
+        $this->assertNull($perm->resourceId);
+        $this->assertSame('read', $perm->permission);
+
+        $perms = $this->svc->listPermissions($key->uuid, $org->id, $owner->id);
+        $this->assertCount(1, $perms);
+    }
+
+    public function test_add_permission_fails_for_non_admin(): void
+    {
+        $owner = $this->createTestUser();
+        $user  = $this->createTestUser('user@example.com');
+        $org   = $this->orgSvc->create('Org', $owner->id);
+        $this->orgSvc->addMember($org->id, $user->id, 'user', $owner->id);
+
+        ['key' => $key] = $this->svc->create('Key', $org->id, $owner->id);
+
+        $this->expectException(AuthException::class);
+        $this->svc->addPermission($key->uuid, 'directory', null, 'read', $org->id, $user->id);
+    }
+
+    public function test_add_permission_fails_with_invalid_type(): void
+    {
+        $owner = $this->createTestUser();
+        $org   = $this->orgSvc->create('Org', $owner->id);
+
+        ['key' => $key] = $this->svc->create('Key', $org->id, $owner->id);
+
+        $this->expectException(\InvalidArgumentException::class);
+        $this->svc->addPermission($key->uuid, 'invalid_type', null, 'read', $org->id, $owner->id);
+    }
+
+    public function test_remove_permission(): void
+    {
+        $owner = $this->createTestUser();
+        $org   = $this->orgSvc->create('Org', $owner->id);
+
+        ['key' => $key] = $this->svc->create('Key', $org->id, $owner->id);
+        $perm = $this->svc->addPermission(
+            $key->uuid, 'directory', null, 'read', $org->id, $owner->id
+        );
+
+        $this->svc->removePermission($key->uuid, $perm->id, $org->id, $owner->id);
+
+        $perms = $this->svc->listPermissions($key->uuid, $org->id, $owner->id);
+        $this->assertCount(0, $perms);
+    }
+
+    public function test_remove_permission_fails_for_non_admin(): void
+    {
+        $owner = $this->createTestUser();
+        $user  = $this->createTestUser('user@example.com');
+        $org   = $this->orgSvc->create('Org', $owner->id);
+        $this->orgSvc->addMember($org->id, $user->id, 'user', $owner->id);
+
+        ['key' => $key] = $this->svc->create('Key', $org->id, $owner->id);
+        $perm = $this->svc->addPermission(
+            $key->uuid, 'directory', null, 'read', $org->id, $owner->id
+        );
+
+        $this->expectException(AuthException::class);
+        $this->svc->removePermission($key->uuid, $perm->id, $org->id, $user->id);
+    }
+
+    // ------------------------------------------------------------------ //
+    //  checkRateLimit()                                                   //
+    // ------------------------------------------------------------------ //
+
+    public function test_rate_limit_allows_first_request(): void
+    {
+        $allowed = $this->svc->checkRateLimit('127.0.0.1', 'api');
+
+        $this->assertTrue($allowed);
+    }
+
+    public function test_rate_limit_allows_up_to_max_requests(): void
+    {
+        $ip = '10.0.0.1';
+
+        // Fill up to the auth limit (20)
+        for ($i = 0; $i < ApiKeyService::RATE_LIMIT_AUTH_MAX; $i++) {
+            $this->assertTrue(
+                $this->svc->checkRateLimit($ip, 'auth'),
+                "Request #$i should be allowed"
+            );
+        }
+    }
+
+    public function test_rate_limit_blocks_over_max(): void
+    {
+        $ip = '10.0.0.2';
+
+        // Hit limit exactly
+        for ($i = 0; $i < ApiKeyService::RATE_LIMIT_AUTH_MAX; $i++) {
+            $this->svc->checkRateLimit($ip, 'auth');
+        }
+
+        // Next request should be blocked
+        $allowed = $this->svc->checkRateLimit($ip, 'auth');
+        $this->assertFalse($allowed);
+    }
+
+    public function test_rate_limit_different_buckets_are_independent(): void
+    {
+        $ip = '10.0.0.3';
+
+        // Exhaust auth bucket
+        for ($i = 0; $i < ApiKeyService::RATE_LIMIT_AUTH_MAX + 1; $i++) {
+            $this->svc->checkRateLimit($ip, 'auth');
+        }
+        $this->assertFalse($this->svc->checkRateLimit($ip, 'auth'));
+
+        // API bucket should still be fine
+        $this->assertTrue($this->svc->checkRateLimit($ip, 'api'));
+    }
+
+    public function test_rate_limit_different_ips_are_independent(): void
+    {
+        // Exhaust auth bucket for ip1
+        for ($i = 0; $i < ApiKeyService::RATE_LIMIT_AUTH_MAX + 1; $i++) {
+            $this->svc->checkRateLimit('10.0.1.1', 'auth');
+        }
+        $this->assertFalse($this->svc->checkRateLimit('10.0.1.1', 'auth'));
+
+        // ip2 should still be allowed
+        $this->assertTrue($this->svc->checkRateLimit('10.0.1.2', 'auth'));
+    }
+}

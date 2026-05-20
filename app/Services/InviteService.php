@@ -1,0 +1,302 @@
+<?php
+
+declare(strict_types=1);
+
+namespace Passway\Services;
+
+use Passway\Core\Database;
+use Passway\Exceptions\AuthException;
+use Passway\Models\InviteLink;
+use Passway\Models\Organization;
+use Passway\Models\OrganizationMember;
+
+/**
+ * Сервис инвайт-ссылок.
+ *
+ * Типы инвайтов:
+ *   join_org   — вступить в существующую организацию
+ *   create_org — создать новую организацию (только в team-режиме)
+ *
+ * Безопасность:
+ *   - Токен 64 hex (32 random bytes), хранится как plaintext (короткоживущий, одноразовый)
+ *   - Срок действия по умолчанию: 1 час (OrganizationService::DEFAULT_INVITE_TTL)
+ *   - После использования: used_at заполняется, повторно недоступен
+ */
+final class InviteService
+{
+    public function __construct(
+        private readonly TokenService        $tokenService,
+        private readonly OrganizationService $organizationService,
+        private readonly ?AuditService       $auditService = null,
+    ) {}
+
+    // ------------------------------------------------------------------ //
+    //  Создание инвайта                                                   //
+    // ------------------------------------------------------------------ //
+
+    /**
+     * Создать инвайт-ссылку для вступления в организацию.
+     *
+     * @throws AuthException если создатель не имеет роли admin+
+     * @throws \InvalidArgumentException при некорректной роли
+     */
+    public function createJoinOrgInvite(
+        string $orgId,
+        string $role,
+        string $createdBy,
+        int    $ttlSeconds = OrganizationService::DEFAULT_INVITE_TTL,
+    ): InviteLink {
+        $this->assertValidInviteRole($role);
+
+        // Только admin+ может создавать инвайты
+        if (!$this->organizationService->hasPermission($orgId, $createdBy, 'admin')) {
+            throw new AuthException("Requires 'admin' role to create invites.", 403);
+        }
+
+        // Только owner может создать инвайт с ролью admin
+        if ($role === 'admin' && !$this->organizationService->hasPermission($orgId, $createdBy, 'owner')) {
+            throw new AuthException("Only the owner can create admin invites.", 403);
+        }
+
+        return $this->insertInvite(
+            type:           InviteLink::TYPE_JOIN_ORG,
+            orgId:          $orgId,
+            role:           $role,
+            createdBy:      $createdBy,
+            ttlSeconds:     $ttlSeconds,
+        );
+    }
+
+    /**
+     * Создать инвайт для регистрации и создания новой организации.
+     * Доступно только в team-режиме.
+     *
+     * @throws \RuntimeException в solo-режиме
+     */
+    public function createOrgInvite(
+        string $createdBy,
+        int    $ttlSeconds = OrganizationService::DEFAULT_INVITE_TTL,
+    ): InviteLink {
+        $deployMode = Database::getInstance()->fetchColumn(
+            "SELECT value FROM system_config WHERE key = 'deploy_mode'"
+        );
+        if ($deployMode === 'solo') {
+            throw new \RuntimeException('create_org invites are not available in solo mode.');
+        }
+
+        return $this->insertInvite(
+            type:       InviteLink::TYPE_CREATE_ORG,
+            orgId:      null,
+            role:       'owner',
+            createdBy:  $createdBy,
+            ttlSeconds: $ttlSeconds,
+        );
+    }
+
+    // ------------------------------------------------------------------ //
+    //  Получение инвайта                                                  //
+    // ------------------------------------------------------------------ //
+
+    /**
+     * Найти валидный (не истёкший, не использованный) инвайт по токену.
+     *
+     * @throws AuthException если инвайт не найден / истёк / использован
+     */
+    public function findValid(string $token): InviteLink
+    {
+        $invite = InviteLink::findByToken($token);
+
+        if ($invite === null) {
+            throw new AuthException('Invite link not found.');
+        }
+        if ($invite->isExpired()) {
+            throw new AuthException('Invite link has expired.');
+        }
+        if ($invite->isUsed()) {
+            throw new AuthException('Invite link has already been used.');
+        }
+
+        return $invite;
+    }
+
+    /**
+     * Активные инвайты организации.
+     *
+     * @return InviteLink[]
+     */
+    public function listActive(string $orgId): array
+    {
+        return InviteLink::findActiveByOrgId($orgId);
+    }
+
+    // ------------------------------------------------------------------ //
+    //  Принятие инвайта                                                   //
+    // ------------------------------------------------------------------ //
+
+    /**
+     * Принять инвайт join_org: добавить acceptorUserId в организацию.
+     *
+     * @throws AuthException если инвайт недействителен
+     * @throws \RuntimeException если пользователь уже в орг.
+     * @return Organization — организация, в которую вступил пользователь
+     */
+    public function acceptJoinOrg(string $token, string $acceptorUserId): Organization
+    {
+        $invite = $this->findValid($token);
+
+        if ($invite->type !== InviteLink::TYPE_JOIN_ORG) {
+            throw new AuthException('This invite is not for joining an organization.');
+        }
+        if ($invite->organizationId === null) {
+            throw new \RuntimeException('Invite is missing organization reference.');
+        }
+
+        $org = Organization::findById($invite->organizationId);
+        if ($org === null || !$org->isActive) {
+            throw new \RuntimeException('Organization not found or inactive.');
+        }
+
+        Database::getInstance()->transaction(function () use ($invite, $org, $acceptorUserId): void {
+            $this->organizationService->addMember(
+                orgId:     $org->id,
+                userId:    $acceptorUserId,
+                role:      $invite->role,
+                invitedBy: $invite->createdBy,
+            );
+
+            $this->markUsed($invite->id, $acceptorUserId);
+        });
+
+        $this->getAuditService()->record(
+            action: 'invite.accept',
+            organizationId: $org->id,
+            userId: $acceptorUserId,
+            resourceType: 'invite',
+            resourceId: $invite->id,
+            resourceUuid: $invite->uuid,
+        );
+
+        return $org;
+    }
+
+    // ------------------------------------------------------------------ //
+    //  Отзыв инвайта                                                      //
+    // ------------------------------------------------------------------ //
+
+    /**
+     * Аннулировать инвайт (пометить как истёкший).
+     *
+     * @throws AuthException если requesterId не имеет прав admin+
+     */
+    public function revoke(string $inviteUuid, string $requesterId): void
+    {
+        $invite = InviteLink::findByUuid($inviteUuid);
+        if ($invite === null) {
+            throw new \RuntimeException('Invite not found.');
+        }
+        if ($invite->isUsed()) {
+            throw new \RuntimeException('Cannot revoke an already used invite.');
+        }
+
+        // Проверка прав: только admin+ орг. или создатель инвайта
+        if ($invite->organizationId !== null) {
+            if (!$this->organizationService->hasPermission($invite->organizationId, $requesterId, 'admin')) {
+                throw new AuthException("Requires 'admin' role to revoke invites.", 403);
+            }
+        }
+
+        // Пометить как истёкший (expires_at = now)
+        Database::getInstance()->update(
+            'invite_links',
+            ['expires_at' => now()->format('Y-m-d H:i:s')],
+            ['id' => $invite->id]
+        );
+
+        $this->getAuditService()->record(
+            action: 'invite.revoke',
+            organizationId: $invite->organizationId,
+            userId: $requesterId,
+            resourceType: 'invite',
+            resourceId: $invite->id,
+            resourceUuid: $invite->uuid,
+        );
+    }
+
+    // ------------------------------------------------------------------ //
+    //  Вспомогательные                                                    //
+    // ------------------------------------------------------------------ //
+
+    private function insertInvite(
+        string  $type,
+        ?string $orgId,
+        string  $role,
+        string  $createdBy,
+        int     $ttlSeconds,
+    ): InviteLink {
+        $token     = $this->tokenService->generateInviteToken();
+        $now       = now()->format('Y-m-d H:i:s');
+        $expiresAt = \date('Y-m-d H:i:s', \time() + $ttlSeconds);
+
+        $id = Database::getInstance()->insert('invite_links', [
+            'uuid'            => generate_uuid(),
+            'token'           => $token,
+            'type'            => $type,
+            'organization_id' => $orgId !== null ? (int) $orgId : null,
+            'role'            => $role,
+            'created_by'      => (int) $createdBy,
+            'used_by'         => null,
+            'expires_at'      => $expiresAt,
+            'used_at'         => null,
+            'created_at'      => $now,
+        ]);
+
+        $invite = InviteLink::findByToken($token)
+            ?? throw new \RuntimeException('Failed to load created invite.');
+
+        $this->getAuditService()->record(
+            action: 'invite.create',
+            organizationId: $orgId,
+            userId: $createdBy,
+            resourceType: 'invite',
+            resourceId: $invite->id,
+            resourceUuid: $invite->uuid,
+            details: ['type' => $type, 'role' => $role],
+        );
+
+        return $invite;
+    }
+
+    private function markUsed(string $inviteId, string $userId): void
+    {
+        Database::getInstance()->update(
+            'invite_links',
+            [
+                'used_by' => (int) $userId,
+                'used_at' => now()->format('Y-m-d H:i:s'),
+            ],
+            ['id' => (int) $inviteId]
+        );
+    }
+
+    /**
+     * @throws \InvalidArgumentException
+     */
+    private function assertValidInviteRole(string $role): void
+    {
+        // owner не выдаётся через инвайт — ownership передаётся отдельно
+        $allowed = \array_filter(
+            OrganizationMember::ROLES,
+            fn($r) => $r !== 'owner'
+        );
+        if (!\in_array($role, $allowed, true)) {
+            throw new \InvalidArgumentException(
+                'Invalid role for invite. Allowed: ' . \implode(', ', $allowed)
+            );
+        }
+    }
+
+    private function getAuditService(): AuditService
+    {
+        return $this->auditService ?? new AuditService(new LoggerService(), $this->organizationService);
+    }
+}

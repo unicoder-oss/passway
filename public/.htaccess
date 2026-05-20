@@ -1,0 +1,34 @@
+Options -Indexes -MultiViews
+DirectoryIndex index.php
+
+# Перенаправить все запросы через index.php (Front Controller)
+RewriteEngine On
+
+# Безопасность заголовков
+Header always set X-Content-Type-Options "nosniff"
+Header always set X-Frame-Options "DENY"
+Header always set Referrer-Policy "strict-origin-when-cross-origin"
+Header always set Permissions-Policy "geolocation=(), microphone=(), camera=()"
+
+# CSP — базовый, конкретизируется в приложении
+Header always set Content-Security-Policy "default-src 'self'; script-src 'self' 'nonce-%{REQUEST_ID}e'; style-src 'self' 'unsafe-inline'; img-src 'self' data:; connect-src 'self'; font-src 'self'; object-src 'none'; base-uri 'self'; form-action 'self'"
+
+# HSTS — только production
+# Header always set Strict-Transport-Security "max-age=31536000; includeSubDomains; preload"
+
+# Не пропускаем существующие файлы и директории
+RewriteCond %{REQUEST_FILENAME} !-f
+RewriteCond %{REQUEST_FILENAME} !-d
+
+# Всё остальное — в index.php
+RewriteRule ^ index.php [QSA,L]
+
+# Запрет доступа к скрытым файлам (.env, .git, etc.)
+<FilesMatch "^\.">
+    Require all denied
+</FilesMatch>
+
+# Запрет доступа к файлам конфигурации
+<FilesMatch "\.(env|json|lock|md|sh|sql|xml|yml|yaml)$">
+    Require all denied
+</FilesMatch>

@@ -1,0 +1,57 @@
+{
+    "name": "passway/passway",
+    "description": "Passway — self-hosted secrets management service",
+    "type": "project",
+    "license": "MIT",
+    "require": {
+        "php": ">=8.1",
+        "ext-pdo": "*",
+        "ext-sodium": "*",
+        "ext-mbstring": "*",
+        "ext-json": "*",
+        "vlucas/phpdotenv": "^5.6",
+        "robthree/twofactorauth": "^2.0",
+        "web-auth/webauthn-lib": "^4.8",
+        "phpseclib/phpseclib": "^3.0",
+        "monolog/monolog": "^3.5"
+    },
+    "require-dev": {
+        "phpunit/phpunit": "^10.5"
+    },
+    "autoload": {
+        "psr-4": {
+            "Passway\\": "app/"
+        },
+        "classmap": [
+            "database/Migration.php",
+            "database/MigrationRunner.php",
+            "database/migrations/"
+        ],
+        "files": [
+            "app/helpers.php"
+        ]
+    },
+    "autoload-dev": {
+        "psr-4": {
+            "Passway\\Tests\\": "tests/"
+        }
+    },
+    "scripts": {
+        "migrate": "php database/migrate.php up",
+        "migrate:status": "php database/migrate.php status",
+        "migrate:rollback": "php database/migrate.php down",
+        "migrate:reset": "php database/migrate.php reset",
+        "maintain:cleanup": "php bin/maintenance.php cleanup",
+        "rotate:run": "php bin/rotate.php",
+        "install": "php install.php"
+    },
+    "config": {
+        "optimize-autoloader": true,
+        "sort-packages": true,
+        "platform": {
+            "php": "8.1"
+        }
+    },
+    "minimum-stability": "stable",
+    "prefer-stable": true
+}

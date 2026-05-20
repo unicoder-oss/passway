@@ -1,0 +1,411 @@
+<?php
+
+declare(strict_types=1);
+
+namespace Passway\Tests\Services;
+
+use Passway\Core\Database;
+use Passway\Exceptions\AuthException;
+use Passway\Models\Directory;
+use Passway\Services\DirectoryService;
+use Passway\Services\GroupService;
+use Passway\Services\OrganizationService;
+use Passway\Services\PermissionService;
+use Passway\Tests\DatabaseTestCase;
+
+/**
+ * Тесты DirectoryService: создание, список, переименование, перемещение, удаление.
+ *
+ * @requires extension pdo_sqlite
+ */
+final class DirectoryServiceTest extends DatabaseTestCase
+{
+    private DirectoryService   $svc;
+    private OrganizationService $orgSvc;
+
+    protected function setUp(): void
+    {
+        parent::setUp();
+
+        $this->orgSvc = new OrganizationService();
+        $permSvc      = new PermissionService($this->orgSvc, new GroupService($this->orgSvc));
+        $this->svc    = new DirectoryService($this->orgSvc, $permSvc);
+
+        // team-режим — нет ограничений по числу организаций
+        Database::getInstance()->query(
+            "UPDATE system_config SET value = 'team' WHERE key = 'deploy_mode'"
+        );
+    }
+
+    // ------------------------------------------------------------------ //
+    //  create()                                                           //
+    // ------------------------------------------------------------------ //
+
+    public function test_create_root_directory(): void
+    {
+        $owner = $this->createTestUser();
+        $org   = $this->orgSvc->create('Org', $owner->id);
+
+        $dir = $this->svc->create($org->id, null, 'Documents', $owner->id);
+
+        $this->assertInstanceOf(Directory::class, $dir);
+        $this->assertSame('Documents', $dir->name);
+        $this->assertSame(0, $dir->depth);
+        $this->assertNull($dir->parentId);
+        $this->assertSame('/' . $dir->uuid, $dir->path);
+        $this->assertSame($org->id, $dir->organizationId);
+    }
+
+    public function test_create_nested_directory(): void
+    {
+        $owner  = $this->createTestUser();
+        $org    = $this->orgSvc->create('Org', $owner->id);
+        $parent = $this->svc->create($org->id, null, 'Parent', $owner->id);
+
+        $child = $this->svc->create($org->id, $parent->uuid, 'Child', $owner->id);
+
+        $this->assertSame(1, $child->depth);
+        $this->assertSame($parent->id, $child->parentId);
+        $this->assertSame($parent->path . '/' . $child->uuid, $child->path);
+    }
+
+    public function test_create_deeply_nested_directory(): void
+    {
+        $owner = $this->createTestUser();
+        $org   = $this->orgSvc->create('Org', $owner->id);
+
+        $current = $this->svc->create($org->id, null, 'Level 0', $owner->id);
+        for ($i = 1; $i <= DirectoryService::MAX_DEPTH; $i++) {
+            $current = $this->svc->create($org->id, $current->uuid, "Level {$i}", $owner->id);
+        }
+
+        $this->assertSame(DirectoryService::MAX_DEPTH, $current->depth);
+    }
+
+    public function test_create_throws_when_max_depth_exceeded(): void
+    {
+        $owner = $this->createTestUser();
+        $org   = $this->orgSvc->create('Org', $owner->id);
+
+        $current = $this->svc->create($org->id, null, 'Root', $owner->id);
+        for ($i = 1; $i <= DirectoryService::MAX_DEPTH; $i++) {
+            $current = $this->svc->create($org->id, $current->uuid, "L{$i}", $owner->id);
+        }
+
+        $this->expectException(\RuntimeException::class);
+        $this->svc->create($org->id, $current->uuid, 'Too Deep', $owner->id);
+    }
+
+    public function test_create_throws_for_empty_name(): void
+    {
+        $owner = $this->createTestUser();
+        $org   = $this->orgSvc->create('Org', $owner->id);
+
+        $this->expectException(\InvalidArgumentException::class);
+        $this->svc->create($org->id, null, '   ', $owner->id);
+    }
+
+    public function test_create_throws_for_non_existent_parent(): void
+    {
+        $owner = $this->createTestUser();
+        $org   = $this->orgSvc->create('Org', $owner->id);
+
+        $this->expectException(\RuntimeException::class);
+        $this->svc->create($org->id, 'non-existent-uuid', 'Dir', $owner->id);
+    }
+
+    public function test_create_throws_if_parent_belongs_to_another_org(): void
+    {
+        $owner  = $this->createTestUser();
+        $org1   = $this->orgSvc->create('Org1', $owner->id);
+        $org2   = $this->orgSvc->create('Org2', $owner->id);
+        $parent = $this->svc->create($org1->id, null, 'Parent', $owner->id);
+
+        $this->expectException(\RuntimeException::class);
+        $this->svc->create($org2->id, $parent->uuid, 'Child', $owner->id);
+    }
+
+    public function test_create_throws_for_observer(): void
+    {
+        $owner    = $this->createTestUser();
+        $observer = $this->createTestUser('obs@example.com');
+        $org      = $this->orgSvc->create('Org', $owner->id);
+        $this->orgSvc->addMember($org->id, $observer->id, 'observer', null);
+
+        $this->expectException(AuthException::class);
+        $this->svc->create($org->id, null, 'Dir', $observer->id);
+    }
+
+    public function test_create_throws_for_non_member(): void
+    {
+        $owner    = $this->createTestUser();
+        $stranger = $this->createTestUser('stranger@example.com');
+        $org      = $this->orgSvc->create('Org', $owner->id);
+
+        $this->expectException(AuthException::class);
+        $this->svc->create($org->id, null, 'Dir', $stranger->id);
+    }
+
+    // ------------------------------------------------------------------ //
+    //  listAll() / listChildren()                                         //
+    // ------------------------------------------------------------------ //
+
+    public function test_list_all_returns_all_dirs_sorted(): void
+    {
+        $owner = $this->createTestUser();
+        $org   = $this->orgSvc->create('Org', $owner->id);
+
+        $root1 = $this->svc->create($org->id, null, 'A Root', $owner->id);
+        $root2 = $this->svc->create($org->id, null, 'B Root', $owner->id);
+        $this->svc->create($org->id, $root1->uuid, 'Child', $owner->id);
+
+        $dirs = $this->svc->listAll($org->id, $owner->id);
+
+        $this->assertCount(3, $dirs);
+        // Первые два — корневые (depth=0)
+        $this->assertSame(0, $dirs[0]->depth);
+        $this->assertSame(0, $dirs[1]->depth);
+        // Третий — дочерний (depth=1)
+        $this->assertSame(1, $dirs[2]->depth);
+    }
+
+    public function test_list_all_excludes_deleted(): void
+    {
+        $owner = $this->createTestUser();
+        $org   = $this->orgSvc->create('Org', $owner->id);
+
+        $dir = $this->svc->create($org->id, null, 'Dir', $owner->id);
+        $this->svc->delete($dir->uuid, $org->id, $owner->id);
+
+        $dirs = $this->svc->listAll($org->id, $owner->id);
+        $this->assertCount(0, $dirs);
+    }
+
+    public function test_list_all_throws_for_non_member(): void
+    {
+        $owner    = $this->createTestUser();
+        $stranger = $this->createTestUser('s@example.com');
+        $org      = $this->orgSvc->create('Org', $owner->id);
+
+        $this->expectException(AuthException::class);
+        $this->svc->listAll($org->id, $stranger->id);
+    }
+
+    public function test_list_children_returns_only_direct_children(): void
+    {
+        $owner = $this->createTestUser();
+        $org   = $this->orgSvc->create('Org', $owner->id);
+
+        $root  = $this->svc->create($org->id, null, 'Root', $owner->id);
+        $child = $this->svc->create($org->id, $root->uuid, 'Child', $owner->id);
+        $this->svc->create($org->id, $child->uuid, 'Grandchild', $owner->id);
+
+        $children = $this->svc->listChildren($org->id, $root->uuid, $owner->id);
+
+        $this->assertCount(1, $children);
+        $this->assertSame($child->id, $children[0]->id);
+    }
+
+    public function test_list_children_null_returns_root_dirs(): void
+    {
+        $owner = $this->createTestUser();
+        $org   = $this->orgSvc->create('Org', $owner->id);
+
+        $root  = $this->svc->create($org->id, null, 'Root', $owner->id);
+        $this->svc->create($org->id, $root->uuid, 'Child', $owner->id);
+
+        $roots = $this->svc->listChildren($org->id, null, $owner->id);
+
+        $this->assertCount(1, $roots);
+        $this->assertSame($root->id, $roots[0]->id);
+    }
+
+    // ------------------------------------------------------------------ //
+    //  findInOrg()                                                        //
+    // ------------------------------------------------------------------ //
+
+    public function test_find_in_org_returns_directory(): void
+    {
+        $owner = $this->createTestUser();
+        $org   = $this->orgSvc->create('Org', $owner->id);
+        $dir   = $this->svc->create($org->id, null, 'Dir', $owner->id);
+
+        $found = $this->svc->findInOrg($dir->uuid, $org->id, $owner->id);
+
+        $this->assertSame($dir->id, $found->id);
+    }
+
+    public function test_find_in_org_throws_if_dir_in_another_org(): void
+    {
+        $owner = $this->createTestUser();
+        $org1  = $this->orgSvc->create('Org1', $owner->id);
+        $org2  = $this->orgSvc->create('Org2', $owner->id);
+        $dir   = $this->svc->create($org1->id, null, 'Dir', $owner->id);
+
+        $this->expectException(\RuntimeException::class);
+        $this->svc->findInOrg($dir->uuid, $org2->id, $owner->id);
+    }
+
+    // ------------------------------------------------------------------ //
+    //  rename()                                                           //
+    // ------------------------------------------------------------------ //
+
+    public function test_rename_updates_name(): void
+    {
+        $owner = $this->createTestUser();
+        $org   = $this->orgSvc->create('Org', $owner->id);
+        $dir   = $this->svc->create($org->id, null, 'OldName', $owner->id);
+
+        $renamed = $this->svc->rename($dir->uuid, $org->id, 'NewName', $owner->id);
+
+        $this->assertSame('NewName', $renamed->name);
+    }
+
+    public function test_rename_throws_for_empty_name(): void
+    {
+        $owner = $this->createTestUser();
+        $org   = $this->orgSvc->create('Org', $owner->id);
+        $dir   = $this->svc->create($org->id, null, 'Dir', $owner->id);
+
+        $this->expectException(\InvalidArgumentException::class);
+        $this->svc->rename($dir->uuid, $org->id, '', $owner->id);
+    }
+
+    public function test_rename_throws_for_observer(): void
+    {
+        $owner    = $this->createTestUser();
+        $observer = $this->createTestUser('obs@example.com');
+        $org      = $this->orgSvc->create('Org', $owner->id);
+        $this->orgSvc->addMember($org->id, $observer->id, 'observer', null);
+        $dir = $this->svc->create($org->id, null, 'Dir', $owner->id);
+
+        $this->expectException(AuthException::class);
+        $this->svc->rename($dir->uuid, $org->id, 'New', $observer->id);
+    }
+
+    // ------------------------------------------------------------------ //
+    //  move()                                                             //
+    // ------------------------------------------------------------------ //
+
+    public function test_move_to_new_parent(): void
+    {
+        $owner   = $this->createTestUser();
+        $org     = $this->orgSvc->create('Org', $owner->id);
+        $rootA   = $this->svc->create($org->id, null, 'A', $owner->id);
+        $rootB   = $this->svc->create($org->id, null, 'B', $owner->id);
+        $child   = $this->svc->create($org->id, $rootA->uuid, 'Child', $owner->id);
+
+        $this->svc->move($child->uuid, $org->id, $rootB->uuid, $owner->id);
+
+        $moved = Directory::findByUuid($child->uuid);
+        $this->assertNotNull($moved);
+        $this->assertSame($rootB->id, $moved->parentId);
+        $this->assertSame(1, $moved->depth);
+        $this->assertSame($rootB->path . '/' . $child->uuid, $moved->path);
+    }
+
+    public function test_move_to_root(): void
+    {
+        $owner  = $this->createTestUser();
+        $org    = $this->orgSvc->create('Org', $owner->id);
+        $root   = $this->svc->create($org->id, null, 'Root', $owner->id);
+        $child  = $this->svc->create($org->id, $root->uuid, 'Child', $owner->id);
+
+        $this->svc->move($child->uuid, $org->id, null, $owner->id);
+
+        $moved = Directory::findByUuid($child->uuid);
+        $this->assertNotNull($moved);
+        $this->assertNull($moved->parentId);
+        $this->assertSame(0, $moved->depth);
+        $this->assertSame('/' . $child->uuid, $moved->path);
+    }
+
+    public function test_move_updates_descendants_path_and_depth(): void
+    {
+        $owner     = $this->createTestUser();
+        $org       = $this->orgSvc->create('Org', $owner->id);
+        $rootA     = $this->svc->create($org->id, null, 'A', $owner->id);
+        $rootB     = $this->svc->create($org->id, null, 'B', $owner->id);
+        $child     = $this->svc->create($org->id, $rootA->uuid, 'Child', $owner->id);
+        $grandchild = $this->svc->create($org->id, $child->uuid, 'Grandchild', $owner->id);
+
+        $this->svc->move($child->uuid, $org->id, $rootB->uuid, $owner->id);
+
+        $gc = Directory::findByUuid($grandchild->uuid);
+        $this->assertNotNull($gc);
+        $this->assertSame(2, $gc->depth);
+        // path = rootB.path/child.uuid/grandchild.uuid
+        $this->assertStringStartsWith($rootB->path . '/' . $child->uuid, $gc->path);
+    }
+
+    public function test_move_into_itself_throws(): void
+    {
+        $owner = $this->createTestUser();
+        $org   = $this->orgSvc->create('Org', $owner->id);
+        $dir   = $this->svc->create($org->id, null, 'Dir', $owner->id);
+
+        $this->expectException(\RuntimeException::class);
+        $this->svc->move($dir->uuid, $org->id, $dir->uuid, $owner->id);
+    }
+
+    public function test_move_into_descendant_throws(): void
+    {
+        $owner = $this->createTestUser();
+        $org   = $this->orgSvc->create('Org', $owner->id);
+        $root  = $this->svc->create($org->id, null, 'Root', $owner->id);
+        $child = $this->svc->create($org->id, $root->uuid, 'Child', $owner->id);
+
+        $this->expectException(\RuntimeException::class);
+        $this->svc->move($root->uuid, $org->id, $child->uuid, $owner->id);
+    }
+
+    // ------------------------------------------------------------------ //
+    //  delete()                                                           //
+    // ------------------------------------------------------------------ //
+
+    public function test_delete_soft_deletes_directory(): void
+    {
+        $owner = $this->createTestUser();
+        $org   = $this->orgSvc->create('Org', $owner->id);
+        $dir   = $this->svc->create($org->id, null, 'Dir', $owner->id);
+
+        $this->svc->delete($dir->uuid, $org->id, $owner->id);
+
+        $this->assertNull(Directory::findByUuid($dir->uuid));
+    }
+
+    public function test_delete_also_soft_deletes_descendants(): void
+    {
+        $owner      = $this->createTestUser();
+        $org        = $this->orgSvc->create('Org', $owner->id);
+        $root       = $this->svc->create($org->id, null, 'Root', $owner->id);
+        $child      = $this->svc->create($org->id, $root->uuid, 'Child', $owner->id);
+        $grandchild = $this->svc->create($org->id, $child->uuid, 'Grandchild', $owner->id);
+
+        $this->svc->delete($root->uuid, $org->id, $owner->id);
+
+        $this->assertNull(Directory::findByUuid($root->uuid));
+        $this->assertNull(Directory::findByUuid($child->uuid));
+        $this->assertNull(Directory::findByUuid($grandchild->uuid));
+    }
+
+    public function test_delete_throws_for_non_member(): void
+    {
+        $owner    = $this->createTestUser();
+        $stranger = $this->createTestUser('s@example.com');
+        $org      = $this->orgSvc->create('Org', $owner->id);
+        $dir      = $this->svc->create($org->id, null, 'Dir', $owner->id);
+
+        $this->expectException(AuthException::class);
+        $this->svc->delete($dir->uuid, $org->id, $stranger->id);
+    }
+
+    public function test_delete_throws_for_not_found(): void
+    {
+        $owner = $this->createTestUser();
+        $org   = $this->orgSvc->create('Org', $owner->id);
+
+        $this->expectException(\RuntimeException::class);
+        $this->svc->delete('non-existent-uuid', $org->id, $owner->id);
+    }
+}

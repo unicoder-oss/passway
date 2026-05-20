@@ -1,0 +1,9 @@
+.git
+.gitignore
+.temp
+tests
+storage
+vendor
+node_modules
+docker-compose.yml
+README.md.bak

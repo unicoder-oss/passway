@@ -1,0 +1,635 @@
+<?php
+
+declare(strict_types=1);
+
+namespace Passway\Services;
+
+use Passway\Core\Database;
+use Passway\Exceptions\AuthException;
+use Passway\Models\Directory;
+use Passway\Models\OrganizationIntegration;
+use Passway\Models\Secret;
+use Passway\Models\SecretVersion;
+use Passway\Models\Template;
+
+/**
+ * Сервис управления секретами.
+ *
+ * Авторизация (через PermissionService, включает org-level и fine-grained):
+ *   read   — list, get, listVersions  (observer+ или явное право)
+ *   write  — create, update           (moderator+ или явное право)
+ *   delete — delete                   (moderator+ или явное право)
+ *
+ * Права проверяются на каталоге, которому принадлежит секрет.
+ * Шифрование: XChaCha20-Poly1305, AAD = uuid секрета.
+ *
+ * requires_approval:
+ *   Если у секрета флаг requires_approval=true, пользователи ниже moderator
+ *   обязаны пройти workflow одобрения (ApprovalService) и получить одноразовый
+ *   токен. Вместо get() используется ApprovalService::useToken().
+ *   Moderator+ обходят проверку и читают секрет напрямую.
+ */
+final class SecretService
+{
+    /** Допустимые типы секретов */
+    public const VALID_TYPES = ['static', 'template', 'dynamic'];
+
+    /** Максимальное число хранимых версий на секрет */
+    private const MAX_VERSIONS = 10;
+
+    public function __construct(
+        private readonly OrganizationService $organizationService,
+        private readonly EncryptionService   $encryptionService,
+        private readonly PermissionService   $permissionService,
+        private readonly ?TemplateService    $templateService = null,
+        private readonly ?AuditService       $auditService = null,
+    ) {}
+
+    // ------------------------------------------------------------------ //
+    //  Создание                                                           //
+    // ------------------------------------------------------------------ //
+
+    /**
+     * Создать секрет в каталоге организации.
+     *
+     * @param string $orgId    ID организации
+     * @param string $dirUuid  UUID каталога
+     * @param string $name     Имя секрета
+     * @param string $type     Тип: static|template|dynamic
+     * @param string $value    Открытое значение (будет зашифровано)
+     * @param string $userId   ID создателя
+     *
+     * @throws AuthException             если нет прав (требуется moderator+)
+     * @throws \InvalidArgumentException при невалидном имени или типе
+     * @throws \RuntimeException         если каталог не найден или имя занято
+     */
+    public function create(
+        string $orgId,
+        string $dirUuid,
+        string $name,
+        string $type,
+        string $value,
+        string $userId,
+        ?string $rotationIntegrationUuid = null,
+        ?string $rotationSchedule = null,
+    ): Secret {
+        $name = \trim($name);
+        if ($name === '') {
+            throw new \InvalidArgumentException('Secret name cannot be empty.');
+        }
+        if (\strlen($name) > 255) {
+            throw new \InvalidArgumentException('Secret name is too long (max 255 characters).');
+        }
+        if (!\in_array($type, self::VALID_TYPES, true)) {
+            throw new \InvalidArgumentException(
+                'Invalid secret type. Allowed: ' . \implode(', ', self::VALID_TYPES) . '.'
+            );
+        }
+
+        $dir = $this->findDirInOrg($dirUuid, $orgId);
+        $this->assertCan('write', $userId, 'directory', $dir->id, $orgId);
+        $this->assertNameUnique($dir->id, $name);
+        $rotationIntegrationId = $this->resolveRotationIntegrationId($rotationIntegrationUuid, $orgId);
+        $rotationSchedule = $this->normalizeRotationSchedule($rotationSchedule);
+
+        $uuid      = generate_uuid();
+        $encrypted = $this->encryptionService->encrypt($value, $uuid);
+        $now       = now()->format('Y-m-d H:i:s');
+
+        Database::getInstance()->insert('secrets', [
+            'uuid'             => $uuid,
+            'directory_id'     => (int) $dir->id,
+            'organization_id'  => (int) $orgId,
+            'name'             => $name,
+            'type'             => $type,
+            'encrypted_value'  => $encrypted->value,
+            'nonce'            => $encrypted->nonce,
+            'requires_approval' => 0,
+            'rotation_integration_id' => $rotationIntegrationId !== null ? (int) $rotationIntegrationId : null,
+            'rotation_schedule' => $rotationSchedule,
+            'version'          => 1,
+            'created_by'       => (int) $userId,
+            'created_at'       => $now,
+            'updated_at'       => $now,
+        ]);
+
+        $secret = Secret::findByUuid($uuid)
+            ?? throw new \RuntimeException('Failed to load created secret.');
+
+        $this->getAuditService()->record(
+            action: 'secret.create',
+            organizationId: $orgId,
+            userId: $userId,
+            resourceType: 'secret',
+            resourceId: $secret->id,
+            resourceUuid: $secret->uuid,
+            details: ['type' => $type],
+        );
+
+        return $secret;
+    }
+
+    /**
+     * Создать секрет типа `template` и сразу сгенерировать значение по шаблону.
+     *
+     * @param array<string, mixed> $overrides
+     */
+    public function createFromTemplate(
+        string $orgId,
+        string $dirUuid,
+        string $name,
+        string $templateUuid,
+        string $userId,
+        array $overrides = [],
+        ?string $rotationSchedule = null,
+    ): Secret {
+        $template = Template::findByUuid($templateUuid);
+        if ($template === null) {
+            throw new \RuntimeException('Template not found.');
+        }
+        if ($template->organizationId !== null && $template->organizationId !== $orgId) {
+            throw new \RuntimeException('Template does not belong to this organization.');
+        }
+
+        $name = \trim($name);
+        if ($name === '') {
+            throw new \InvalidArgumentException('Secret name cannot be empty.');
+        }
+        if (\strlen($name) > 255) {
+            throw new \InvalidArgumentException('Secret name is too long (max 255 characters).');
+        }
+
+        $value = $this->getTemplateService()->generate($templateUuid, $orgId, $overrides);
+        $rotationSchedule = $this->normalizeRotationSchedule($rotationSchedule);
+
+        $dir = $this->findDirInOrg($dirUuid, $orgId);
+        $this->assertCan('write', $userId, 'directory', $dir->id, $orgId);
+        $this->assertNameUnique($dir->id, $name);
+
+        $uuid      = generate_uuid();
+        $encrypted = $this->encryptionService->encrypt($value, $uuid);
+        $now       = now()->format('Y-m-d H:i:s');
+
+        Database::getInstance()->insert('secrets', [
+            'uuid'                  => $uuid,
+            'directory_id'          => (int) $dir->id,
+            'organization_id'       => (int) $orgId,
+            'name'                  => $name,
+            'type'                  => 'template',
+            'encrypted_value'       => $encrypted->value,
+            'nonce'                 => $encrypted->nonce,
+            'template_id'           => (int) $template->id,
+            'requires_approval'     => 0,
+            'rotation_schedule'     => $rotationSchedule,
+            'rotation_integration_id' => null,
+            'version'               => 1,
+            'created_by'            => (int) $userId,
+            'created_at'            => $now,
+            'updated_at'            => $now,
+        ]);
+
+        $secret = Secret::findByUuid($uuid)
+            ?? throw new \RuntimeException('Failed to load created secret.');
+
+        $this->getAuditService()->record(
+            action: 'secret.create',
+            organizationId: $orgId,
+            userId: $userId,
+            resourceType: 'secret',
+            resourceId: $secret->id,
+            resourceUuid: $secret->uuid,
+            details: ['type' => 'template', 'template_uuid' => $templateUuid],
+        );
+
+        return $secret;
+    }
+
+    // ------------------------------------------------------------------ //
+    //  Чтение                                                             //
+    // ------------------------------------------------------------------ //
+
+    /**
+     * Список секретов в каталоге (без расшифровки значений).
+     *
+     * @return Secret[]
+     * @throws AuthException     если нет прав (требуется observer+)
+     * @throws \RuntimeException если каталог не найден
+     */
+    public function listInDirectory(string $dirUuid, string $orgId, string $userId): array
+    {
+        $dir = $this->findDirInOrg($dirUuid, $orgId);
+        $this->assertCan('read', $userId, 'directory', $dir->id, $orgId);
+        return Secret::findByDirId($dir->id);
+    }
+
+    /**
+     * Получить секрет с расшифрованным значением.
+     *
+     * Если у секрета requires_approval=true и пользователь ниже moderator,
+     * бросается AuthException с кодом 403 и инструкцией использовать approval workflow.
+     *
+     * @return array{secret: Secret, value: string}
+     * @throws AuthException     если нет прав (требуется observer+) или требуется одобрение
+     * @throws \RuntimeException если не найден
+     */
+    public function get(string $secretUuid, string $orgId, string $userId): array
+    {
+        $secret = $this->findSecretInOrg($secretUuid, $orgId);
+        $this->assertCan('read', $userId, 'directory', $secret->directoryId, $orgId);
+
+        // requires_approval: пользователи ниже moderator должны использовать ApprovalService::useToken()
+        if ($secret->requiresApproval
+            && !$this->organizationService->hasPermission($orgId, $userId, 'moderator')
+        ) {
+            throw new AuthException(
+                'This secret requires approval. Submit an approval request and use the one-time token to access it.',
+                403
+            );
+        }
+
+        $value = $this->encryptionService->decrypt(
+            $secret->encryptedValue,
+            $secret->nonce,
+            $secret->uuid
+        );
+
+        $this->getAuditService()->record(
+            action: 'secret.read',
+            organizationId: $orgId,
+            userId: $userId,
+            resourceType: 'secret',
+            resourceId: $secret->id,
+            resourceUuid: $secret->uuid,
+        );
+
+        return ['secret' => $secret, 'value' => $value];
+    }
+
+    /**
+     * История версий секрета (зашифрованные записи, без расшифровки).
+     *
+     * @return SecretVersion[]
+     * @throws AuthException     если нет прав (требуется observer+)
+     * @throws \RuntimeException если не найден
+     */
+    public function listVersions(string $secretUuid, string $orgId, string $userId): array
+    {
+        $secret = $this->findSecretInOrg($secretUuid, $orgId);
+        $this->assertCan('read', $userId, 'directory', $secret->directoryId, $orgId);
+        return SecretVersion::findBySecretId($secret->id);
+    }
+
+    // ------------------------------------------------------------------ //
+    //  Обновление                                                         //
+    // ------------------------------------------------------------------ //
+
+    /**
+     * Обновить имя и/или значение секрета.
+     * При смене значения предыдущая версия сохраняется в историю, version++.
+     *
+     * @throws AuthException             если нет прав (требуется moderator+)
+     * @throws \InvalidArgumentException при пустом имени
+     * @throws \RuntimeException         если не найден или новое имя занято
+     */
+    public function update(
+        string  $secretUuid,
+        string  $orgId,
+        string  $userId,
+        ?string $newName  = null,
+        ?string $newValue = null,
+    ): Secret {
+        $secret = $this->findSecretInOrg($secretUuid, $orgId);
+        $this->assertCan('write', $userId, 'directory', $secret->directoryId, $orgId);
+        $now    = now()->format('Y-m-d H:i:s');
+        $data   = ['updated_at' => $now];
+
+        if ($newName !== null) {
+            $newName = \trim($newName);
+            if ($newName === '') {
+                throw new \InvalidArgumentException('Secret name cannot be empty.');
+            }
+            if (\strlen($newName) > 255) {
+                throw new \InvalidArgumentException('Secret name is too long (max 255 characters).');
+            }
+            // Проверить уникальность, исключая текущий секрет
+            $this->assertNameUnique($secret->directoryId, $newName, $secret->id);
+            $data['name'] = $newName;
+        }
+
+        if ($newValue !== null) {
+            // Сохранить текущую версию в историю перед перезаписью
+            $this->saveVersionHistory($secret, $userId);
+
+            $encrypted       = $this->encryptionService->encrypt($newValue, $secret->uuid);
+            $data['encrypted_value'] = $encrypted->value;
+            $data['nonce']           = $encrypted->nonce;
+            $data['version']         = $secret->version + 1;
+        }
+
+        $secret->update($data);
+
+        $updated = Secret::findByUuid($secretUuid)
+            ?? throw new \RuntimeException('Failed to reload secret after update.');
+
+        $this->getAuditService()->record(
+            action: 'secret.update',
+            organizationId: $orgId,
+            userId: $userId,
+            resourceType: 'secret',
+            resourceId: $updated->id,
+            resourceUuid: $updated->uuid,
+            details: ['renamed' => $newName !== null, 'rotated' => $newValue !== null],
+        );
+
+        return $updated;
+    }
+
+    // ------------------------------------------------------------------ //
+    //  Удаление                                                           //
+    // ------------------------------------------------------------------ //
+
+    /**
+     * Мягкое удаление секрета (устанавливает deleted_at).
+     *
+     * @throws AuthException     если нет прав (требуется moderator+)
+     * @throws \RuntimeException если не найден
+     */
+    public function delete(string $secretUuid, string $orgId, string $userId): void
+    {
+        $secret = $this->findSecretInOrg($secretUuid, $orgId);
+        $this->assertCan('delete', $userId, 'directory', $secret->directoryId, $orgId);
+        $secret->update(['deleted_at' => now()->format('Y-m-d H:i:s')]);
+
+        $this->getAuditService()->record(
+            action: 'secret.delete',
+            organizationId: $orgId,
+            userId: $userId,
+            resourceType: 'secret',
+            resourceId: $secret->id,
+            resourceUuid: $secret->uuid,
+        );
+    }
+
+    /**
+     * Внутреннее обновление значения секрета для автоматической или внешней ротации.
+     */
+    public function rotateValue(
+        string $secretUuid,
+        string $orgId,
+        string $newValue,
+        ?string $rotatedBy = null,
+        string $rotationType = 'scheduled',
+    ): Secret {
+        if (!\in_array($rotationType, ['scheduled', 'api', 'manual'], true)) {
+            throw new \InvalidArgumentException('Invalid rotation type.');
+        }
+
+        $secret = $this->findSecretInOrg($secretUuid, $orgId);
+        $this->saveVersionHistory($secret, $rotatedBy, $rotationType, 'success');
+
+        $encrypted = $this->encryptionService->encrypt($newValue, $secret->uuid);
+        $now       = now()->format('Y-m-d H:i:s');
+
+        $secret->update([
+            'encrypted_value' => $encrypted->value,
+            'nonce'           => $encrypted->nonce,
+            'version'         => $secret->version + 1,
+            'last_rotated_at' => $now,
+            'updated_at'      => $now,
+        ]);
+
+        $updated = Secret::findByUuid($secretUuid)
+            ?? throw new \RuntimeException('Failed to reload rotated secret.');
+
+        $this->getAuditService()->record(
+            action: 'rotation.secret_rotated',
+            organizationId: $orgId,
+            userId: $rotatedBy,
+            resourceType: 'secret',
+            resourceId: $updated->id,
+            resourceUuid: $updated->uuid,
+            details: ['rotation_type' => $rotationType],
+        );
+
+        return $updated;
+    }
+
+    /**
+     * Обновить параметры ротации уже существующего секрета.
+     */
+    public function configureRotation(
+        string $secretUuid,
+        string $orgId,
+        string $userId,
+        ?string $rotationIntegrationUuid,
+        ?string $rotationSchedule,
+    ): Secret {
+        $secret = $this->findSecretInOrg($secretUuid, $orgId);
+        $this->assertCan('write', $userId, 'directory', $secret->directoryId, $orgId);
+
+        $secret->update([
+            'rotation_integration_id' => ($id = $this->resolveRotationIntegrationId($rotationIntegrationUuid, $orgId)) !== null
+                ? (int) $id
+                : null,
+            'rotation_schedule' => $this->normalizeRotationSchedule($rotationSchedule),
+            'updated_at'        => now()->format('Y-m-d H:i:s'),
+        ]);
+
+        return Secret::findByUuid($secretUuid)
+            ?? throw new \RuntimeException('Failed to reload secret after rotation config update.');
+    }
+
+    /** @return array{secret: Secret, value: string} */
+    public function getForRotation(string $secretUuid, string $orgId): array
+    {
+        $secret = $this->findSecretInOrg($secretUuid, $orgId);
+        $value = $this->encryptionService->decrypt($secret->encryptedValue, $secret->nonce, $secret->uuid);
+
+        return ['secret' => $secret, 'value' => $value];
+    }
+
+    public function recordRotationFailure(
+        string $secretUuid,
+        string $orgId,
+        string $rotationType,
+        string $errorMessage,
+    ): void {
+        $secret = $this->findSecretInOrg($secretUuid, $orgId);
+        $this->saveVersionHistory($secret, null, $rotationType, 'failed', $errorMessage);
+
+        $this->getAuditService()->record(
+            action: 'rotation.secret_rotate_failed',
+            organizationId: $orgId,
+            resourceType: 'secret',
+            resourceId: $secret->id,
+            resourceUuid: $secret->uuid,
+            details: ['rotation_type' => $rotationType, 'error' => $errorMessage],
+            success: false,
+        );
+    }
+
+    public function assertCanRotate(string $secretUuid, string $orgId, string $userId): void
+    {
+        $secret = $this->findSecretInOrg($secretUuid, $orgId);
+        $this->assertCan('write', $userId, 'directory', $secret->directoryId, $orgId);
+    }
+
+    // ------------------------------------------------------------------ //
+    //  Вспомогательные                                                    //
+    // ------------------------------------------------------------------ //
+
+    /**
+     * @throws \RuntimeException если каталог не найден или принадлежит другой организации
+     */
+    private function findDirInOrg(string $dirUuid, string $orgId): Directory
+    {
+        $dir = Directory::findByUuid($dirUuid);
+        if ($dir === null || $dir->organizationId !== $orgId) {
+            throw new \RuntimeException('Directory not found.');
+        }
+        return $dir;
+    }
+
+    /**
+     * @throws \RuntimeException если секрет не найден или принадлежит другой организации
+     */
+    private function findSecretInOrg(string $secretUuid, string $orgId): Secret
+    {
+        $secret = Secret::findByUuid($secretUuid);
+        if ($secret === null || $secret->organizationId !== $orgId) {
+            throw new \RuntimeException('Secret not found.');
+        }
+        return $secret;
+    }
+
+    /**
+     * @param string|null $excludeId ID секрета, который нужно исключить из проверки (при обновлении).
+     * @throws \RuntimeException если имя уже занято в каталоге
+     */
+    private function assertNameUnique(string $dirId, string $name, ?string $excludeId = null): void
+    {
+        $sql    = 'SELECT COUNT(*) FROM secrets WHERE directory_id = ? AND name = ? AND deleted_at IS NULL';
+        $params = [(int) $dirId, $name];
+
+        if ($excludeId !== null) {
+            $sql   .= ' AND id != ?';
+            $params[] = (int) $excludeId;
+        }
+
+        $count = (int) Database::getInstance()->fetchColumn($sql, $params);
+        if ($count > 0) {
+            throw new \RuntimeException('A secret with this name already exists in the directory.');
+        }
+    }
+
+    /**
+     * Сохранить текущую версию секрета в secret_rotation_history.
+     * Автоматически удаляет записи сверх лимита MAX_VERSIONS (самые старые).
+     */
+    private function saveVersionHistory(
+        Secret $secret,
+        ?string $userId,
+        string $rotationType = 'manual',
+        string $status = 'success',
+        ?string $errorMessage = null,
+    ): void
+    {
+        $now = now()->format('Y-m-d H:i:s');
+        $db  = Database::getInstance();
+
+        $db->insert('secret_rotation_history', [
+            'secret_id'       => (int) $secret->id,
+            'encrypted_value' => $secret->encryptedValue,
+            'nonce'           => $secret->nonce,
+            'version'         => $secret->version,
+            'rotated_by'      => $userId !== null ? (int) $userId : null,
+            'rotation_type'   => $rotationType,
+            'status'          => $status,
+            'error_message'   => $errorMessage,
+            'created_at'      => $now,
+        ]);
+
+        // Удалить самые старые версии, оставив не более MAX_VERSIONS
+        $count = (int) $db->fetchColumn(
+            'SELECT COUNT(*) FROM secret_rotation_history WHERE secret_id = ?',
+            [(int) $secret->id]
+        );
+
+        if ($count > self::MAX_VERSIONS) {
+            $toDelete = $count - self::MAX_VERSIONS;
+            $db->query(
+                'DELETE FROM secret_rotation_history WHERE id IN (
+                    SELECT id FROM secret_rotation_history
+                    WHERE secret_id = ?
+                    ORDER BY version ASC
+                    LIMIT ?
+                )',
+                [(int) $secret->id, $toDelete]
+            );
+        }
+    }
+
+    /**
+     * @throws AuthException (code 403)
+     */
+    private function assertCan(
+        string $permission,
+        string $userId,
+        string $resourceType,
+        string $resourceId,
+        string $orgId,
+    ): void {
+        if (!$this->permissionService->can($permission, $userId, $resourceType, $resourceId, $orgId)) {
+            throw new AuthException(
+                \sprintf("Access denied: '%s' permission required.", $permission),
+                403
+            );
+        }
+    }
+
+    private function getTemplateService(): TemplateService
+    {
+        return $this->templateService ?? new TemplateService();
+    }
+
+    private function getAuditService(): AuditService
+    {
+        return $this->auditService ?? new AuditService(new LoggerService());
+    }
+
+    private function resolveRotationIntegrationId(?string $integrationUuid, string $orgId): ?string
+    {
+        if ($integrationUuid === null || \trim($integrationUuid) === '') {
+            return null;
+        }
+
+        $integration = OrganizationIntegration::findByUuid(\trim($integrationUuid));
+        if ($integration === null || $integration->organizationId !== $orgId) {
+            throw new \RuntimeException('Rotation integration not found.');
+        }
+        if (!$integration->isActive) {
+            throw new \RuntimeException('Rotation integration is inactive.');
+        }
+
+        return $integration->id;
+    }
+
+    private function normalizeRotationSchedule(?string $rotationSchedule): ?string
+    {
+        if ($rotationSchedule === null) {
+            return null;
+        }
+
+        $rotationSchedule = \trim($rotationSchedule);
+        if ($rotationSchedule === '') {
+            return null;
+        }
+
+        $parts = \preg_split('/\s+/', $rotationSchedule) ?: [];
+        if (\count($parts) !== 5) {
+            throw new \InvalidArgumentException('Rotation schedule must be a 5-field cron expression.');
+        }
+
+        return \implode(' ', $parts);
+    }
+}

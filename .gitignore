@@ -1,0 +1,43 @@
+# Зависимости
+/vendor/
+/node_modules/
+
+# Конфигурация окружения
+.env
+*.env.local
+
+# Чувствительные файлы
+setup_token.txt
+/var/passway/
+
+# Хранилище приложения
+/storage/logs/*.log
+/storage/cache/*
+!/storage/logs/.gitkeep
+!/storage/cache/.gitkeep
+
+# SQLite БД (только для разработки)
+*.db
+*.sqlite
+*.sqlite3
+
+# Системные файлы
+.DS_Store
+Thumbs.db
+*.swp
+*.swo
+
+# IDE
+.idea/
+.vscode/
+*.iml
+
+# Тесты
+/tests/coverage/
+.phpunit.result.cache
+phpunit.xml
+
+# Docker
+/docker/data/
+
+.temp/

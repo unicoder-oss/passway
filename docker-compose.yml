@@ -1,0 +1,64 @@
+services:
+  app:
+    build:
+      context: .
+      dockerfile: Dockerfile
+    ports:
+      - "8000:8000"
+    environment:
+      APP_NAME: Passway
+      APP_ENV: development
+      APP_URL: http://localhost:8000
+      APP_DEBUG: "true"
+      APP_LOCALE: ru
+      APP_TIMEZONE: UTC
+      DB_DRIVER: pgsql
+      DB_HOST: db
+      DB_PORT: 5432
+      DB_NAME: passway
+      DB_USER: passway
+      DB_PASS: passway
+      DB_SSLMODE: disable
+      MASTER_KEY: 0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef
+      SESSION_COOKIE_NAME: passway_session
+      SESSION_COOKIE_SECURE: "false"
+      SESSION_COOKIE_SAMESITE: Strict
+      WEBAUTHN_RP_ID: localhost
+      WEBAUTHN_RP_NAME: Passway
+      WEBAUTHN_ORIGIN: http://localhost:8000
+      LOG_CHANNEL: stderr
+      LOG_LEVEL: debug
+      LOG_PATH: /app/storage/logs/passway.log
+      LOG_RETENTION_DAYS: 90
+      SETUP_TOKEN_PATH: /app/storage/setup_token.txt
+    depends_on:
+      db:
+        condition: service_healthy
+    volumes:
+      - app-storage:/app/storage
+    healthcheck:
+      test: ["CMD-SHELL", "php -r '$$d=@file_get_contents(\"http://127.0.0.1:8000/health\"); if($$d===false) exit(1); $$j=json_decode($$d,true); exit((($$j[\"status\"] ?? \"\") === \"ok\") ? 0 : 1);'"]
+      interval: 10s
+      timeout: 3s
+      retries: 10
+      start_period: 15s
+
+  db:
+    image: postgres:16-alpine
+    environment:
+      POSTGRES_DB: passway
+      POSTGRES_USER: passway
+      POSTGRES_PASSWORD: passway
+    ports:
+      - "5432:5432"
+    volumes:
+      - pgdata:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U passway -d passway"]
+      interval: 5s
+      timeout: 5s
+      retries: 12
+
+volumes:
+  pgdata:
+  app-storage:
