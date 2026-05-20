@@ -136,6 +136,14 @@ final class AuthMiddleware
             return true;
         }
 
+        if (preg_match('#^/api/v1/organizations/[^/]+/secrets/[^/]+/approvals$#', $path) === 1) {
+            return true;
+        }
+
+        if (preg_match('#^/api/v1/organizations/[^/]+/approvals/[^/]+(?:/use)?$#', $path) === 1) {
+            return true;
+        }
+
         return false;
     }
 }

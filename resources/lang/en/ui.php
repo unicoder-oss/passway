@@ -659,6 +659,10 @@ return [
                 'title' => 'Secrets',
                 'description' => 'Secret resource routes',
             ],
+            'approvals' => [
+                'title' => 'Approvals',
+                'description' => 'API-key accessible approval workflow routes',
+            ],
         ],
         'endpoints' => [
             'root' => [
@@ -711,6 +715,15 @@ return [
             ],
             'secrets_versions' => [
                 'summary' => 'Secret version and rotation history',
+            ],
+            'approvals_create' => [
+                'summary' => 'Create an approval request for a secret that requires approval',
+            ],
+            'approvals_show' => [
+                'summary' => 'Check the status of your approval request',
+            ],
+            'approvals_use' => [
+                'summary' => 'Consume an approved request and return the secret value',
             ],
         ],
         'section_methods' => 'Methods',

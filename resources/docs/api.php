@@ -82,4 +82,20 @@ return [
   -H 'X-Api-Key: sv_...';", $ok([['version' => 1, 'rotation_type' => 'manual', 'status' => 'success', 'created_at' => '2026-05-10 12:00:00']])) ,
         ],
     ],
+    [
+        'title' => __('ui.api_docs.sections.approvals.title'),
+        'description' => __('ui.api_docs.sections.approvals.description'),
+        'endpoints' => [
+            $ep('POST', '/api/v1/organizations/:uuid/secrets/:secUuid/approvals', __('ui.api_docs.access.api_key'), __('ui.api_docs.endpoints.approvals_create.summary'), "curl -X POST https://example.test/api/v1/organizations/org-uuid/secrets/sec-uuid/approvals \
+  -H 'Content-Type: application/json' \
+  -H 'X-Api-Key: sv_...'; \
+  -d '{\"request_type\":\"read\"}'", $ok(['uuid' => 'apr-uuid', 'request_type' => 'read', 'status' => 'pending', 'reason' => null, 'created_at' => '2026-05-10 12:00:00', 'resolved_at' => null, 'requester' => ['type' => 'api_key', 'id' => '12', 'uuid' => 'key-uuid', 'name' => 'Deploy key', 'email' => null, 'display_name' => 'Deploy key'], 'organization' => ['uuid' => 'org-uuid', 'name' => 'Platform Team'], 'secret' => ['id' => '44', 'uuid' => 'sec-uuid', 'name' => 'DB_PASSWORD', 'type' => 'static', 'requires_approval' => true, 'link' => null], 'directory' => ['uuid' => 'dir-uuid', 'path' => 'Infrastructure']])) ,
+            $ep('GET', '/api/v1/organizations/:uuid/approvals/:aprUuid', __('ui.api_docs.access.api_key'), __('ui.api_docs.endpoints.approvals_show.summary'), "curl https://example.test/api/v1/organizations/org-uuid/approvals/apr-uuid \
+  -H 'X-Api-Key: sv_...';", $ok(['uuid' => 'apr-uuid', 'request_type' => 'read', 'status' => 'approved', 'reason' => null, 'created_at' => '2026-05-10 12:00:00', 'resolved_at' => '2026-05-10 12:03:00', 'requester' => ['type' => 'api_key', 'id' => '12', 'uuid' => 'key-uuid', 'name' => 'Deploy key', 'email' => null, 'display_name' => 'Deploy key'], 'organization' => ['uuid' => 'org-uuid', 'name' => 'Platform Team'], 'secret' => ['id' => '44', 'uuid' => 'sec-uuid', 'name' => 'DB_PASSWORD', 'type' => 'static', 'requires_approval' => true, 'link' => null], 'directory' => ['uuid' => 'dir-uuid', 'path' => 'Infrastructure']])) ,
+            $ep('POST', '/api/v1/organizations/:uuid/approvals/:aprUuid/use', __('ui.api_docs.access.api_key'), __('ui.api_docs.endpoints.approvals_use.summary'), "curl -X POST https://example.test/api/v1/organizations/org-uuid/approvals/apr-uuid/use \
+  -H 'Content-Type: application/json' \
+  -H 'X-Api-Key: sv_...'; \
+  -d '{\"token\":\"\"}'", $ok(['uuid' => 'sec-uuid', 'name' => 'DB_PASSWORD', 'type' => 'static', 'value' => 'secret'])) ,
+        ],
+    ],
 ];

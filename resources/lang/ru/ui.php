@@ -659,6 +659,10 @@ return [
                 'title' => 'Секреты',
                 'description' => 'Ресурсные маршруты секретов',
             ],
+            'approvals' => [
+                'title' => 'Согласования',
+                'description' => 'Маршруты approval workflow, доступные API-ключу',
+            ],
         ],
         'endpoints' => [
             'root' => [
@@ -711,6 +715,15 @@ return [
             ],
             'secrets_versions' => [
                 'summary' => 'История версий и ротаций секрета',
+            ],
+            'approvals_create' => [
+                'summary' => 'Создать запрос на одобрение для секрета, требующего одобрения',
+            ],
+            'approvals_show' => [
+                'summary' => 'Проверить статус своего запроса на одобрение',
+            ],
+            'approvals_use' => [
+                'summary' => 'Использовать одобренный запрос и получить значение секрета',
             ],
         ],
         'section_methods' => 'Методы',
