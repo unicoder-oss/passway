@@ -1,180 +1,217 @@
 # Passway
 
-Self-hosted secrets management service on custom PHP 8.1+ stack.
+Languages: English | [Русский](README.ru.md)
 
-Source of truth for implementation progress lives in `.temp/project_passway_status.md`.
+Passway is a web service for secrets management for PHP 8.1+ with PostgreSQL and SQLite support.
 
-## Current Scope
+## Features
 
-- Custom Composer PHP app, no Laravel/Symfony
-- Entry point: `public/index.php`
-- Web UI: login, TOTP, dashboard, org management, directories, secrets, audit, API keys, integrations, passkeys
-- API: `/api/v1/...`
-- Databases: PostgreSQL and SQLite
+- Secrets, directories, organizations, access log, API, and dynamic secrets with rotation support through external services.
+- Full-featured web interface for initial setup, authentication, and secrets management.
+- Single-user and team deployment modes for different usage scenarios.
+- English and Russian localization support. PRs for adding other languages are welcome.
 
 ## Requirements
 
 - PHP 8.1+
 - Composer
-- Extensions:
-  - `pdo`
-  - `mbstring`
-  - `json`
-  - `sodium`
-  - `pdo_sqlite` for SQLite dev/test
-  - `pdo_pgsql` for PostgreSQL
+- PHP extensions: `pdo`, `mbstring`, `json`, `sodium`
+- Database extension: `pdo_pgsql` for PostgreSQL or `pdo_sqlite` for SQLite
 
 ## Local Quick Start
 
 1. Install dependencies:
+
 ```bash
 composer install
 ```
 
-2. Create local config:
+2. Create the configuration file and adjust values for your environment:
+
 ```bash
 cp .env.example .env
 ```
 
-3. Bootstrap config, storage, master key, and migrations:
+3. Run the installation script:
+
 ```bash
 php install.php
 ```
 
-4. Start the app:
+4. Start the application:
+
 ```bash
 php -S 0.0.0.0:8000 -t public public/index.php
 ```
 
-5. Open:
+5. Open in your browser:
+
 ```text
 http://localhost:8000/setup
 ```
 
-6. Read the setup token from:
-```text
-storage/setup_token.txt
-```
+The initial setup token can be found in the application logs or in the file specified by `SETUP_TOKEN_PATH`.
 
-## Docker Quick Start
+## Docker Compose Quick Start
 
 1. Build and start services:
+
 ```bash
 docker compose up --build
 ```
 
-2. Open:
+2. Open in your browser:
+
 ```text
 http://localhost:8000/setup
 ```
 
-3. Read the setup token:
-```bash
-docker compose logs app
+## Configuration
+
+| Variable | Description | Allowed Values |
+| --- | --- | --- |
+| `APP_NAME` | Application name in the UI and TOTP issuer. | Any string, for example `Passway` |
+| `APP_ENV` | Application environment. | `production` or any other string |
+| `APP_URL` | Public base URL. | Examples: `http://localhost:8000`, `https://passway.example.com` |
+| `APP_DEBUG` | Enables detailed debug output. | `true`, `false` |
+| `APP_LOCALE` | Web interface language used when the browser sends an unsupported language. | `en`, `ru` |
+| `APP_TIMEZONE` | Application timezone. | `UTC`, `Europe/Moscow` |
+| `APP_BEHIND_PROXY` | Trust reverse proxy headers with the client IP. Enable only behind a trusted proxy. | `true`, `false` |
+| `DB_DRIVER` | Database driver. | `pgsql`, `sqlite` |
+| `DB_HOST` | PostgreSQL host. | `127.0.0.1`, `db` |
+| `DB_PORT` | PostgreSQL port. | `5432` |
+| `DB_NAME` | PostgreSQL database name. | `passway` |
+| `DB_USER` | PostgreSQL user. | `passway` |
+| `DB_PASS` | PostgreSQL password. | Any password string |
+| `DB_SSLMODE` | PostgreSQL SSL mode. | `disable`, `require`, `verify-full` |
+| `DB_SQLITE_PATH` | SQLite database path. | `storage/passway.db`, `:memory:` |
+| `MASTER_KEY` | 32-byte encryption master key. | Generate with: `php -r "echo bin2hex(random_bytes(32));"` |
+| `SESSION_TTL` | Session lifetime in seconds. | `86400` |
+| `SESSION_COOKIE_NAME` | HTTP session cookie name. | `passway_session` |
+| `SESSION_COOKIE_SECURE` | Send session cookies only over HTTPS. | `true`, `false` |
+| `SESSION_COOKIE_SAMESITE` | SameSite policy for session cookies. | `Strict`, `Lax`, `None` |
+| `DEPLOY_MODE` | Deployment mode selected during initial setup. Leave empty before setup. | `team`, `solo`, empty |
+| `RATE_LIMIT_API` | API request limit per minute. | `100` |
+| `RATE_LIMIT_AUTH` | Authentication endpoint request limit per minute. | `20` |
+| `WEBAUTHN_RP_ID` | WebAuthn relying party identifier. Must match the real domain. | `localhost`, `passway.example.com` |
+| `WEBAUTHN_RP_NAME` | WebAuthn relying party display name. | `Passway` |
+| `WEBAUTHN_ORIGIN` | WebAuthn origin. Must match the address in the browser. | `http://localhost:8000`, `https://passway.example.com` |
+| `LOG_CHANNEL` | Log channel. | `file`, `stderr` |
+| `LOG_LEVEL` | Minimum logging level. | `debug`, `info`, `warning`, `error` |
+| `LOG_PATH` | Path to the log file when `LOG_CHANNEL=file`. | `storage/logs/passway.log` |
+| `LOG_RETENTION_DAYS` | Audit log retention window. | `90` |
+| `SCHEDULER_SECRET` | Random token for protecting scheduler endpoints. | Random high-entropy string |
+| `SETUP_TOKEN_PATH` | Path to the initial setup token file. | `storage/setup_token.txt` |
+
+## Public Server Setup
+
+Deploy Passway behind a reverse proxy such as nginx, Caddy, or Traefik. TLS is terminated by the proxy, and HTTP traffic is proxied to the web application.
+
+### Recommended Deployment Settings
+
+```dotenv
+APP_ENV=production
+APP_DEBUG=false
+APP_URL=https://passway.example.com
+APP_BEHIND_PROXY=true
+SESSION_COOKIE_SECURE=true
+DB_DRIVER=pgsql
+WEBAUTHN_RP_ID=passway.example.com
+WEBAUTHN_ORIGIN=https://passway.example.com
 ```
 
-Or inside the volume-backed storage path:
-```bash
-docker compose exec app sh -lc 'cat /app/storage/setup_token.txt'
+### Nginx Configuration Example With TLS Termination
+
+```nginx
+server {
+    listen 443 ssl http2;
+    server_name passway.example.com;
+
+    ssl_certificate /etc/letsencrypt/live/passway.example.com/fullchain.pem;
+    ssl_certificate_key /etc/letsencrypt/live/passway.example.com/privkey.pem;
+
+    location / {
+        proxy_pass http://127.0.0.1:8000;
+        proxy_set_header Host $host;
+        proxy_set_header X-Real-IP $remote_addr;
+        proxy_set_header X-Forwarded-For $proxy_add_x_forwarded_for;
+        proxy_set_header X-Forwarded-Proto https;
+    }
+}
+
+server {
+    listen 80;
+    server_name passway.example.com;
+    return 301 https://$host$request_uri;
+}
 ```
 
-## Configuration Notes
+> [!IMPORTANT]
+> Set `APP_BEHIND_PROXY=true` only when these headers come from a trusted proxy and cannot be set directly by clients.
 
-- `.env.example` is tuned for local development by default
-- local defaults use:
-  - `DB_DRIVER=sqlite`
-  - `APP_URL=http://localhost:8000`
-  - `SESSION_COOKIE_SECURE=false`
-- for Docker Compose, the bundled `docker-compose.yml` uses PostgreSQL and injects env directly into containers
-- in production you should change at least:
-  - `APP_ENV=production`
-  - `APP_DEBUG=false`
-  - `APP_URL=https://...`
-  - `SESSION_COOKIE_SECURE=true`
-  - `MASTER_KEY`
-  - DB credentials
-  - `WEBAUTHN_RP_ID` and `WEBAUTHN_ORIGIN`
+## Initial Setup Flow
 
-## Install Script
+After the first deployment:
 
-`php install.php` is idempotent and currently does the following:
-
-- creates `.env` from `.env.example` if missing
-- generates `MASTER_KEY` if empty
-- aligns WebAuthn defaults with `APP_URL` when example placeholders are still present
-- creates storage/log directories
-- runs pending migrations
-
-It does not complete `/setup` automatically. Initial admin creation and deploy mode selection still happen through the setup page.
+1. Open `/setup`.
+2. Enter the initial setup token.
+3. Create the first administrator account.
+4. Choose team or single-user deployment mode.
 
 ## Common Commands
 
-Install deps:
+#### Install Dependencies
+
 ```bash
 composer install
 ```
 
-Run all tests:
+#### Run All Tests
+
 ```bash
 vendor/bin/phpunit
 ```
 
-Run migrations:
+#### Run Migrations
+
 ```bash
 composer migrate
 ```
 
-Migration status:
+#### Migration Status
+
 ```bash
 composer migrate:status
 ```
 
-Rollback last batch:
+#### Roll Back Last Batch
+
 ```bash
 composer migrate:rollback
 ```
 
-Fresh local reset:
+#### Reset Database (local testing only)
+
 ```bash
 php database/migrate.php fresh
 ```
 
-Run rotation job:
+#### Run Rotation
+
 ```bash
 composer rotate:run
 ```
 
-Run maintenance cleanup:
+#### Clean Up Old Log Entries
+
 ```bash
 composer maintain:cleanup
 ```
 
-## Setup Flow
-
-After first boot:
-
-1. open `/setup`
-2. submit the setup token
-3. create the first admin account
-4. choose deploy mode:
-   - `team`
-   - `solo`
-
-The setup token is one-time. After setup completes it is invalidated and removed from the token file.
-
 ## Testing
 
-- tests run against SQLite `:memory:` via `phpunit.xml`
-- they do not depend on your local `.env`
+Tests run against SQLite `:memory:` via `phpunit.xml` and do not depend on your local `.env`.
 
-Run:
 ```bash
 vendor/bin/phpunit
 ```
-
-## Known Notes
-
-- `install.php` is now present; older comments and past planning notes that referenced a missing installer are stale
-- setup token path is controlled by `SETUP_TOKEN_PATH`
-- passkeys require `WEBAUTHN_RP_ID` and `WEBAUTHN_ORIGIN` to match the actual host/origin
-- the built-in PHP server is fine for local development only

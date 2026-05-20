@@ -10,7 +10,7 @@
  *   php database/migrate.php down 2   — откатить 2 последних batch
  *   php database/migrate.php reset    — откатить все миграции
  *   php database/migrate.php status   — показать статус
- *   php database/migrate.php fresh    — reset + up (ТОЛЬКО для разработки!)
+ *   php database/migrate.php fresh    — удалить все таблицы + up (ТОЛЬКО для разработки!)
  */
 
 declare(strict_types=1);
@@ -114,7 +114,7 @@ try {
                 exit(1);
             }
             warn("Resetting and re-running all migrations (DEVELOPMENT ONLY)...");
-            $runner->reset();
+            $runner->dropAllTables();
             $applied = $runner->up();
             foreach ($applied as $name) {
                 info("  ✓ Applied: {$name}");

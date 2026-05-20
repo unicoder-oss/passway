@@ -18,7 +18,7 @@ use RuntimeException;
  *   php database/migrate.php down     — откатить последний batch
  *   php database/migrate.php reset    — откатить ВСЕ миграции
  *   php database/migrate.php status   — показать статус
- *   php database/migrate.php fresh    — reset + up (только для разработки!)
+ *   php database/migrate.php fresh    — drop all tables + up (только для разработки!)
  */
 final class MigrationRunner
 {
@@ -109,6 +109,37 @@ final class MigrationRunner
         $this->ensureMigrationsTable();
         $maxBatch = $this->getMaxBatch();
         return $this->down($maxBatch);
+    }
+
+    /**
+     * Удалить все таблицы текущей схемы без вызова down() миграций.
+     *
+     * Используется для fresh в разработке: это надёжнее rollback всех миграций,
+     * особенно для SQLite с пересозданием таблиц и внешними ключами.
+     */
+    public function dropAllTables(): void
+    {
+        if ($this->db->getDriver() === 'pgsql') {
+            $this->db->getPdo()->exec('DROP SCHEMA IF EXISTS public CASCADE');
+            $this->db->getPdo()->exec('CREATE SCHEMA public');
+            return;
+        }
+
+        $pdo = $this->db->getPdo();
+        $pdo->exec('PRAGMA foreign_keys = OFF');
+
+        try {
+            $tables = $this->db->fetchAll(
+                "SELECT name FROM sqlite_master WHERE type = 'table' AND name NOT LIKE 'sqlite_%'"
+            );
+
+            foreach ($tables as $table) {
+                $name = (string) $table['name'];
+                $pdo->exec('DROP TABLE IF EXISTS ' . $this->db->quoteIdentifier($name));
+            }
+        } finally {
+            $pdo->exec('PRAGMA foreign_keys = ON');
+        }
     }
 
     /**
