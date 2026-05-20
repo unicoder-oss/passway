@@ -107,6 +107,14 @@ final class TotpServiceTest extends TestCase
         $this->assertStringContainsString('secret=' . $data['raw_secret'], $uri);
     }
 
+    public function test_qr_code_image_data_uri_is_svg(): void
+    {
+        $data = $this->svc->generateSecret();
+        $uri  = $this->svc->getQrCodeImageDataUri('user@example.com', $data['raw_secret']);
+
+        $this->assertStringStartsWith('data:image/svg+xml;base64,', $uri);
+    }
+
     // ------------------------------------------------------------------ //
     //  verifyCode()                                                       //
     // ------------------------------------------------------------------ //

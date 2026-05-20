@@ -4,6 +4,7 @@ declare(strict_types=1);
 
 namespace Passway\Services;
 
+use RobThree\Auth\Providers\Qr\BaconQrCodeProvider;
 use Passway\Exceptions\DecryptionException;
 use RobThree\Auth\TwoFactorAuth;
 use RobThree\Auth\TwoFactorAuthException;
@@ -27,7 +28,10 @@ final class TotpService
     ) {
         // Issuer — отображается в TOTP-приложении (Google Authenticator, Authy и т.д.)
         $issuer = (string) ($_ENV['APP_NAME'] ?? 'Passway');
-        $this->tfa = new TwoFactorAuth(issuer: $issuer);
+        $this->tfa = new TwoFactorAuth(
+            issuer: $issuer,
+            qrcodeprovider: new BaconQrCodeProvider(format: 'svg'),
+        );
     }
 
     // ------------------------------------------------------------------ //
@@ -71,6 +75,14 @@ final class TotpService
     {
         // Формат: otpauth://totp/{issuer}:{email}?secret={secret}&issuer={issuer}
         return $this->tfa->getQRText($email, $rawSecret);
+    }
+
+    /**
+     * Вернуть встроенное SVG-изображение QR-кода для показа в веб-интерфейсе.
+     */
+    public function getQrCodeImageDataUri(string $email, string $rawSecret, int $size = 220): string
+    {
+        return $this->tfa->getQRCodeImageAsDataUri($email, $rawSecret, $size);
     }
 
     /**

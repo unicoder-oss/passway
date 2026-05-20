@@ -38,13 +38,27 @@
                     </form>
                 <?php else: ?>
                     <div class="grid" style="gap:.75rem;">
+                        <?php if (!empty($totpSetup['qr_code_image'])): ?>
+                            <div>
+                                <label><?= e(__('ui.profile.qr_code')) ?></label>
+                                <div class="panel panel-muted" style="margin-top:.35rem; padding:1rem; display:flex; justify-content:center;">
+                                    <img
+                                        src="<?= e((string) $totpSetup['qr_code_image']) ?>"
+                                        alt="<?= e(__('ui.profile.qr_code_alt')) ?>"
+                                        width="220"
+                                        height="220"
+                                        style="display:block; width:100%; max-width:220px; height:auto;"
+                                    >
+                                </div>
+                            </div>
+                        <?php endif; ?>
                         <div>
                             <label><?= e(__('ui.profile.manual_entry_key')) ?></label>
                             <input class="mono" value="<?= e((string) $totpSetup['raw_secret']) ?>" readonly>
                         </div>
                         <div>
                             <label><?= e(__('ui.profile.otpauth_uri')) ?></label>
-                            <textarea class="mono" rows="4" readonly><?= e((string) $totpSetup['qr_code_uri']) ?></textarea>
+                            <a class="mono" href="<?= e((string) $totpSetup['qr_code_uri']) ?>"><?= e(__('ui.profile.authenticator_link')) ?></a>
                         </div>
                         <form method="POST" action="/profile/totp/enable" class="grid" style="gap:.75rem;">
                             <div>

@@ -315,12 +315,21 @@ final class WebController
         try {
             $data = $this->totpService->generateSecret();
             $qrCodeUri = $this->totpService->getQrCodeUri($user->email, $data['raw_secret']);
+            $qrCodeImage = null;
+
+            try {
+                $qrCodeImage = $this->totpService->getQrCodeImageDataUri($user->email, $data['raw_secret']);
+            } catch (\Throwable) {
+                // Не срываем настройку TOTP, если QR не удалось отрисовать локально.
+            }
+
             $this->ensureSessionStarted();
             $_SESSION['totp_setup'] = [
                 'encrypted' => $data['totp_secret'],
                 'nonce' => $data['totp_nonce'],
                 'raw_secret' => $data['raw_secret'],
                 'qr_code_uri' => $qrCodeUri,
+                'qr_code_image' => $qrCodeImage,
                 'expires' => \time() + 600,
             ];
         } catch (\Throwable $e) {
