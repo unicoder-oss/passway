@@ -31,7 +31,7 @@ $renderRotationField = static function (array $field, string $namePrefix, bool $
                 <?php endforeach; ?>
             </select>
         <?php elseif ($type === 'boolean'): ?>
-            <label style="display:flex; gap:.5rem; align-items:center;">
+            <label class="inline-check">
                 <input type="hidden" name="<?= e($inputName) ?>" value="false">
                 <input id="<?= e($inputId) ?>" type="checkbox" name="<?= e($inputName) ?>" value="true">
                 <span><?= e($label) ?></span>
@@ -102,7 +102,7 @@ require base_path('resources/views/partials/auth_topbar.php');
                     <div>
                         <div style="font-weight:700;"><?= e($integration->name) ?></div>
                         <div class="muted" style="font-size:.92rem;"><?= e($service?->name ?? __('ui.integrations.unknown_service')) ?><?= $service ? ' · ' . e($service->url) : '' ?></div>
-                        <div class="muted" style="font-size:.92rem;"><?= e($integration->isActive ? __('ui.app.active') : __('ui.app.inactive')) ?> · <?= e(__('ui.integrations.updated', ['date' => $integration->updatedAt])) ?></div>
+                        <div class="muted" style="font-size:.92rem;"><?= e($integration->isActive ? __('ui.app.active') : __('ui.app.inactive')) ?> · <?= __('ui.integrations.updated', ['date' => local_datetime($integration->updatedAt)]) ?></div>
                     </div>
 
                     <form method="POST" action="/organizations/<?= e($organization->uuid) ?>/integrations/<?= e($integration->uuid) ?>/update" class="grid" style="gap:.75rem;">
@@ -110,7 +110,7 @@ require base_path('resources/views/partials/auth_topbar.php');
                             <label><?= e(__('ui.integrations.name')) ?></label>
                             <input name="name" value="<?= e($integration->name) ?>" required>
                         </div>
-                        <label style="display:flex; gap:.5rem; align-items:center;">
+                        <label class="inline-check">
                             <input type="checkbox" name="is_active" value="1" <?= $integration->isActive ? 'checked' : '' ?>>
                             <span><?= e(__('ui.integrations.active')) ?></span>
                         </label>

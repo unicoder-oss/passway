@@ -52,8 +52,8 @@ require base_path('resources/views/partials/auth_topbar.php');
                     <div>
                         <div style="font-weight:700;"><?= e($key->name) ?></div>
                         <div class="muted" style="font-size:.92rem;"><?= e(__('ui.api_keys.prefix', ['prefix' => $key->keyPrefix])) ?> · <?= e(__('ui.api_keys.environments.' . $key->environment)) ?> · <?= e($key->isActive ? __('ui.api_key_permissions.status_active') : __('ui.api_key_permissions.status_revoked')) ?></div>
-                        <div class="muted" style="font-size:.92rem;"><?= e(__('ui.api_keys.created', ['created_at' => $key->createdAt])) ?><?= $key->expiresAt ? e(__('ui.api_keys.expires_suffix', ['date' => $key->expiresAt])) : '' ?></div>
-                        <div class="muted" style="font-size:.92rem;"><?= e(__('ui.api_keys.last_used', ['date' => (string) ($key->lastUsedAt ?? __('ui.app.never'))])) ?></div>
+                        <div class="muted" style="font-size:.92rem;"><?= __('ui.api_keys.created', ['created_at' => local_datetime($key->createdAt)]) ?><?= $key->expiresAt ? __('ui.api_keys.expires_suffix', ['date' => local_datetime($key->expiresAt)]) : '' ?></div>
+                        <div class="muted" style="font-size:.92rem;"><?= __('ui.api_keys.last_used', ['date' => $key->lastUsedAt !== null ? local_datetime($key->lastUsedAt) : e(__('ui.app.never'))]) ?></div>
                     </div>
                     <div class="actions">
                         <a class="button secondary" href="/organizations/<?= e($organization->uuid) ?>/api-keys/<?= e($key->uuid) ?>/permissions"><?= e(__('ui.api_keys.permissions')) ?></a>

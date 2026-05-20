@@ -20,7 +20,7 @@ require base_path('resources/views/partials/auth_topbar.php');
             <h2 style="margin:0 0 .6rem;"><?= e(__('ui.api_key_permissions.key_summary')) ?></h2>
             <div class="muted"><?= e(__('ui.api_key_permissions.owner', ['owner' => $owner?->email ?? __('ui.api_key_permissions.unknown_owner')])) ?></div>
             <div class="muted"><?= e(__('ui.api_keys.prefix', ['prefix' => $apiKey->keyPrefix])) ?> · <?= e(__('ui.api_keys.environments.' . $apiKey->environment)) ?> · <?= e($apiKey->isActive ? __('ui.api_key_permissions.status_active') : __('ui.api_key_permissions.status_revoked')) ?></div>
-            <div class="muted"><?= e(__('ui.api_key_permissions.created', ['created_at' => $apiKey->createdAt])) ?><?= $apiKey->expiresAt ? e(__('ui.api_key_permissions.expires_suffix', ['date' => $apiKey->expiresAt])) : '' ?></div>
+            <div class="muted"><?= __('ui.api_key_permissions.created', ['created_at' => local_datetime($apiKey->createdAt)]) ?><?= $apiKey->expiresAt ? __('ui.api_key_permissions.expires_suffix', ['date' => local_datetime($apiKey->expiresAt)]) : '' ?></div>
         </div>
 
         <form method="POST" action="/organizations/<?= e($organization->uuid) ?>/api-keys/<?= e($apiKey->uuid) ?>/permissions" class="grid" style="gap:.75rem;">
@@ -53,7 +53,7 @@ require base_path('resources/views/partials/auth_topbar.php');
                     <div>
                         <div style="font-weight:700;"><?= e($permission->permission) ?></div>
                         <div class="muted" style="font-size:.92rem;"><?= e($permissionLabels[$permission->id] ?? $permission->resourceType) ?></div>
-                        <div class="muted" style="font-size:.92rem;"><?= e(__('ui.api_key_permissions.added', ['date' => $permission->createdAt])) ?></div>
+                        <div class="muted" style="font-size:.92rem;"><?= __('ui.api_key_permissions.added', ['date' => local_datetime($permission->createdAt)]) ?></div>
                     </div>
                     <form method="POST" action="/organizations/<?= e($organization->uuid) ?>/api-keys/<?= e($apiKey->uuid) ?>/permissions/<?= e($permission->id) ?>/delete">
                         <button type="submit" class="danger"><?= e(__('ui.api_key_permissions.remove_permission')) ?></button>

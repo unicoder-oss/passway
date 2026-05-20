@@ -153,6 +153,23 @@
         .panel-muted { background: var(--panel-subtle); }
         .mono { font-family: inherit; }
         .hidden { display: none !important; }
+        .inline-check {
+            display: flex;
+            align-items: center;
+            justify-content: flex-start;
+            gap: .5rem;
+            width: fit-content;
+            margin: 0;
+            text-align: left;
+        }
+        .inline-check input {
+            width: auto;
+            margin: 0;
+            flex: 0 0 auto;
+        }
+        .inline-check span {
+            text-align: left;
+        }
         .preview-wrap { max-width: 100%; border: 1px solid var(--border); background: var(--panel-subtle); }
         canvas { display: block; width: 100%; height: auto; }
         .range { width: 100%; margin: 0; }
@@ -251,5 +268,44 @@
         <?= $content ?>
     </div>
 </div>
+<script>
+(() => {
+    const parseUtcDate = (value) => {
+        if (typeof value !== 'string' || value.trim() === '') {
+            return null;
+        }
+
+        const normalized = value.includes('T') ? value : value.replace(' ', 'T');
+        const withTimezone = /(?:Z|[+-]\d{2}:?\d{2})$/i.test(normalized) ? normalized : `${normalized}Z`;
+        const date = new Date(withTimezone);
+
+        return Number.isNaN(date.getTime()) ? null : date;
+    };
+
+    const formatter = new Intl.DateTimeFormat(document.documentElement.lang || undefined, {
+        year: 'numeric',
+        month: '2-digit',
+        day: '2-digit',
+        hour: '2-digit',
+        minute: '2-digit',
+        second: '2-digit',
+        hour12: false,
+    });
+
+    document.querySelectorAll('[data-local-datetime]').forEach((element) => {
+        const rawValue = element.getAttribute('data-local-datetime');
+        const parsed = parseUtcDate(rawValue);
+
+        if (parsed === null) {
+            return;
+        }
+
+        element.textContent = formatter.format(parsed);
+        if (rawValue) {
+            element.title = `${rawValue} UTC`;
+        }
+    });
+})();
+</script>
 </body>
 </html>

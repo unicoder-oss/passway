@@ -104,7 +104,7 @@ require base_path('resources/views/partials/auth_topbar.php');
                     <?php $inviteUrl = app_url('/invite/' . $invite->token); ?>
                     <div class="panel panel-muted" style="padding:1rem;">
                         <div style="font-weight:700;"><?= e(__('ui.organization_manage.role')) ?>: <?= e($invite->role) ?></div>
-                        <div class="muted" style="font-size:.92rem;"><?= e(__('ui.organization_manage.expires', ['date' => $invite->expiresAt])) ?></div>
+                        <div class="muted" style="font-size:.92rem;"><?= __('ui.organization_manage.expires', ['date' => local_datetime($invite->expiresAt)]) ?></div>
                         <div style="margin:.5rem 0 .75rem;">
                             <label><?= e(__('ui.organization_manage.link', ['link' => $inviteUrl])) ?></label>
                             <input class="mono js-copy-on-click" value="<?= e($inviteUrl) ?>" readonly>

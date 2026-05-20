@@ -45,7 +45,7 @@ require base_path('resources/views/partials/auth_topbar.php');
                     <div>
                         <div style="font-weight:700;"><?= e($service->name) ?></div>
                         <div class="muted" style="font-size:.92rem;"><?= e($service->url) ?></div>
-                        <div class="muted" style="font-size:.92rem;"><?= e($service->isVerified ? __('ui.app.verified') : __('ui.app.not_verified')) ?> · <?= e($service->isActive ? __('ui.app.active') : __('ui.app.inactive')) ?><?= $service->lastCheckAt ? ' · ' . e(__('ui.rotation_services.checked', ['date' => $service->lastCheckAt])) : '' ?></div>
+                        <div class="muted" style="font-size:.92rem;"><?= e($service->isVerified ? __('ui.app.verified') : __('ui.app.not_verified')) ?> · <?= e($service->isActive ? __('ui.app.active') : __('ui.app.inactive')) ?><?= $service->lastCheckAt ? ' · ' . __('ui.rotation_services.checked', ['date' => local_datetime($service->lastCheckAt)]) : '' ?></div>
                         <?php if ($spec !== []): ?><div class="muted" style="font-size:.92rem; margin-top:.35rem;"><?= e(__('ui.rotation_services.spec_keys', ['keys' => implode(', ', array_keys($spec))])) ?></div><?php endif; ?>
                     </div>
 
@@ -59,7 +59,7 @@ require base_path('resources/views/partials/auth_topbar.php');
                                 <label><?= e(__('ui.rotation_services.base_url')) ?></label>
                                 <input name="url" value="<?= e($service->url) ?>" required>
                             </div>
-                            <label style="display:flex; gap:.5rem; align-items:center;">
+                            <label class="inline-check">
                                 <input type="checkbox" name="is_active" value="1" <?= $service->isActive ? 'checked' : '' ?>>
                                 <span><?= e(__('ui.rotation_services.active')) ?></span>
                             </label>

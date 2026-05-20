@@ -166,6 +166,23 @@ if (!function_exists('e')) {
     }
 }
 
+if (!function_exists('local_datetime')) {
+    /**
+     * Render a UTC datetime string with browser-local formatting fallback.
+     */
+    function local_datetime(?string $value): string
+    {
+        $value = $value !== null ? trim($value) : null;
+        if ($value === null || $value === '') {
+            return '';
+        }
+
+        $escaped = htmlspecialchars($value, ENT_QUOTES | ENT_SUBSTITUTE, 'UTF-8');
+
+        return '<span class="js-local-datetime" data-local-datetime="' . $escaped . '">' . $escaped . '</span>';
+    }
+}
+
 if (!function_exists('app_fallback_locale')) {
     function app_fallback_locale(): string
     {

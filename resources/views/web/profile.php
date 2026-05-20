@@ -16,7 +16,7 @@ require base_path('resources/views/partials/auth_topbar.php');
     <section class="panel" style="padding:1.5rem; display:grid; gap:1rem;">
         <div>
             <h1 style="margin:0; font-size:1.6rem;"><?= e($user->email) ?></h1>
-            <p class="muted" style="margin:.4rem 0 0;"><?= e(__('ui.profile.created_last_login', ['created_at' => $user->createdAt, 'last_login_at' => (string) ($user->lastLoginAt ?? __('ui.app.never'))])) ?></p>
+            <p class="muted" style="margin:.4rem 0 0;"><?= __('ui.profile.created_last_login', ['created_at' => local_datetime($user->createdAt), 'last_login_at' => $user->lastLoginAt !== null ? local_datetime($user->lastLoginAt) : e(__('ui.app.never'))]) ?></p>
         </div>
 
         <div class="panel panel-muted" style="padding:1rem; display:grid; gap:.75rem;">
@@ -119,7 +119,7 @@ require base_path('resources/views/partials/auth_topbar.php');
                 <div class="panel" style="padding:1rem; background:rgba(15,23,42,.55); display:grid; gap:.75rem;">
                     <div>
                         <div style="font-weight:700;"><?= e($passkey->name) ?></div>
-                        <div class="muted" style="font-size:.92rem;"><?= e(__('ui.profile.created_last_used', ['created_at' => $passkey->createdAt, 'last_used_at' => (string) ($passkey->lastUsedAt ?? __('ui.app.never'))])) ?></div>
+                        <div class="muted" style="font-size:.92rem;"><?= __('ui.profile.created_last_used', ['created_at' => local_datetime($passkey->createdAt), 'last_used_at' => $passkey->lastUsedAt !== null ? local_datetime($passkey->lastUsedAt) : e(__('ui.app.never'))]) ?></div>
                     </div>
                     <form method="POST" action="/profile/passkeys/<?= e($passkey->uuid) ?>/delete">
                         <button type="submit" class="danger"><?= e(__('ui.profile.remove_passkey')) ?></button>

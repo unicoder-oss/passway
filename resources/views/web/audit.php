@@ -46,7 +46,7 @@ require base_path('resources/views/partials/auth_topbar.php');
             <div style="display:flex; justify-content:space-between; gap:1rem; flex-wrap:wrap;">
                 <div>
                     <div style="font-weight:700;"><?= e($entry->action) ?></div>
-                    <div class="muted" style="font-size:.92rem;"><?= e($entry->createdAt) ?> · <?= e($entry->success ? __('ui.app.success') : __('ui.app.failed')) ?></div>
+                    <div class="muted" style="font-size:.92rem;"><?= local_datetime($entry->createdAt) ?> · <?= e($entry->success ? __('ui.app.success') : __('ui.app.failed')) ?></div>
                 </div>
                 <div class="muted" style="font-size:.92rem;"><?= e((string) ($entry->resourceType ?? __('ui.audit.system'))) ?> <?= e((string) ($entry->resourceUuid ?? '')) ?></div>
             </div>

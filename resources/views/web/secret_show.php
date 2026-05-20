@@ -12,9 +12,47 @@ $rotateAction = '/organizations/' . $organization->uuid . '/directories/' . $dir
 $deleteAction = '/organizations/' . $organization->uuid . '/directories/' . $directory->uuid . '/secrets/' . $secret->uuid . '/delete';
 $templatePreviewUrl = '/api/v1/organizations/' . $organization->uuid . '/directories/' . $directory->uuid . '/secrets/template-preview';
 $dynamicRotationOutputs = $dynamicRotationView['outputs'] ?? [];
+$dynamicRotationInputs = $dynamicRotationView['input'] ?? [];
 $dynamicRotationPrimaryField = $dynamicRotationView['primary_field'] ?? null;
 $dynamicRotationService = $dynamicRotationView['service'] ?? null;
 $dynamicOutputFields = $dynamicRotationService !== null ? $dynamicRotationService->outputFields() : [];
+$renderReadonlyRotationField = static function (array $field, array $values): void {
+    $fieldName = isset($field['name']) && is_string($field['name']) ? trim($field['name']) : '';
+    if ($fieldName === '') {
+        return;
+    }
+
+    $label = isset($field['label']) && is_string($field['label']) && trim($field['label']) !== '' ? $field['label'] : $fieldName;
+    $type = isset($field['type']) && is_string($field['type']) ? $field['type'] : 'string';
+    $fieldId = 'readonly-rotation-field-' . preg_replace('/[^a-z0-9_-]+/i', '-', $fieldName);
+    $value = $values[$fieldName] ?? null;
+    $displayValue = $value;
+
+    if ($type === 'enum' && isset($field['options']) && is_array($field['options'])) {
+        foreach ($field['options'] as $option) {
+            $optionValue = is_array($option) ? (string) ($option['value'] ?? '') : (string) $option;
+            if ((string) $value === $optionValue) {
+                $displayValue = is_array($option) ? (string) ($option['label'] ?? $optionValue) : $optionValue;
+                break;
+            }
+        }
+    }
+    ?>
+    <div>
+        <label for="<?= e($fieldId) ?>"><?= e($label) ?></label>
+        <?php if ($type === 'boolean'): ?>
+            <label class="inline-check">
+                <input id="<?= e($fieldId) ?>" type="checkbox" <?= $value ? 'checked' : '' ?> disabled>
+                <span><?= e($label) ?></span>
+            </label>
+        <?php elseif (in_array($type, ['secret_text', 'readonly_text', 'textarea'], true)): ?>
+            <textarea id="<?= e($fieldId) ?>" class="mono" rows="5" readonly><?= e(is_scalar($displayValue) ? (string) $displayValue : '') ?></textarea>
+        <?php else: ?>
+            <input id="<?= e($fieldId) ?>" class="<?= $type === 'integer' ? 'mono' : '' ?>" value="<?= e(is_scalar($displayValue) ? (string) $displayValue : '') ?>" readonly>
+        <?php endif; ?>
+    </div>
+    <?php
+};
 ?>
 
 <?php if (!empty($error)): ?><div class="error" style="margin-bottom:1rem;"><?= e((string) $error) ?></div><?php endif; ?>
@@ -80,6 +118,12 @@ $dynamicOutputFields = $dynamicRotationService !== null ? $dynamicRotationServic
     .template-param-check span {
         text-align: left;
     }
+    .manual-actions-grid > form {
+        width: 100%;
+    }
+    .manual-actions-grid > form > button {
+        width: 100%;
+    }
     @media (min-width: 720px) {
         .secret-page-shell {
             grid-template-columns: auto minmax(0, 1fr);
@@ -104,7 +148,7 @@ $dynamicOutputFields = $dynamicRotationService !== null ? $dynamicRotationServic
             <div class="actions" style="margin-top:.75rem;">
                 <span class="pill"><?= e(__('ui.home.types.' . $secret->type)) ?></span>
                 <?php if ($isDynamicSecret && $secret->rotationSchedule !== null && $secret->rotationSchedule !== ''): ?><span class="pill mono"><?= e(__('ui.secret.schedule', ['schedule' => $secret->rotationSchedule])) ?></span><?php endif; ?>
-                <?php if ($isDynamicSecret && $secret->lastRotatedAt !== null): ?><span class="pill"><?= e(__('ui.secret.last_rotated', ['date' => $secret->lastRotatedAt])) ?></span><?php endif; ?>
+                <?php if ($isDynamicSecret && $secret->lastRotatedAt !== null): ?><span class="pill"><?= __('ui.secret.last_rotated', ['date' => local_datetime($secret->lastRotatedAt)]) ?></span><?php endif; ?>
                 <?php if ($isDynamicSecret && $selectedIntegration !== null): ?><span class="pill"><?= e(__('ui.secret.integration', ['name' => $selectedIntegration->name])) ?></span><?php endif; ?>
                 <?php if ($isTemplateSecret && $templateDetails !== null): ?><span class="pill"><?= e($templateDetails['name']) ?></span><?php endif; ?>
             </div>
@@ -155,7 +199,7 @@ $dynamicOutputFields = $dynamicRotationService !== null ? $dynamicRotationServic
     <section class="grid" style="gap:1rem;">
         <div class="panel" style="padding:1rem;">
             <h3 style="margin:0 0 .75rem;"><?= e(__('ui.secret.manual_actions')) ?></h3>
-            <div class="grid" style="gap:.75rem;">
+            <div class="grid manual-actions-grid" style="gap:.75rem;">
                 <button type="button" class="secondary" data-open-modal="rename-secret-modal"><?= e(__('ui.secret.rename_secret')) ?></button>
                 <?php if (!$isDynamicSecret): ?><button type="button" class="secondary" data-open-modal="replace-secret-modal"><?= e(__('ui.secret.replace_value')) ?></button><?php endif; ?>
                 <?php if ($isDynamicSecret): ?>
@@ -173,7 +217,7 @@ $dynamicOutputFields = $dynamicRotationService !== null ? $dynamicRotationServic
                 <?php foreach ($versions as $version): ?>
                     <div class="panel" style="padding:.85rem; background:rgba(15,23,42,.55);">
                         <div style="font-weight:700;"><?= e(__('ui.secret.version_label', ['version' => (string) $version->version])) ?></div>
-                        <div class="muted" style="font-size:.92rem;"><?= e(__('ui.secret.version_meta', ['rotation_type' => $version->rotationType, 'status' => $version->status, 'created_at' => $version->createdAt])) ?></div>
+                        <div class="muted" style="font-size:.92rem;"><?= __('ui.secret.version_meta', ['rotation_type' => e($version->rotationType), 'status' => e($version->status), 'created_at' => local_datetime($version->createdAt)]) ?></div>
                         <?php if ($version->errorMessage !== null): ?><div class="muted" style="margin-top:.25rem;"><?= e($version->errorMessage) ?></div><?php endif; ?>
                     </div>
                 <?php endforeach; ?>
@@ -271,17 +315,23 @@ $dynamicOutputFields = $dynamicRotationService !== null ? $dynamicRotationServic
             <form method="POST" action="<?= e($replaceAction) ?>" class="grid" style="gap:1rem;">
                 <div>
                     <label for="secret-rotation-integration"><?= e(__('ui.secret.rotation_integration')) ?></label>
-                    <select id="secret-rotation-integration" name="rotation_integration_uuid">
-                        <option value=""><?= e(__('ui.app.none')) ?></option>
-                        <?php foreach ($integrations as $integration): ?>
-                            <option value="<?= e($integration->uuid) ?>" <?= $selectedIntegration?->uuid === $integration->uuid ? 'selected' : '' ?>><?= e($integration->name) ?></option>
-                        <?php endforeach; ?>
-                    </select>
+                    <input id="secret-rotation-integration" value="<?= e($selectedIntegration?->name ?? __('ui.app.none')) ?>" readonly>
+                    <input type="hidden" name="rotation_integration_uuid" value="<?= e((string) ($selectedIntegration?->uuid ?? '')) ?>">
                 </div>
                 <div>
                     <label for="secret-rotation-schedule"><?= e(__('ui.secret.rotation_schedule')) ?></label>
                     <input id="secret-rotation-schedule" class="mono" name="rotation_schedule" value="<?= e((string) ($secret->rotationSchedule ?? '')) ?>" placeholder="0 3 * * *">
                 </div>
+                <?php if ($dynamicRotationService !== null && $dynamicRotationService->secretFields() !== []): ?>
+                    <div>
+                        <label><?= e(__('ui.secret.rotation_integration')) ?></label>
+                        <div class="grid panel panel-muted" style="padding:1rem; gap:1rem;">
+                            <?php foreach ($dynamicRotationService->secretFields() as $field): ?>
+                                <?php $renderReadonlyRotationField($field, $dynamicRotationInputs); ?>
+                            <?php endforeach; ?>
+                        </div>
+                    </div>
+                <?php endif; ?>
                 <div class="actions-end">
                     <button type="button" class="secondary" data-close-modal="rotation-secret-modal"><?= e(__('ui.organization.cancel')) ?></button>
                     <button type="submit"><?= e(__('ui.secret.save_changes')) ?></button>
