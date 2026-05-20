@@ -1,6 +1,7 @@
 <?php
 $topbarLinks = [
     ['href' => '/', 'label' => __('ui.app.back_to_dashboard')],
+    ['href' => '/api', 'label' => __('ui.home.api')],
     ['href' => '/auth/logout', 'label' => __('ui.app.logout')],
 ];
 require base_path('resources/views/partials/auth_topbar.php');

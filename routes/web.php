@@ -30,6 +30,7 @@ $router->post('/setup', [SetupController::class, 'process']);
 // ------------------------------------------------------------------ //
 
 $router->get('/', [WebController::class, 'home'], [AuthMiddleware::class]);
+$router->get('/api', [WebController::class, 'showApiDocs'], [AuthMiddleware::class]);
 
 // Health check (Docker, балансировщики)
 $router->get('/health', fn() => Response::json([

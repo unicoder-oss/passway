@@ -776,6 +776,17 @@ final class WebController
         ]));
     }
 
+    public function showApiDocs(Request $request): Response
+    {
+        $user = AuthContext::requireUser();
+
+        return $this->html($this->view->render('web/api', [
+            'title' => __('ui.titles.api_docs'),
+            'user' => $user,
+            'sections' => require base_path('resources/docs/api.php'),
+        ]));
+    }
+
     public function createRotationService(Request $request): Response
     {
         $user = AuthContext::requireUser();

@@ -1,6 +1,7 @@
 <?php
 $topbarLinks = [
     ['href' => '/organizations/' . $organization->uuid . '/manage', 'label' => __('ui.app.back_to_management')],
+    ['href' => '/api', 'label' => __('ui.home.api')],
     ['href' => '/rotation-services', 'label' => __('ui.home.rotation_services')],
     ['href' => '/auth/logout', 'label' => __('ui.app.logout')],
 ];

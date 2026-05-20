@@ -1,6 +1,7 @@
 <?php
 $topbarTitle = '';
 $topbarLinks = [
+    ['href' => '/api', 'label' => __('ui.home.api')],
     ['href' => '/rotation-services', 'label' => __('ui.home.rotation_services')],
 ];
 $createdOrganizationInviteUrl = $createdOrganizationInvite !== null
