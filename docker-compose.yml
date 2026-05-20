@@ -38,6 +38,7 @@ services:
         condition: service_healthy
     volumes:
       - app-storage:/app/storage
+      - app-uploads:/app/public/uploads
     healthcheck:
       test: ["CMD-SHELL", "php -r '$$d=@file_get_contents(\"http://127.0.0.1:8000/health\"); if($$d===false) exit(1); $$j=json_decode($$d,true); exit((($$j[\"status\"] ?? \"\") === \"ok\") ? 0 : 1);'"]
       interval: 10s
@@ -90,3 +91,4 @@ services:
 volumes:
   pgdata:
   app-storage:
+  app-uploads:
