@@ -30,6 +30,7 @@ abstract class DatabaseTestCase extends TestCase
         // Убедиться, что env настроен на :memory:
         $_ENV['DB_DRIVER']      = 'sqlite';
         $_ENV['DB_SQLITE_PATH'] = ':memory:';
+        $_ENV['MASTER_KEY']     = str_repeat('ab', 32);
 
         // Сбросить синглтон и создать свежее соединение
         static::resetDbSingleton();
