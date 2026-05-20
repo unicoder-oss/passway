@@ -294,7 +294,7 @@ final class WebController
         $user = AuthContext::requireUser();
         $totpSetup = $this->getTotpSetupSession();
 
-        return $this->html($this->view->render('web/profile.php', [
+        return $this->html($this->view->render('web/profile', [
             'title' => __('ui.titles.profile_security'),
             'user' => $user,
             'passkeys' => Passkey::findByUserId($user->id),
