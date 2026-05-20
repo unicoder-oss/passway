@@ -33,7 +33,7 @@ final class CreateTemplatesRotationsTables extends Migration
             'type             VARCHAR(50) NOT NULL',
             'description      TEXT',
             // JSON с параметрами генерации:
-            // password: {"min_length":8,"max_length":128,"use_upper":true,"use_lower":true,"use_digits":true,"use_special":true}
+            // password: {"min_length":8,"max_length":256,"use_upper":true,"use_lower":true,"use_digits":true,"use_special":true}
             // ssh_key:  {"algorithm":"rsa","bits":4096} или {"algorithm":"ed25519"}
             'config_json      TEXT NOT NULL',
             "is_system        {$this->boolType(false)}",
@@ -157,7 +157,7 @@ final class CreateTemplatesRotationsTables extends Migration
                 'description' => 'Generate a secure random password',
                 'config_json' => json_encode([
                     'min_length'   => 16,
-                    'max_length'   => 128,
+                    'max_length'   => 256,
                     'use_upper'    => true,
                     'use_lower'    => true,
                     'use_digits'   => true,

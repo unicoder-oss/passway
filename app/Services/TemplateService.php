@@ -152,7 +152,7 @@ final class TemplateService
                 'type' => 'number',
                 'label' => __('ui.secret.template_length'),
                 'min' => 8,
-                'max' => 128,
+                'max' => 256,
                 'value' => (int) ($config['min_length'] ?? 16),
             ],
             [
@@ -250,7 +250,7 @@ final class TemplateService
         $useSpecial = (bool) ($config['use_special'] ?? true);
         $specialChars = (string) ($config['special_chars'] ?? '!@#$%^&*()-_=+[]{}|;:,.<>?');
 
-        if ($minLength < 8 || $maxLength > 128 || $minLength > $maxLength) {
+        if ($minLength < 8 || $maxLength > 256 || $minLength > $maxLength) {
             throw new \InvalidArgumentException(__('ui.backend.template.password_length'));
         }
 

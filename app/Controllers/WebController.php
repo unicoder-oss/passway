@@ -211,6 +211,10 @@ final class WebController
             $dirUuid = $request->query('dir');
             $dirUuid = \is_string($dirUuid) && $dirUuid !== '' ? $dirUuid : null;
 
+            if ($dirUuid !== null && $this->isRootSecretDirectoryUuid($org, $dirUuid)) {
+                $dirUuid = null;
+            }
+
             if ($dirUuid !== null) {
                 $currentDir = $this->directoryService->findInOrg($dirUuid, $org->id, $user->id);
                 $directories = $this->filterVisibleDirectories($this->directoryService->listChildren($org->id, $currentDir->uuid, $user->id));
@@ -959,6 +963,8 @@ final class WebController
             'secret' => $secret,
             'value' => $value,
             'displayValue' => $displayValue,
+            'directoryDisplayName' => $this->isHiddenDirectory($dir) ? __('ui.organization.root_level') : $dir->name,
+            'directoryBackUrl' => $this->organizationUrl($org->uuid, $this->isHiddenDirectory($dir) ? null : $dir->uuid),
             'versions' => $versions,
             'integrations' => $this->listActiveIntegrationsForOrg($org->id),
             'selectedIntegration' => $secret->rotationIntegrationId !== null ? OrganizationIntegration::findById($secret->rotationIntegrationId) : null,
@@ -1056,7 +1062,7 @@ final class WebController
             return Response::redirect($this->secretUrl($org->uuid, $dirUuid, $secUuid, $e->getMessage()));
         }
 
-        return Response::redirect($this->organizationUrl($org->uuid, $dirUuid));
+        return Response::redirect($this->organizationUrl($org->uuid, $this->isRootSecretDirectoryUuid($org, $dirUuid) ? null : $dirUuid));
     }
 
     public function renameDirectory(Request $request): Response
@@ -1257,6 +1263,9 @@ final class WebController
 
         while ($parentId !== null && isset($directoryMap[$parentId])) {
             $parent = $directoryMap[$parentId];
+            if ($this->isHiddenDirectory($parent)) {
+                break;
+            }
             array_unshift($segments, $parent->name);
             $parentId = $parent->parentId;
         }

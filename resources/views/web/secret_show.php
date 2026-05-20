@@ -1,6 +1,6 @@
 <?php
 $topbarLinks = [
-    ['href' => '/organizations/' . $organization->uuid . '?dir=' . $directory->uuid, 'label' => __('ui.secret.back_to_directory')],
+    ['href' => $directoryBackUrl, 'label' => __('ui.secret.back_to_directory')],
     ['href' => '/auth/logout', 'label' => __('ui.app.logout')],
 ];
 require base_path('resources/views/partials/auth_topbar.php');
@@ -20,11 +20,67 @@ $templatePreviewUrl = '/api/v1/organizations/' . $organization->uuid . '/directo
     <h1 style="margin:0; font-size:2rem;"><?= e(__('ui.secret.details_for_org', ['organization' => $organization->name])) ?></h1>
 </section>
 
+<style>
+    .template-params-layout {
+        display: grid;
+        gap: 1rem;
+    }
+    .template-range-field {
+        display: grid;
+        gap: .5rem;
+    }
+    .template-range-inputs {
+        display: grid;
+        grid-template-columns: minmax(0, 1fr) 84px;
+        gap: .75rem;
+        align-items: center;
+    }
+    .template-range-inputs input[type="range"] {
+        width: 100%;
+        margin: 0;
+    }
+    .template-range-inputs input[type="number"] {
+        width: 84px;
+        min-width: 84px;
+        text-align: center;
+    }
+    .template-params-columns {
+        display: grid;
+        gap: 1rem;
+    }
+    .template-param-checks {
+        display: grid;
+        gap: .75rem;
+        align-content: start;
+    }
+    .template-param-check {
+        display: flex;
+        align-items: center;
+        justify-content: flex-start;
+        gap: .65rem;
+        margin: 0;
+    }
+    .template-param-check input {
+        width: auto;
+        margin: 0;
+        flex: 0 0 auto;
+    }
+    .template-param-check span {
+        text-align: left;
+    }
+    @media (min-width: 720px) {
+        .template-params-columns {
+            grid-template-columns: minmax(0, 1fr) minmax(0, 1fr);
+            align-items: start;
+        }
+    }
+</style>
+
 <div class="grid grid-2-compact" style="align-items:start; padding-bottom:2rem;">
     <section class="panel" style="padding:1.5rem; display:grid; gap:1rem;">
         <div>
             <h1 style="margin:0; font-size:1.6rem;"><?= e($secret->name) ?></h1>
-            <p class="muted" style="margin:.45rem 0 0;"><?= e(__('ui.secret.meta', ['type' => __('ui.home.types.' . $secret->type), 'version' => (string) $secret->version, 'directory' => $directory->name])) ?></p>
+            <p class="muted" style="margin:.45rem 0 0;"><?= e(__('ui.secret.meta', ['type' => __('ui.home.types.' . $secret->type), 'version' => (string) $secret->version, 'directory' => $directoryDisplayName])) ?></p>
             <div class="actions" style="margin-top:.75rem;">
                 <span class="pill"><?= e(__('ui.home.types.' . $secret->type)) ?></span>
                 <?php if ($isDynamicSecret && $secret->rotationSchedule !== null && $secret->rotationSchedule !== ''): ?><span class="pill mono"><?= e(__('ui.secret.schedule', ['schedule' => $secret->rotationSchedule])) ?></span><?php endif; ?>
@@ -122,9 +178,11 @@ $templatePreviewUrl = '/api/v1/organizations/' . $organization->uuid . '/directo
                     <label for="template-secret-display"><?= e(__('ui.home.generated_value')) ?></label>
                     <div class="grid field-actions-2" style="gap:.75rem; align-items:start;">
                         <textarea id="template-secret-display" class="mono" rows="8" readonly><?= e($displayValue) ?></textarea>
-                        <button type="button" class="secondary" id="template-secret-regenerate-button"><?= e(__('ui.home.regenerate')) ?></button>
+                        <div class="grid" style="gap:.5rem; align-content:start;">
+                            <button type="button" class="secondary" id="template-secret-regenerate-button"><?= e(__('ui.home.regenerate')) ?></button>
+                            <div class="wizard-meta" id="template-secret-status"></div>
+                        </div>
                     </div>
-                    <div class="wizard-meta" id="template-secret-status"></div>
                 </div>
                 <div id="template-secret-params" class="grid"></div>
                 <div id="template-secret-extra-fields" class="grid"></div>
@@ -247,6 +305,18 @@ $templatePreviewUrl = '/api/v1/organizations/' . $organization->uuid . '/directo
     const initialValue = <?= json_encode($value, JSON_UNESCAPED_UNICODE | JSON_UNESCAPED_SLASHES) ?>;
     const initialDisplayValue = <?= json_encode($displayValue, JSON_UNESCAPED_UNICODE | JSON_UNESCAPED_SLASHES) ?>;
     let previewRequestId = 0;
+    let previewTimer = null;
+
+    const schedulePreviewRequest = () => {
+        if (previewTimer !== null) {
+            window.clearTimeout(previewTimer);
+        }
+
+        previewTimer = window.setTimeout(() => {
+            previewTimer = null;
+            void requestPreview(false);
+        }, 220);
+    };
 
     const renderExtraFields = (fields) => {
         extraFields.innerHTML = '';
@@ -288,6 +358,11 @@ $templatePreviewUrl = '/api/v1/organizations/' . $organization->uuid . '/directo
     };
 
     const requestPreview = async (isManual) => {
+        if (previewTimer !== null) {
+            window.clearTimeout(previewTimer);
+            previewTimer = null;
+        }
+
         previewRequestId += 1;
         const requestId = previewRequestId;
         regenerateButton.disabled = true;
@@ -336,20 +411,121 @@ $templatePreviewUrl = '/api/v1/organizations/' . $organization->uuid . '/directo
         heading.textContent = <?= json_encode((string) __('ui.home.template_parameters')) ?>;
         params.appendChild(heading);
 
+        const layout = document.createElement('div');
+        layout.className = 'template-params-layout';
+        params.appendChild(layout);
+
+        const generalFields = [];
+        const booleanFields = [];
+        let specialCharsField = null;
+
         schema.forEach((field) => {
+            if (field.type === 'boolean') {
+                booleanFields.push(field);
+                return;
+            }
+
+            if (field.name === 'special_chars') {
+                specialCharsField = field;
+                return;
+            }
+
+            generalFields.push(field);
+        });
+
+        const appendTextField = (container, field) => {
             const wrapper = document.createElement('div');
+            if (field.name === 'length') {
+                wrapper.className = 'template-range-field';
+            }
             const inputId = `replace-template-${field.name}`;
             const value = Object.prototype.hasOwnProperty.call(values, field.name)
                 ? values[field.name]
                 : field.value;
             const label = document.createElement('label');
+            label.htmlFor = inputId;
+            label.textContent = field.label;
+            wrapper.appendChild(label);
 
-            if (field.type === 'boolean') {
-                label.style.display = 'flex';
-                label.style.gap = '.65rem';
-                label.style.alignItems = 'center';
-                label.style.margin = '0';
+            if (field.name === 'length') {
+                const controls = document.createElement('div');
+                controls.className = 'template-range-inputs';
 
+                const rangeInput = document.createElement('input');
+                rangeInput.id = inputId;
+                rangeInput.type = 'range';
+                rangeInput.setAttribute('data-template-param', field.name);
+                if (field.min !== undefined) {
+                    rangeInput.min = String(field.min);
+                }
+                if (field.max !== undefined) {
+                    rangeInput.max = String(field.max);
+                }
+                rangeInput.step = '1';
+                rangeInput.value = String(value ?? '');
+
+                const numberInput = document.createElement('input');
+                numberInput.type = 'number';
+                numberInput.setAttribute('data-template-param-number', field.name);
+                if (field.min !== undefined) {
+                    numberInput.min = String(field.min);
+                }
+                if (field.max !== undefined) {
+                    numberInput.max = String(field.max);
+                }
+                numberInput.step = '1';
+                numberInput.value = String(value ?? '');
+
+                const syncLengthValue = (source, target) => {
+                    target.value = source.value;
+                    schedulePreviewRequest();
+                };
+
+                rangeInput.addEventListener('input', () => syncLengthValue(rangeInput, numberInput));
+                numberInput.addEventListener('input', () => syncLengthValue(numberInput, rangeInput));
+
+                controls.appendChild(rangeInput);
+                controls.appendChild(numberInput);
+                wrapper.appendChild(controls);
+                container.appendChild(wrapper);
+                return;
+            }
+
+            const input = document.createElement('input');
+            input.id = inputId;
+            input.type = field.type;
+            input.value = String(value ?? '');
+            input.setAttribute('data-template-param', field.name);
+            if (field.min !== undefined) {
+                input.min = String(field.min);
+            }
+            if (field.max !== undefined) {
+                input.max = String(field.max);
+            }
+
+            wrapper.appendChild(input);
+            container.appendChild(wrapper);
+        };
+
+        generalFields.forEach((field) => appendTextField(layout, field));
+
+        if (booleanFields.length > 0 || specialCharsField !== null) {
+            const columns = document.createElement('div');
+            columns.className = 'template-params-columns';
+            layout.appendChild(columns);
+
+            const checksColumn = document.createElement('div');
+            checksColumn.className = 'template-param-checks';
+            columns.appendChild(checksColumn);
+
+            booleanFields.forEach((field) => {
+                const wrapper = document.createElement('div');
+                const inputId = `replace-template-${field.name}`;
+                const value = Object.prototype.hasOwnProperty.call(values, field.name)
+                    ? values[field.name]
+                    : field.value;
+                const label = document.createElement('label');
+                label.className = 'template-param-check';
                 const input = document.createElement('input');
                 input.id = inputId;
                 input.type = 'checkbox';
@@ -357,36 +533,22 @@ $templatePreviewUrl = '/api/v1/organizations/' . $organization->uuid . '/directo
                 input.setAttribute('data-template-param', field.name);
                 const text = document.createElement('span');
                 text.textContent = field.label;
-
                 label.appendChild(input);
                 label.appendChild(text);
                 wrapper.appendChild(label);
-            } else {
-                label.htmlFor = inputId;
-                label.textContent = field.label;
+                checksColumn.appendChild(wrapper);
+            });
 
-                const input = document.createElement('input');
-                input.id = inputId;
-                input.type = field.type;
-                input.value = String(value ?? '');
-                input.setAttribute('data-template-param', field.name);
-                if (field.min !== undefined) {
-                    input.min = String(field.min);
-                }
-                if (field.max !== undefined) {
-                    input.max = String(field.max);
-                }
-
-                wrapper.appendChild(label);
-                wrapper.appendChild(input);
+            if (specialCharsField !== null) {
+                const specialColumn = document.createElement('div');
+                columns.appendChild(specialColumn);
+                appendTextField(specialColumn, specialCharsField);
             }
-
-            params.appendChild(wrapper);
-        });
+        }
 
         params.querySelectorAll('[data-template-param]').forEach((input) => {
             input.addEventListener(input.type === 'checkbox' ? 'change' : 'input', () => {
-                void requestPreview(false);
+                schedulePreviewRequest();
             });
         });
     };
@@ -413,6 +575,10 @@ $templatePreviewUrl = '/api/v1/organizations/' . $organization->uuid . '/directo
 
     if (replaceModal) {
         replaceModal.addEventListener('close', () => {
+            if (previewTimer !== null) {
+                window.clearTimeout(previewTimer);
+                previewTimer = null;
+            }
             applyPreview({
                 value: initialValue,
                 display_value: initialDisplayValue,

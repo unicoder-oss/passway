@@ -100,6 +100,59 @@ require base_path('resources/views/partials/auth_topbar.php');
                 display: grid;
                 gap: .5rem;
             }
+            .template-params-layout {
+                display: grid;
+                gap: 1rem;
+            }
+            .template-range-field {
+                display: grid;
+                gap: .5rem;
+            }
+            .template-range-inputs {
+                display: grid;
+                grid-template-columns: minmax(0, 1fr) 84px;
+                gap: .75rem;
+                align-items: center;
+            }
+            .template-range-inputs input[type="range"] {
+                width: 100%;
+                margin: 0;
+            }
+            .template-range-inputs input[type="number"] {
+                width: 84px;
+                min-width: 84px;
+                text-align: center;
+            }
+            .template-params-columns {
+                display: grid;
+                gap: 1rem;
+            }
+            .template-param-checks {
+                display: grid;
+                gap: .75rem;
+                align-content: start;
+            }
+            .template-param-check {
+                display: flex;
+                align-items: center;
+                justify-content: flex-start;
+                gap: .65rem;
+                margin: 0;
+            }
+            .template-param-check input {
+                width: auto;
+                margin: 0;
+                flex: 0 0 auto;
+            }
+            .template-param-check span {
+                text-align: left;
+            }
+            @media (min-width: 720px) {
+                .template-params-columns {
+                    grid-template-columns: minmax(0, 1fr) minmax(0, 1fr);
+                    align-items: start;
+                }
+            }
         </style>
 
         <div style="display:flex; justify-content:space-between; gap:1rem; align-items:flex-end; flex-wrap:wrap;">
@@ -323,9 +376,11 @@ require base_path('resources/views/partials/auth_topbar.php');
                             <label for="modal-generated-display"><?= e(__('ui.home.generated_value')) ?></label>
                             <div class="grid field-actions-2" style="gap:.75rem; align-items:start;">
                                 <textarea id="modal-generated-display" class="mono" rows="8" readonly></textarea>
-                                <button type="button" class="secondary" id="modal-regenerate-button"><?= e(__('ui.home.regenerate')) ?></button>
+                                <div class="grid" style="gap:.5rem; align-content:start;">
+                                    <button type="button" class="secondary" id="modal-regenerate-button"><?= e(__('ui.home.regenerate')) ?></button>
+                                    <div class="wizard-meta" id="modal-template-status"></div>
+                                </div>
                             </div>
-                            <div class="wizard-meta" id="modal-template-status"></div>
                         </div>
                         <div id="modal-template-params" class="grid hidden"></div>
                         <div id="modal-template-extra-fields" class="grid hidden"></div>
@@ -461,6 +516,7 @@ require base_path('resources/views/partials/auth_topbar.php');
         let currentStep = 1;
         let secretMode = 'static';
         let previewRequestId = 0;
+        let previewTimer = null;
 
         const getStepCount = () => secretMode === 'dynamic' ? 3 : 2;
         const isTemplateSelected = () => secretMode === 'static' && templateSelect.value !== '';
@@ -506,7 +562,14 @@ require base_path('resources/views/partials/auth_topbar.php');
                 return;
             }
 
-            void refreshTemplatePreview(false);
+            if (previewTimer !== null) {
+                window.clearTimeout(previewTimer);
+            }
+
+            previewTimer = window.setTimeout(() => {
+                previewTimer = null;
+                void refreshTemplatePreview(false);
+            }, 220);
         };
 
         const collectTemplateOverrides = () => {
@@ -542,19 +605,120 @@ require base_path('resources/views/partials/auth_topbar.php');
             heading.textContent = <?= json_encode((string) __('ui.home.template_parameters')) ?>;
             templateParams.appendChild(heading);
 
+            const layout = document.createElement('div');
+            layout.className = 'template-params-layout';
+            templateParams.appendChild(layout);
+
+            const generalFields = [];
+            const booleanFields = [];
+            let specialCharsField = null;
+
             schema.forEach((field) => {
+                if (field.type === 'boolean') {
+                    booleanFields.push(field);
+                    return;
+                }
+
+                if (field.name === 'special_chars') {
+                    specialCharsField = field;
+                    return;
+                }
+
+                generalFields.push(field);
+            });
+
+            const appendTextField = (container, field) => {
                 const wrapper = document.createElement('div');
+                if (field.name === 'length') {
+                    wrapper.className = 'template-range-field';
+                }
                 const inputId = `template-param-${field.name}`;
                 const value = Object.prototype.hasOwnProperty.call(currentValues, field.name)
                     ? currentValues[field.name]
                     : field.value;
                 const label = document.createElement('label');
+                label.htmlFor = inputId;
+                label.textContent = field.label;
+                wrapper.appendChild(label);
 
-                if (field.type === 'boolean') {
-                    label.style.display = 'flex';
-                    label.style.gap = '.65rem';
-                    label.style.alignItems = 'center';
-                    label.style.margin = '0';
+                if (field.name === 'length') {
+                    const controls = document.createElement('div');
+                    controls.className = 'template-range-inputs';
+
+                    const rangeInput = document.createElement('input');
+                    rangeInput.id = inputId;
+                    rangeInput.type = 'range';
+                    rangeInput.setAttribute('data-template-param', field.name);
+                    if (field.min !== undefined) {
+                        rangeInput.min = String(field.min);
+                    }
+                    if (field.max !== undefined) {
+                        rangeInput.max = String(field.max);
+                    }
+                    rangeInput.step = '1';
+                    rangeInput.value = String(value ?? '');
+
+                    const numberInput = document.createElement('input');
+                    numberInput.type = 'number';
+                    numberInput.setAttribute('data-template-param-number', field.name);
+                    if (field.min !== undefined) {
+                        numberInput.min = String(field.min);
+                    }
+                    if (field.max !== undefined) {
+                        numberInput.max = String(field.max);
+                    }
+                    numberInput.step = '1';
+                    numberInput.value = String(value ?? '');
+
+                    const syncLengthValue = (source, target) => {
+                        target.value = source.value;
+                        schedulePreviewRefresh();
+                    };
+
+                    rangeInput.addEventListener('input', () => syncLengthValue(rangeInput, numberInput));
+                    numberInput.addEventListener('input', () => syncLengthValue(numberInput, rangeInput));
+
+                    controls.appendChild(rangeInput);
+                    controls.appendChild(numberInput);
+                    wrapper.appendChild(controls);
+                    container.appendChild(wrapper);
+                    return;
+                }
+
+                const input = document.createElement('input');
+                input.id = inputId;
+                input.type = field.type;
+                input.value = String(value ?? '');
+                input.setAttribute('data-template-param', field.name);
+                if (field.min !== undefined) {
+                    input.min = String(field.min);
+                }
+                if (field.max !== undefined) {
+                    input.max = String(field.max);
+                }
+                wrapper.appendChild(input);
+                container.appendChild(wrapper);
+            };
+
+            generalFields.forEach((field) => appendTextField(layout, field));
+
+            if (booleanFields.length > 0 || specialCharsField !== null) {
+                const columns = document.createElement('div');
+                columns.className = 'template-params-columns';
+                layout.appendChild(columns);
+
+                const checksColumn = document.createElement('div');
+                checksColumn.className = 'template-param-checks';
+                columns.appendChild(checksColumn);
+
+                booleanFields.forEach((field) => {
+                    const wrapper = document.createElement('div');
+                    const inputId = `template-param-${field.name}`;
+                    const value = Object.prototype.hasOwnProperty.call(currentValues, field.name)
+                        ? currentValues[field.name]
+                        : field.value;
+                    const label = document.createElement('label');
+                    label.className = 'template-param-check';
                     const input = document.createElement('input');
                     input.id = inputId;
                     input.type = 'checkbox';
@@ -565,26 +729,15 @@ require base_path('resources/views/partials/auth_topbar.php');
                     label.appendChild(input);
                     label.appendChild(span);
                     wrapper.appendChild(label);
-                } else {
-                    label.htmlFor = inputId;
-                    label.textContent = field.label;
-                    const input = document.createElement('input');
-                    input.id = inputId;
-                    input.type = field.type;
-                    input.value = String(value ?? '');
-                    input.setAttribute('data-template-param', field.name);
-                    if (field.min !== undefined) {
-                        input.min = String(field.min);
-                    }
-                    if (field.max !== undefined) {
-                        input.max = String(field.max);
-                    }
-                    wrapper.appendChild(label);
-                    wrapper.appendChild(input);
-                }
+                    checksColumn.appendChild(wrapper);
+                });
 
-                templateParams.appendChild(wrapper);
-            });
+                if (specialCharsField !== null) {
+                    const specialColumn = document.createElement('div');
+                    columns.appendChild(specialColumn);
+                    appendTextField(specialColumn, specialCharsField);
+                }
+            }
 
             templateParams.querySelectorAll('[data-template-param]').forEach((input) => {
                 input.addEventListener(input.type === 'checkbox' ? 'change' : 'input', schedulePreviewRefresh);
@@ -604,6 +757,11 @@ require base_path('resources/views/partials/auth_topbar.php');
         };
 
         const refreshTemplatePreview = async (isManual) => {
+            if (previewTimer !== null) {
+                window.clearTimeout(previewTimer);
+                previewTimer = null;
+            }
+
             if (!isTemplateSelected()) {
                 clearTemplatePreview();
                 return;
@@ -742,6 +900,10 @@ require base_path('resources/views/partials/auth_topbar.php');
 
         if (secretModal) {
             secretModal.addEventListener('close', () => {
+                if (previewTimer !== null) {
+                    window.clearTimeout(previewTimer);
+                    previewTimer = null;
+                }
                 wizardForm.reset();
                 currentStep = 1;
                 setMode('static');

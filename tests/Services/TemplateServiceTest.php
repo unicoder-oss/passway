@@ -59,6 +59,36 @@ final class TemplateServiceTest extends DatabaseTestCase
         $this->assertDoesNotMatchRegularExpression('/[^A-Za-z0-9]/', $password);
     }
 
+    public function test_generate_password_allows_length_up_to_256(): void
+    {
+        $template = Database::getInstance()->fetchOne(
+            'SELECT uuid FROM templates WHERE type = ? ORDER BY id ASC LIMIT 1',
+            ['password']
+        );
+
+        $password = $this->svc->generate((string) $template['uuid'], null, [
+            'min_length' => 256,
+            'max_length' => 256,
+            'use_special' => false,
+        ]);
+
+        $this->assertSame(256, \strlen($password));
+    }
+
+    public function test_generate_password_rejects_length_above_256(): void
+    {
+        $template = Database::getInstance()->fetchOne(
+            'SELECT uuid FROM templates WHERE type = ? ORDER BY id ASC LIMIT 1',
+            ['password']
+        );
+
+        $this->expectException(\InvalidArgumentException::class);
+        $this->svc->generate((string) $template['uuid'], null, [
+            'min_length' => 257,
+            'max_length' => 257,
+        ]);
+    }
+
     public function test_generate_ssh_key_returns_json_pair(): void
     {
         $template = Database::getInstance()->fetchOne(

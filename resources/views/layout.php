@@ -155,6 +155,43 @@
         .preview-wrap { max-width: 100%; border: 1px solid var(--border); background: var(--panel-subtle); }
         canvas { display: block; width: 100%; height: auto; }
         .range { width: 100%; margin: 0; }
+        .template-range-inputs input[type="range"] {
+            -webkit-appearance: none;
+            appearance: none;
+            background: transparent;
+            padding: 0;
+            border: 0;
+            height: 20px;
+        }
+        .template-range-inputs input[type="range"]::-webkit-slider-runnable-track {
+            height: 4px;
+            background: var(--border);
+            border-radius: 999px;
+        }
+        .template-range-inputs input[type="range"]::-webkit-slider-thumb {
+            -webkit-appearance: none;
+            appearance: none;
+            width: 16px;
+            height: 16px;
+            border-radius: 50%;
+            background: #93c5fd;
+            border: 0;
+            margin-top: -6px;
+            cursor: pointer;
+        }
+        .template-range-inputs input[type="range"]::-moz-range-track {
+            height: 4px;
+            background: var(--border);
+            border-radius: 999px;
+        }
+        .template-range-inputs input[type="range"]::-moz-range-thumb {
+            width: 16px;
+            height: 16px;
+            border-radius: 50%;
+            background: #93c5fd;
+            border: 0;
+            cursor: pointer;
+        }
         .pill {
             display: inline-flex;
             align-items: center;

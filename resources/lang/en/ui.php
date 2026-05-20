@@ -661,7 +661,7 @@ return [
             'not_found' => 'Template not found.',
             'wrong_org' => 'Template does not belong to this organization.',
             'unsupported_type' => 'Unsupported template type: :type',
-            'password_length' => 'Password template length must be between 8 and 128 characters.',
+            'password_length' => 'Password template length must be between 8 and 256 characters.',
             'special_chars_empty' => 'special_chars cannot be empty when use_special is enabled.',
             'charset_required' => 'At least one character set must be enabled.',
             'rsa_bits_invalid' => 'RSA template bits must be 2048 or 4096.',
