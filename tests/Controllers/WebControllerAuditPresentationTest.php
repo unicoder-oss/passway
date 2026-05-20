@@ -27,8 +27,22 @@ final class WebControllerAuditPresentationTest extends DatabaseTestCase
         $this->controller = Application::getInstance()->getContainer()->make(WebController::class);
     }
 
-    public function test_it_presents_actor_target_user_and_whitelisted_details(): void
+    protected function tearDown(): void
     {
+        reset_request_locale();
+        parent::tearDown();
+    }
+
+    /**
+     * @dataProvider actorTargetUserLocaleProvider
+     */
+    public function test_it_presents_actor_target_user_and_whitelisted_details(
+        string $locale,
+        string $expectedTitle,
+    ): void
+    {
+        set_request_locale($locale);
+
         $owner = $this->createTestUser('owner@example.com');
         $owner->update(['nickname' => 'Иван', 'updated_at' => now()->format('Y-m-d H:i:s')]);
 
@@ -58,14 +72,24 @@ final class WebControllerAuditPresentationTest extends DatabaseTestCase
 
         $entry = $entries[0];
 
-        $this->assertSame('Изменение роли пользователя Пётр на администратор', $this->flattenTitle($entry));
+        $this->assertSame($expectedTitle, $this->flattenTitle($entry));
         $this->assertSame('Иван', $entry['actor_label']);
         $this->assertSame([], $entry['details']);
         $this->assertSame('1.2.3.4', $entry['ip_address']);
     }
 
-    public function test_it_builds_secret_link_and_api_key_detail(): void
+    /**
+     * @dataProvider secretLinkLocaleProvider
+     * @param string[] $expectedDetails
+     */
+    public function test_it_builds_secret_link_and_api_key_detail(
+        string $locale,
+        string $expectedTitle,
+        array $expectedDetails,
+    ): void
     {
+        set_request_locale($locale);
+
         $owner = $this->createTestUser('owner2@example.com');
         $owner->update(['nickname' => 'Мария', 'updated_at' => now()->format('Y-m-d H:i:s')]);
 
@@ -148,15 +172,30 @@ final class WebControllerAuditPresentationTest extends DatabaseTestCase
 
         $entry = $entries[0];
 
-        $this->assertSame('Просмотр секрета Prod DB', $this->flattenTitle($entry));
+        $this->assertSame($expectedTitle, $this->flattenTitle($entry));
         $this->assertSame(
             '/organizations/' . $organization->uuid . '/directories/' . $directoryUuid . '/secrets/' . $secretUuid,
             $entry['title_parts'][1]['href']
         );
-        $this->assertSame([
-            'Через API-ключ: Deploy key',
-            'Маршрут: /api/v1/secrets',
-        ], $entry['details']);
+        $this->assertSame($expectedDetails, $entry['details']);
+    }
+
+    /** @return array<string, array{string, string}> */
+    public static function actorTargetUserLocaleProvider(): array
+    {
+        return [
+            'en' => ['en', 'Change role for user Пётр to admin'],
+            'ru' => ['ru', 'Изменение роли пользователя Пётр на администратор'],
+        ];
+    }
+
+    /** @return array<string, array{string, string, string[]}> */
+    public static function secretLinkLocaleProvider(): array
+    {
+        return [
+            'en' => ['en', 'View secret Prod DB', ['Via API key: Deploy key', 'Path: /api/v1/secrets']],
+            'ru' => ['ru', 'Просмотр секрета Prod DB', ['Через API-ключ: Deploy key', 'Маршрут: /api/v1/secrets']],
+        ];
     }
 
     /**
