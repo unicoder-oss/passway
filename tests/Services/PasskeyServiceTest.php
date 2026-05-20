@@ -53,8 +53,6 @@ final class PasskeyServiceTest extends DatabaseTestCase
         $service = new PasskeyService();
         $reflection = new ReflectionClass($service);
         $property = $reflection->getProperty('securedRelyingPartyIds');
-        $property->setAccessible(true);
-
         $this->assertSame(['localhost'], $property->getValue($service));
     }
 }
