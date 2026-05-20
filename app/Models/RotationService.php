@@ -56,6 +56,32 @@ final class RotationService
         return \is_array($decoded) ? $decoded : [];
     }
 
+    /** @return array<int, array<string, mixed>> */
+    public function integrationFields(): array
+    {
+        return $this->schemaFields('integration_schema');
+    }
+
+    /** @return array<int, array<string, mixed>> */
+    public function secretFields(): array
+    {
+        return $this->schemaFields('secret_schema');
+    }
+
+    /** @return array<int, array<string, mixed>> */
+    public function outputFields(): array
+    {
+        return $this->schemaFields('output_schema');
+    }
+
+    public function primarySecretField(): ?string
+    {
+        $spec = $this->spec();
+        $field = $spec['output_schema']['primary_secret_field'] ?? null;
+
+        return \is_string($field) && \trim($field) !== '' ? \trim($field) : null;
+    }
+
     public static function findById(string $id): ?self
     {
         $row = Database::getInstance()->fetchOne(
@@ -84,5 +110,25 @@ final class RotationService
         );
 
         return \array_map(fn($row) => self::fromRow($row), $rows);
+    }
+
+    /** @return array<int, array<string, mixed>> */
+    private function schemaFields(string $key): array
+    {
+        $spec = $this->spec();
+        $fields = $spec[$key]['fields'] ?? null;
+
+        if (!\is_array($fields)) {
+            return [];
+        }
+
+        $normalized = [];
+        foreach ($fields as $field) {
+            if (\is_array($field)) {
+                $normalized[] = $field;
+            }
+        }
+
+        return $normalized;
     }
 }

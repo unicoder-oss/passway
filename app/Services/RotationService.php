@@ -7,10 +7,7 @@ namespace Passway\Services;
 use Passway\Models\Secret;
 
 /**
- * Автоматическая ротация секретов по расписанию.
- *
- * На этом этапе поддерживается плановая ротация шаблонных секретов.
- * Dynamic-секреты с внешними integration будут подключены в следующем подшаге.
+ * Внешняя schema-driven ротация dynamic-секретов.
  */
 final class RotationService
 {
@@ -57,6 +54,95 @@ final class RotationService
         return $result;
     }
 
+    /**
+     * @param array<string, mixed> $rotationInput
+     */
+    public function provisionDynamicSecret(
+        string $orgId,
+        string $dirUuid,
+        string $name,
+        string $rotationIntegrationUuid,
+        ?string $rotationSchedule,
+        array $rotationInput,
+        string $userId,
+    ): Secret {
+        $integration = \Passway\Models\OrganizationIntegration::findByUuid($rotationIntegrationUuid)
+            ?? throw new \RuntimeException(__('ui.backend.secret.rotation_integration_not_found'));
+        if ($integration->organizationId !== $orgId) {
+            throw new \RuntimeException(__('ui.backend.secret.rotation_integration_not_found'));
+        }
+        if (!$integration->isActive) {
+            throw new \RuntimeException(__('ui.backend.secret.rotation_integration_inactive'));
+        }
+
+        $service = \Passway\Models\RotationService::findById($integration->rotationServiceId)
+            ?? throw new \RuntimeException(__('ui.backend.rotation.service_not_found'));
+        if (!$service->isActive || !$service->isVerified) {
+            throw new \RuntimeException(__('ui.backend.integration.service_must_be_active_verified'));
+        }
+        $rotationInput = RotationSchemaValidator::normalizeValues($service->secretFields(), $rotationInput);
+
+        $primaryField = $service->primarySecretField();
+        if ($primaryField === null) {
+            throw new \RuntimeException(__('ui.backend.secret.dynamic_primary_field_missing'));
+        }
+
+        $credentials = $this->integrationService->getDecryptedCredentials($integration->id);
+        $secretUuid = generate_uuid();
+        $context = [
+            'secret_uuid' => $secretUuid,
+            'secret_name' => $name,
+            'organization_id' => $orgId,
+            'directory_uuid' => $dirUuid,
+        ];
+
+        $outputs = $this->httpClient->provision($service->url, $credentials, $rotationInput, $context);
+        $primaryValue = $outputs[$primaryField] ?? null;
+        if (!\is_string($primaryValue) || $primaryValue === '') {
+            throw new \RuntimeException(__('ui.backend.secret.dynamic_primary_value_missing', ['field' => $primaryField]));
+        }
+
+        $validationSecret = new \Passway\Models\Secret(
+            id: '0',
+            uuid: $secretUuid,
+            directoryId: $dirUuid,
+            organizationId: $orgId,
+            name: $name,
+            type: 'dynamic',
+            encryptedValue: '',
+            nonce: '',
+            templateId: null,
+            requiresApproval: false,
+            rotationIntegrationId: $integration->id,
+            rotationSchedule: $rotationSchedule,
+            lastRotatedAt: null,
+            version: 1,
+            createdBy: $userId,
+            createdAt: now()->format('Y-m-d H:i:s'),
+            updatedAt: now()->format('Y-m-d H:i:s'),
+            deletedAt: null,
+        );
+
+        if (!$this->httpClient->validate($service->url, $credentials, $validationSecret, $rotationInput, $outputs)) {
+            throw new \RuntimeException(__('ui.backend.rotation_runtime.provision_validation_failed'));
+        }
+
+        $secret = $this->secretService->createProvisionedDynamicSecret(
+            $orgId,
+            $dirUuid,
+            $name,
+            $rotationIntegrationUuid,
+            $rotationSchedule,
+            $rotationInput,
+            $outputs,
+            $primaryField,
+            $userId,
+            $secretUuid,
+        );
+
+        return $secret;
+    }
+
     public function rotateTemplateSecret(string $secretUuid, string $orgId): Secret
     {
         $secret = Secret::findByUuid($secretUuid);
@@ -90,45 +176,60 @@ final class RotationService
 
     public function rotateDynamicSecret(string $secretUuid, string $orgId): Secret
     {
-        ['secret' => $secret, 'value' => $currentValue] = $this->secretService->getForRotation($secretUuid, $orgId);
+        [
+            'secret' => $secret,
+            'input' => $rotationInput,
+            'outputs' => $currentOutputs,
+            'primary_field' => $primaryField,
+        ] = $this->secretService->getDynamicRotationState($secretUuid, $orgId);
 
-        if ($secret->type !== 'dynamic') {
-            throw new \RuntimeException(__('ui.backend.rotation_runtime.dynamic_only_external'));
-        }
         if ($secret->rotationIntegrationId === null) {
             throw new \RuntimeException(__('ui.backend.rotation_runtime.dynamic_missing_integration'));
         }
 
         $integration = \Passway\Models\OrganizationIntegration::findById($secret->rotationIntegrationId)
             ?? throw new \RuntimeException(__('ui.backend.secret.rotation_integration_not_found'));
+        if (!$integration->isActive) {
+            throw new \RuntimeException(__('ui.backend.secret.rotation_integration_inactive'));
+        }
         $service = \Passway\Models\RotationService::findById($integration->rotationServiceId)
             ?? throw new \RuntimeException(__('ui.backend.rotation.service_not_found'));
+        if (!$service->isActive || !$service->isVerified) {
+            throw new \RuntimeException(__('ui.backend.integration.service_must_be_active_verified'));
+        }
         $credentials = $this->integrationService->getDecryptedCredentials($integration->id);
 
         try {
-            if (!$this->httpClient->validate($service->url, $credentials, $secret, $currentValue)) {
+            if (!$this->httpClient->validate($service->url, $credentials, $secret, $rotationInput, $currentOutputs)) {
                 throw new \RuntimeException(__('ui.backend.rotation_runtime.validation_before_failed'));
             }
 
-            $newValue = $this->httpClient->rotate($service->url, $credentials, $secret, $currentValue);
+            $newOutputs = $this->httpClient->rotate($service->url, $credentials, $secret, $rotationInput, $currentOutputs);
+            $newPrimaryValue = $newOutputs[$primaryField] ?? null;
+            if (!\is_string($newPrimaryValue) || $newPrimaryValue === '') {
+                throw new \RuntimeException(__('ui.backend.secret.dynamic_primary_value_missing', ['field' => $primaryField]));
+            }
 
-            if ($this->httpClient->validate($service->url, $credentials, $secret, $currentValue)) {
-                $this->httpClient->rollback($service->url, $credentials, $secret, $newValue, $currentValue);
+            if ($this->httpClient->validate($service->url, $credentials, $secret, $rotationInput, $currentOutputs)) {
+                $this->httpClient->rollback($service->url, $credentials, $secret, $rotationInput, $newOutputs, $currentOutputs);
                 throw new \RuntimeException(__('ui.backend.rotation_runtime.old_value_still_valid'));
             }
 
-            if (!$this->httpClient->validate($service->url, $credentials, $secret, $newValue)) {
-                $this->httpClient->rollback($service->url, $credentials, $secret, $newValue, $currentValue);
+            if (!$this->httpClient->validate($service->url, $credentials, $secret, $rotationInput, $newOutputs)) {
+                $this->httpClient->rollback($service->url, $credentials, $secret, $rotationInput, $newOutputs, $currentOutputs);
                 throw new \RuntimeException(__('ui.backend.rotation_runtime.new_value_invalid'));
             }
 
-            return $this->secretService->rotateValue(
+            $updated = $this->secretService->rotateValue(
                 $secret->uuid,
                 $orgId,
-                $newValue,
+                $newPrimaryValue,
                 null,
                 'api'
             );
+            $this->secretService->updateDynamicRotationOutputs($secret->uuid, $orgId, $newOutputs, $primaryField);
+
+            return $updated;
         } catch (\Throwable $e) {
             $this->secretService->recordRotationFailure($secret->uuid, $orgId, 'api', $e->getMessage());
             throw $e;

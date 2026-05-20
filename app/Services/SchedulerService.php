@@ -24,8 +24,8 @@ final class SchedulerService
              WHERE deleted_at IS NULL
                AND rotation_schedule IS NOT NULL
                AND rotation_schedule != \'\'
-               AND type IN (?, ?)',
-            ['template', 'dynamic']
+               AND type = ?',
+            ['dynamic']
         );
 
         $due = [];

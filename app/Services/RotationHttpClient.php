@@ -44,17 +44,44 @@ final class RotationHttpClient
 
     /**
      * @param array<string, mixed> $credentials
+     * @param array<string, mixed> $input
+     * @param array<string, mixed> $context
+     * @return array<string, mixed>
+     */
+    public function provision(
+        string $baseUrl,
+        array $credentials,
+        array $input,
+        array $context,
+    ): array {
+        $response = $this->request('POST', $this->endpoint($baseUrl, '/provision'), [
+            'credentials' => $credentials,
+            'input'       => $input,
+            'context'     => $context,
+        ]);
+
+        if ($response['status'] < 200 || $response['status'] >= 300) {
+            throw new \RuntimeException(__('ui.backend.rotation_runtime.provision_failed'));
+        }
+
+        return $this->extractOutputs($response['body'], 'provision_missing_outputs');
+    }
+
+    /**
+     * @param array<string, mixed> $credentials
      */
     public function validate(
         string $baseUrl,
         array $credentials,
         Secret $secret,
-        string $value,
+        array $input,
+        array $outputs,
     ): bool {
         $response = $this->request('POST', $this->endpoint($baseUrl, '/validate'), [
             'credentials' => $credentials,
             'secret'      => $this->serializeSecret($secret),
-            'value'       => $value,
+            'input'       => $input,
+            'outputs'     => $outputs,
         ]);
 
         if ($response['status'] < 200 || $response['status'] >= 300) {
@@ -71,28 +98,21 @@ final class RotationHttpClient
         string $baseUrl,
         array $credentials,
         Secret $secret,
-        string $currentValue,
-    ): string {
+        array $input,
+        array $currentOutputs,
+    ): array {
         $response = $this->request('POST', $this->endpoint($baseUrl, '/rotate'), [
             'credentials'   => $credentials,
             'secret'        => $this->serializeSecret($secret),
-            'current_value' => $currentValue,
+            'input'         => $input,
+            'current_outputs' => $currentOutputs,
         ]);
 
         if ($response['status'] < 200 || $response['status'] >= 300) {
             throw new \RuntimeException(__('ui.backend.rotation_runtime.rotate_failed'));
         }
 
-        $newValue = $response['body']['value']
-            ?? $response['body']['new_value']
-            ?? $response['body']['rotated_value']
-            ?? null;
-
-        if (!\is_string($newValue) || $newValue === '') {
-            throw new \RuntimeException(__('ui.backend.rotation_runtime.rotate_missing_value'));
-        }
-
-        return $newValue;
+        return $this->extractOutputs($response['body'], 'rotate_missing_outputs');
     }
 
     /**
@@ -105,15 +125,17 @@ final class RotationHttpClient
         string $baseUrl,
         array $credentials,
         Secret $secret,
-        string $currentValue,
-        string $targetValue,
+        array $input,
+        array $currentOutputs,
+        array $targetOutputs,
     ): void {
         try {
             $this->request('POST', $this->endpoint($baseUrl, '/rotate'), [
                 'credentials'   => $credentials,
                 'secret'        => $this->serializeSecret($secret),
-                'current_value' => $currentValue,
-                'target_value'  => $targetValue,
+                'input'         => $input,
+                'current_outputs' => $currentOutputs,
+                'target_outputs'  => $targetOutputs,
                 'rollback'      => true,
             ]);
         } catch (\Throwable) {
@@ -192,5 +214,19 @@ final class RotationHttpClient
     private function endpoint(string $baseUrl, string $path): string
     {
         return \rtrim($baseUrl, '/') . $path;
+    }
+
+    /**
+     * @param array<string, mixed> $body
+     * @return array<string, mixed>
+     */
+    private function extractOutputs(array $body, string $missingKey): array
+    {
+        $outputs = $body['outputs'] ?? $body['result'] ?? null;
+        if (!\is_array($outputs) || $outputs === []) {
+            throw new \RuntimeException(__('ui.backend.rotation_runtime.' . $missingKey));
+        }
+
+        return $outputs;
     }
 }

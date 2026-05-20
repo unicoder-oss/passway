@@ -43,7 +43,14 @@ final class OrganizationIntegrationServiceTest extends DatabaseTestCase
             'name'          => 'Stub Rotator',
             'url'           => 'https://rotator.example.test',
             'health_url'    => 'https://rotator.example.test/health',
-            'spec_json'     => '{}',
+            'spec_json'     => \json_encode([
+                'integration_schema' => [
+                    'fields' => [
+                        ['name' => 'endpoint', 'label' => 'Endpoint', 'type' => 'string', 'required' => true],
+                        ['name' => 'token', 'label' => 'Token', 'type' => 'secret_text', 'required' => true],
+                    ],
+                ],
+            ], \JSON_UNESCAPED_SLASHES),
             'is_active'     => 1,
             'is_verified'   => 1,
             'last_check_at' => now()->format('Y-m-d H:i:s'),
@@ -81,7 +88,13 @@ final class OrganizationIntegrationServiceTest extends DatabaseTestCase
             'name'          => 'Stub Rotator',
             'url'           => 'https://rotator.example.test',
             'health_url'    => 'https://rotator.example.test/health',
-            'spec_json'     => '{}',
+            'spec_json'     => \json_encode([
+                'integration_schema' => [
+                    'fields' => [
+                        ['name' => 'token', 'label' => 'Token', 'type' => 'secret_text', 'required' => true],
+                    ],
+                ],
+            ], \JSON_UNESCAPED_SLASHES),
             'is_active'     => 1,
             'is_verified'   => 1,
             'last_check_at' => now()->format('Y-m-d H:i:s'),

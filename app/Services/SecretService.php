@@ -8,6 +8,7 @@ use Passway\Core\Database;
 use Passway\Exceptions\AuthException;
 use Passway\Models\Directory;
 use Passway\Models\OrganizationIntegration;
+use Passway\Models\RotationService;
 use Passway\Models\Secret;
 use Passway\Models\SecretMetadata;
 use Passway\Models\SecretVersion;
@@ -39,6 +40,9 @@ final class SecretService
     private const MAX_VERSIONS = 10;
 
     private const TEMPLATE_OVERRIDES_METADATA_KEY = 'template_overrides';
+    private const DYNAMIC_ROTATION_INPUT_METADATA_KEY = 'rotation_input';
+    private const DYNAMIC_ROTATION_OUTPUTS_METADATA_KEY = 'rotation_outputs';
+    private const DYNAMIC_ROTATION_PRIMARY_FIELD_METADATA_KEY = 'rotation_primary_field';
 
     public function __construct(
         private readonly OrganizationService $organizationService,
@@ -230,6 +234,86 @@ final class SecretService
         return $secret;
     }
 
+    /**
+     * @param array<string, mixed> $rotationInput
+     * @param array<string, mixed> $outputs
+     */
+    public function createProvisionedDynamicSecret(
+        string $orgId,
+        string $dirUuid,
+        string $name,
+        string $rotationIntegrationUuid,
+        ?string $rotationSchedule,
+        array $rotationInput,
+        array $outputs,
+        string $primaryField,
+        string $userId,
+        ?string $secretUuid = null,
+    ): Secret {
+        $name = \trim($name);
+        if ($name === '') {
+            throw new \InvalidArgumentException(__('ui.backend.secret.name_empty'));
+        }
+        if (\strlen($name) > 255) {
+            throw new \InvalidArgumentException(__('ui.backend.secret.name_too_long'));
+        }
+
+        $rotationSchedule = $this->normalizeRotationSchedule($rotationSchedule);
+        $primaryField = \trim($primaryField);
+        if ($primaryField === '') {
+            throw new \RuntimeException(__('ui.backend.secret.dynamic_primary_field_missing'));
+        }
+
+        $primaryValue = $outputs[$primaryField] ?? null;
+        if (!\is_string($primaryValue) || $primaryValue === '') {
+            throw new \RuntimeException(__('ui.backend.secret.dynamic_primary_value_missing', ['field' => $primaryField]));
+        }
+
+        $dir = $this->findDirInOrg($dirUuid, $orgId);
+        $this->assertCan('write', $userId, 'directory', $dir->id, $orgId);
+        $this->assertNameUnique($dir->id, $name);
+        $rotationIntegrationId = $this->resolveRotationIntegrationId($rotationIntegrationUuid, $orgId)
+            ?? throw new \RuntimeException(__('ui.backend.secret.rotation_integration_not_found'));
+
+        $uuid = $secretUuid !== null && \trim($secretUuid) !== '' ? \trim($secretUuid) : generate_uuid();
+        $encrypted = $this->encryptionService->encrypt($primaryValue, $uuid);
+        $now = now()->format('Y-m-d H:i:s');
+
+        Database::getInstance()->insert('secrets', [
+            'uuid'                    => $uuid,
+            'directory_id'            => (int) $dir->id,
+            'organization_id'         => (int) $orgId,
+            'name'                    => $name,
+            'type'                    => 'dynamic',
+            'encrypted_value'         => $encrypted->value,
+            'nonce'                   => $encrypted->nonce,
+            'requires_approval'       => 0,
+            'rotation_integration_id' => (int) $rotationIntegrationId,
+            'rotation_schedule'       => $rotationSchedule,
+            'version'                 => 1,
+            'created_by'              => (int) $userId,
+            'created_at'              => $now,
+            'updated_at'              => $now,
+        ]);
+
+        $secret = Secret::findByUuid($uuid)
+            ?? throw new \RuntimeException(__('ui.backend.secret.failed_load_created'));
+
+        $this->storeDynamicRotationState($secret->id, $rotationInput, $outputs, $primaryField);
+
+        $this->getAuditService()->record(
+            action: 'secret.create',
+            organizationId: $orgId,
+            userId: $userId,
+            resourceType: 'secret',
+            resourceId: $secret->id,
+            resourceUuid: $secret->uuid,
+            details: ['type' => 'dynamic'],
+        );
+
+        return $secret;
+    }
+
     // ------------------------------------------------------------------ //
     //  Чтение                                                             //
     // ------------------------------------------------------------------ //
@@ -298,6 +382,29 @@ final class SecretService
         $this->assertCan('read', $userId, 'directory', $secret->directoryId, $orgId);
 
         return $this->loadTemplateOverrides($secret->id);
+    }
+
+    /** @return array<string, mixed> */
+    public function getDynamicSecretView(string $secretUuid, string $orgId, string $userId): array
+    {
+        $secret = $this->findSecretInOrg($secretUuid, $orgId);
+        $this->assertCan('read', $userId, 'directory', $secret->directoryId, $orgId);
+
+        if ($secret->type !== 'dynamic') {
+            return ['input' => [], 'outputs' => [], 'primary_field' => null, 'service' => null];
+        }
+
+        $integration = $secret->rotationIntegrationId !== null
+            ? OrganizationIntegration::findById($secret->rotationIntegrationId)
+            : null;
+        $service = $integration !== null ? RotationService::findById($integration->rotationServiceId) : null;
+
+        return [
+            'input' => $this->loadDynamicRotationInput($secret->id),
+            'outputs' => $this->loadDynamicRotationOutputs($secret->id),
+            'primary_field' => $this->loadDynamicRotationPrimaryField($secret->id),
+            'service' => $service,
+        ];
     }
 
     /**
@@ -439,6 +546,9 @@ final class SecretService
             if ($secret->type === 'template') {
                 throw new \InvalidArgumentException(__('ui.backend.secret.template_manual_value_not_supported'));
             }
+            if ($secret->type === 'dynamic') {
+                throw new \InvalidArgumentException(__('ui.backend.secret.dynamic_manual_value_not_supported'));
+            }
 
             // Сохранить текущую версию в историю перед перезаписью
             $this->saveVersionHistory($secret, $userId);
@@ -564,6 +674,40 @@ final class SecretService
 
         return Secret::findByUuid($secretUuid)
             ?? throw new \RuntimeException(__('ui.backend.secret.failed_reload_after_rotation_config'));
+    }
+
+    /** @return array{secret: Secret, input: array<string, mixed>, outputs: array<string, mixed>, primary_field: string} */
+    public function getDynamicRotationState(string $secretUuid, string $orgId): array
+    {
+        ['secret' => $secret, 'value' => $value] = $this->getForRotation($secretUuid, $orgId);
+
+        if ($secret->type !== 'dynamic') {
+            throw new \RuntimeException(__('ui.backend.rotation_runtime.dynamic_only_external'));
+        }
+
+        $primaryField = $this->loadDynamicRotationPrimaryField($secret->id);
+        if ($primaryField === null || $primaryField === '') {
+            throw new \RuntimeException(__('ui.backend.secret.dynamic_primary_field_missing'));
+        }
+
+        $outputs = $this->loadDynamicRotationOutputs($secret->id);
+        $outputs[$primaryField] = $value;
+
+        return [
+            'secret' => $secret,
+            'input' => $this->loadDynamicRotationInput($secret->id),
+            'outputs' => $outputs,
+            'primary_field' => $primaryField,
+        ];
+    }
+
+    /**
+     * @param array<string, mixed> $outputs
+     */
+    public function updateDynamicRotationOutputs(string $secretUuid, string $orgId, array $outputs, string $primaryField): void
+    {
+        $secret = $this->findSecretInOrg($secretUuid, $orgId);
+        $this->storeDynamicRotationOutputs($secret->id, $outputs, $primaryField);
     }
 
     /** @return array{secret: Secret, value: string} */
@@ -754,10 +898,90 @@ final class SecretService
         SecretMetadata::upsert($secretId, self::TEMPLATE_OVERRIDES_METADATA_KEY, $payload);
     }
 
+    /** @param array<string, mixed> $input */
+    private function storeDynamicRotationInput(string $secretId, array $input): void
+    {
+        SecretMetadata::upsert(
+            $secretId,
+            self::DYNAMIC_ROTATION_INPUT_METADATA_KEY,
+            $this->encodeJsonObject($input)
+        );
+    }
+
+    /**
+     * @param array<string, mixed> $outputs
+     */
+    private function storeDynamicRotationOutputs(string $secretId, array $outputs, string $primaryField): void
+    {
+        $primaryField = \trim($primaryField);
+        if ($primaryField === '') {
+            throw new \RuntimeException(__('ui.backend.secret.dynamic_primary_field_missing'));
+        }
+
+        $publicOutputs = $outputs;
+        unset($publicOutputs[$primaryField]);
+
+        SecretMetadata::upsert(
+            $secretId,
+            self::DYNAMIC_ROTATION_OUTPUTS_METADATA_KEY,
+            $this->encodeJsonObject($publicOutputs)
+        );
+        SecretMetadata::upsert(
+            $secretId,
+            self::DYNAMIC_ROTATION_PRIMARY_FIELD_METADATA_KEY,
+            $primaryField
+        );
+    }
+
+    /**
+     * @param array<string, mixed> $input
+     * @param array<string, mixed> $outputs
+     */
+    private function storeDynamicRotationState(string $secretId, array $input, array $outputs, string $primaryField): void
+    {
+        $this->storeDynamicRotationInput($secretId, $input);
+        $this->storeDynamicRotationOutputs($secretId, $outputs, $primaryField);
+    }
+
     /** @return array<string, mixed> */
     private function loadTemplateOverrides(string $secretId): array
     {
         $metadata = SecretMetadata::findBySecretIdAndKey($secretId, self::TEMPLATE_OVERRIDES_METADATA_KEY);
+        if ($metadata === null || $metadata->value === null || \trim($metadata->value) === '') {
+            return [];
+        }
+
+        $decoded = \json_decode($metadata->value, true);
+        return \is_array($decoded) ? $decoded : [];
+    }
+
+    /** @return array<string, mixed> */
+    private function loadDynamicRotationInput(string $secretId): array
+    {
+        return $this->loadJsonMetadata(self::DYNAMIC_ROTATION_INPUT_METADATA_KEY, $secretId);
+    }
+
+    /** @return array<string, mixed> */
+    private function loadDynamicRotationOutputs(string $secretId): array
+    {
+        return $this->loadJsonMetadata(self::DYNAMIC_ROTATION_OUTPUTS_METADATA_KEY, $secretId);
+    }
+
+    private function loadDynamicRotationPrimaryField(string $secretId): ?string
+    {
+        $metadata = SecretMetadata::findBySecretIdAndKey($secretId, self::DYNAMIC_ROTATION_PRIMARY_FIELD_METADATA_KEY);
+        if ($metadata === null || $metadata->value === null) {
+            return null;
+        }
+
+        $value = \trim($metadata->value);
+        return $value !== '' ? $value : null;
+    }
+
+    /** @return array<string, mixed> */
+    private function loadJsonMetadata(string $key, string $secretId): array
+    {
+        $metadata = SecretMetadata::findBySecretIdAndKey($secretId, $key);
         if ($metadata === null || $metadata->value === null || \trim($metadata->value) === '') {
             return [];
         }

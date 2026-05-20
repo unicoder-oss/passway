@@ -61,6 +61,8 @@ final class OrganizationIntegrationService
             throw new \RuntimeException(__('ui.backend.integration.service_must_be_active_verified'));
         }
 
+        $credentials = RotationSchemaValidator::normalizeValues($service->integrationFields(), $credentials);
+
         $uuid = generate_uuid();
         $now = now()->format('Y-m-d H:i:s');
         $credentialsJson = $this->encodeCredentials($credentials);
@@ -112,6 +114,9 @@ final class OrganizationIntegrationService
         }
 
         if ($credentials !== null) {
+            $service = RotationService::findById($integration->rotationServiceId)
+                ?? throw new \RuntimeException(__('ui.backend.integration.service_not_found'));
+            $credentials = RotationSchemaValidator::normalizeValues($service->integrationFields(), $credentials);
             $credentialsJson = $this->encodeCredentials($credentials);
             $encrypted = $this->encryptionService->encrypt($credentialsJson, $integration->uuid);
             $data['encrypted_credentials'] = $encrypted->value;

@@ -75,6 +75,7 @@ final class SecretController
         $rotationSchedule = $request->input('rotation_schedule') !== null
             ? \trim((string) $request->input('rotation_schedule'))
             : null;
+        $rotationInput = $request->input('rotation_input');
         $templateOverrides = $this->parseTemplateOverridesInput($request->input('template_overrides'));
         $templateValue = $request->input('value');
         $templateValue = \is_string($templateValue) ? $templateValue : null;
@@ -100,6 +101,16 @@ final class SecretController
                     $rotationSchedule !== '' ? $rotationSchedule : null,
                     $templateValue,
                 )
+                : ($type === 'dynamic'
+                    ? $this->rotationService->provisionDynamicSecret(
+                        $org->id,
+                        $dirUuid,
+                        $name,
+                        $rotationIntegrationUuid !== '' ? $rotationIntegrationUuid : '',
+                        $rotationSchedule !== '' ? $rotationSchedule : null,
+                        \is_array($rotationInput) ? $rotationInput : [],
+                        $user->id,
+                    )
                 : $this->secretService->create(
                     $org->id,
                     $dirUuid,
@@ -109,7 +120,7 @@ final class SecretController
                     $user->id,
                     $rotationIntegrationUuid !== '' ? $rotationIntegrationUuid : null,
                     $rotationSchedule !== '' ? $rotationSchedule : null,
-                );
+                ));
         } catch (AuthException $e) {
             return Response::error($e->getMessage(), $e->getCode() ?: 403);
         } catch (\InvalidArgumentException $e) {
@@ -172,6 +183,7 @@ final class SecretController
         try {
             ['secret' => $secret, 'value' => $value] =
                 $this->secretService->get($secUuid, $org->id, $user->id);
+            $dynamicView = $this->secretService->getDynamicSecretView($secUuid, $org->id, $user->id);
         } catch (AuthException $e) {
             return Response::forbidden($e->getMessage());
         } catch (DecryptionException $e) {
@@ -180,7 +192,7 @@ final class SecretController
             return Response::notFound($e->getMessage());
         }
 
-        return Response::success($this->serializeWithValue($secret, $value));
+        return Response::success($this->serializeWithValue($secret, $value, $dynamicView));
     }
 
     // ------------------------------------------------------------------ //
@@ -369,9 +381,14 @@ final class SecretController
     }
 
     /** @return array<string, mixed> */
-    private function serializeWithValue(Secret $s, string $value): array
+    private function serializeWithValue(Secret $s, string $value, array $dynamicView = []): array
     {
-        return \array_merge($this->serializeMeta($s), ['value' => $value]);
+        return \array_merge($this->serializeMeta($s), [
+            'value' => $value,
+            'rotation_input' => $dynamicView['input'] ?? [],
+            'rotation_outputs' => $dynamicView['outputs'] ?? [],
+            'rotation_primary_field' => $dynamicView['primary_field'] ?? null,
+        ]);
     }
 
     /** @return array<string, mixed> */

@@ -680,6 +680,17 @@ final class SecretServiceTest extends DatabaseTestCase
         $this->svc->configureRotation($secret->uuid, $org->id, $owner->id, null, '0 3 * * *');
     }
 
+    public function test_update_dynamic_secret_value_throws(): void
+    {
+        $owner = $this->createTestUser();
+        $org = $this->orgSvc->create('Org', $owner->id);
+        $dir = $this->dirSvc->create($org->id, null, 'Dir', $owner->id);
+        $secret = $this->svc->create($org->id, $dir->uuid, 'Dynamic Secret', 'dynamic', 'value', $owner->id);
+
+        $this->expectException(\InvalidArgumentException::class);
+        $this->svc->update($secret->uuid, $org->id, $owner->id, null, 'new-value');
+    }
+
     public function test_preview_template_returns_display_value_and_overrides(): void
     {
         $owner = $this->createTestUser();

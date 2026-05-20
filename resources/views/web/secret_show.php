@@ -11,6 +11,10 @@ $regenerateAction = '/organizations/' . $organization->uuid . '/directories/' . 
 $rotateAction = '/organizations/' . $organization->uuid . '/directories/' . $directory->uuid . '/secrets/' . $secret->uuid . '/rotate';
 $deleteAction = '/organizations/' . $organization->uuid . '/directories/' . $directory->uuid . '/secrets/' . $secret->uuid . '/delete';
 $templatePreviewUrl = '/api/v1/organizations/' . $organization->uuid . '/directories/' . $directory->uuid . '/secrets/template-preview';
+$dynamicRotationOutputs = $dynamicRotationView['outputs'] ?? [];
+$dynamicRotationPrimaryField = $dynamicRotationView['primary_field'] ?? null;
+$dynamicRotationService = $dynamicRotationView['service'] ?? null;
+$dynamicOutputFields = $dynamicRotationService !== null ? $dynamicRotationService->outputFields() : [];
 ?>
 
 <?php if (!empty($error)): ?><div class="error" style="margin-bottom:1rem;"><?= e((string) $error) ?></div><?php endif; ?>
@@ -126,6 +130,26 @@ $templatePreviewUrl = '/api/v1/organizations/' . $organization->uuid . '/directo
                 </div>
             </div>
         <?php endforeach; ?>
+
+        <?php if ($isDynamicSecret): ?>
+            <?php foreach ($dynamicOutputFields as $field): ?>
+                <?php
+                $key = is_string($field['name'] ?? null) ? $field['name'] : null;
+                if ($key === null || $key === $dynamicRotationPrimaryField || !array_key_exists($key, $dynamicRotationOutputs)) {
+                    continue;
+                }
+                $fieldId = 'dynamic-output-field-' . preg_replace('/[^a-z0-9_-]+/i', '-', $key);
+                $label = is_string($field['label'] ?? null) && trim((string) $field['label']) !== '' ? (string) $field['label'] : $key;
+                ?>
+                <div class="panel panel-muted" style="padding:1rem; display:grid; gap:.75rem;">
+                    <label><?= e($label) ?></label>
+                    <textarea id="<?= e($fieldId) ?>" class="mono" rows="4" readonly><?= e((string) $dynamicRotationOutputs[$key]) ?></textarea>
+                    <div class="actions">
+                        <button type="button" class="secondary" data-copy-target="<?= e($fieldId) ?>"><?= e(__('ui.secret.copy_value')) ?></button>
+                    </div>
+                </div>
+            <?php endforeach; ?>
+        <?php endif; ?>
     </section>
 
     <section class="grid" style="gap:1rem;">
@@ -133,7 +157,7 @@ $templatePreviewUrl = '/api/v1/organizations/' . $organization->uuid . '/directo
             <h3 style="margin:0 0 .75rem;"><?= e(__('ui.secret.manual_actions')) ?></h3>
             <div class="grid" style="gap:.75rem;">
                 <button type="button" class="secondary" data-open-modal="rename-secret-modal"><?= e(__('ui.secret.rename_secret')) ?></button>
-                <button type="button" class="secondary" data-open-modal="replace-secret-modal"><?= e(__('ui.secret.replace_value')) ?></button>
+                <?php if (!$isDynamicSecret): ?><button type="button" class="secondary" data-open-modal="replace-secret-modal"><?= e(__('ui.secret.replace_value')) ?></button><?php endif; ?>
                 <?php if ($isDynamicSecret): ?>
                     <button type="button" class="secondary" data-open-modal="rotation-secret-modal"><?= e(__('ui.secret.rotation_integration')) ?></button>
                     <form method="POST" action="<?= e($rotateAction) ?>">

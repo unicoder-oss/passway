@@ -13,6 +13,47 @@ $templateNamesById = [];
 foreach ($templates as $template) {
     $templateNamesById[$template->id] = $template->name;
 }
+$renderRotationField = static function (array $field, string $namePrefix, bool $required = true): void {
+    $fieldName = isset($field['name']) && is_string($field['name']) ? trim($field['name']) : '';
+    if ($fieldName === '') {
+        return;
+    }
+
+    $label = isset($field['label']) && is_string($field['label']) && trim($field['label']) !== '' ? $field['label'] : $fieldName;
+    $type = isset($field['type']) && is_string($field['type']) ? $field['type'] : 'string';
+    $placeholder = isset($field['placeholder']) && is_string($field['placeholder']) ? $field['placeholder'] : '';
+    $helpText = isset($field['help_text']) && is_string($field['help_text']) ? $field['help_text'] : '';
+    $inputName = $namePrefix . '[' . $fieldName . ']';
+    $inputId = $namePrefix . '-' . preg_replace('/[^a-z0-9_-]+/i', '-', $fieldName);
+    $isRequired = $required && (($field['required'] ?? false) === true);
+    ?>
+    <div>
+        <label for="<?= e($inputId) ?>"><?= e($label) ?></label>
+        <?php if ($type === 'enum'): ?>
+            <select id="<?= e($inputId) ?>" name="<?= e($inputName) ?>"<?= $isRequired ? ' required' : '' ?>>
+                <?php foreach (($field['options'] ?? []) as $option): ?>
+                    <?php
+                    $optionValue = is_array($option) ? (string) ($option['value'] ?? '') : (string) $option;
+                    $optionLabel = is_array($option) ? (string) ($option['label'] ?? $optionValue) : (string) $option;
+                    ?>
+                    <option value="<?= e($optionValue) ?>"><?= e($optionLabel) ?></option>
+                <?php endforeach; ?>
+            </select>
+        <?php elseif ($type === 'boolean'): ?>
+            <label style="display:flex; gap:.5rem; align-items:center;">
+                <input type="hidden" name="<?= e($inputName) ?>" value="false">
+                <input id="<?= e($inputId) ?>" type="checkbox" name="<?= e($inputName) ?>" value="true">
+                <span><?= e($label) ?></span>
+            </label>
+        <?php elseif (in_array($type, ['secret_text', 'readonly_text', 'textarea'], true)): ?>
+            <textarea id="<?= e($inputId) ?>" class="mono" name="<?= e($inputName) ?>" rows="5" placeholder="<?= e($placeholder) ?>"<?= $isRequired ? ' required' : '' ?>></textarea>
+        <?php else: ?>
+            <input id="<?= e($inputId) ?>" class="<?= $type === 'integer' ? 'mono' : '' ?>" name="<?= e($inputName) ?>" type="<?= e($type === 'integer' ? 'number' : 'text') ?>" placeholder="<?= e($placeholder) ?>"<?= $isRequired ? ' required' : '' ?>>
+        <?php endif; ?>
+        <?php if ($helpText !== ''): ?><div class="muted" style="font-size:.92rem;"><?= e($helpText) ?></div><?php endif; ?>
+    </div>
+    <?php
+};
 require base_path('resources/views/partials/auth_topbar.php');
 ?>
 
@@ -400,25 +441,34 @@ require base_path('resources/views/partials/auth_topbar.php');
 
                     <div data-secret-flow="dynamic" class="grid hidden" style="gap:1rem;">
                         <div>
-                            <label for="modal-dynamic-secret-value"><?= e(__('ui.home.value')) ?></label>
-                            <textarea id="modal-dynamic-secret-value" class="mono" name="value" rows="6" placeholder="<?= e(__('ui.home.value_placeholder')) ?>"></textarea>
+                            <label for="modal-dynamic-integration"><?= e(__('ui.home.rotation_integration')) ?></label>
+                            <select id="modal-dynamic-integration" name="rotation_integration_uuid">
+                                <option value=""><?= e(__('ui.app.none')) ?></option>
+                                <?php foreach ($integrations as $integration): ?><option value="<?= e($integration->uuid) ?>"><?= e($integration->name) ?></option><?php endforeach; ?>
+                            </select>
+                        </div>
+                        <div>
+                            <label for="modal-dynamic-schedule"><?= e(__('ui.home.rotation_schedule')) ?></label>
+                            <input id="modal-dynamic-schedule" class="mono" name="rotation_schedule" placeholder="0 3 * * *">
+                        </div>
+                        <div id="modal-dynamic-configs" class="grid" style="gap:1rem;">
+                            <?php foreach ($integrations as $integration): ?>
+                                <?php $integrationService = $rotationServiceMap[$integration->rotationServiceId] ?? null; ?>
+                                <div class="hidden" data-dynamic-config="<?= e($integration->uuid) ?>">
+                                    <?php if ($integrationService !== null && $integrationService->secretFields() !== []): ?>
+                                        <div class="wizard-meta" style="margin-bottom:.5rem;"><?= e($integrationService->name) ?></div>
+                                        <div class="grid" style="gap:1rem;">
+                                            <?php foreach ($integrationService->secretFields() as $field): ?>
+                                                <?php $renderRotationField($field, 'rotation_input'); ?>
+                                            <?php endforeach; ?>
+                                        </div>
+                                    <?php else: ?>
+                                        <div class="muted"><?= e(__('ui.integrations.no_schema_fields')) ?></div>
+                                    <?php endif; ?>
+                                </div>
+                            <?php endforeach; ?>
                         </div>
                     </div>
-                </section>
-
-                <section class="wizard-step hidden" data-step="3">
-                    <div>
-                        <label for="modal-rotation-integration"><?= e(__('ui.home.rotation_integration')) ?></label>
-                        <select id="modal-rotation-integration" name="rotation_integration_uuid">
-                            <option value=""><?= e(__('ui.app.none')) ?></option>
-                            <?php foreach ($integrations as $integration): ?><option value="<?= e($integration->uuid) ?>"><?= e($integration->name) ?></option><?php endforeach; ?>
-                        </select>
-                    </div>
-                    <div>
-                        <label for="modal-rotation-schedule"><?= e(__('ui.home.rotation_schedule')) ?></label>
-                        <input id="modal-rotation-schedule" class="mono" name="rotation_schedule" placeholder="0 3 * * *">
-                    </div>
-                    <div class="wizard-meta" id="secret-review"></div>
                 </section>
 
                 <div class="actions-end">
@@ -515,7 +565,9 @@ require base_path('resources/views/partials/auth_topbar.php');
         const templateSelect = document.getElementById('modal-template-uuid');
         const staticValueField = document.getElementById('modal-static-value-field');
         const staticValueInput = document.getElementById('modal-secret-value');
-        const dynamicValueInput = document.getElementById('modal-dynamic-secret-value');
+        const dynamicIntegrationSelect = document.getElementById('modal-dynamic-integration');
+        const dynamicScheduleInput = document.getElementById('modal-dynamic-schedule');
+        const dynamicConfigs = Array.from(wizardForm.querySelectorAll('[data-dynamic-config]'));
         const previewField = document.getElementById('modal-template-preview-field');
         const previewDisplay = document.getElementById('modal-generated-display');
         const previewStatus = document.getElementById('modal-template-status');
@@ -535,7 +587,7 @@ require base_path('resources/views/partials/auth_topbar.php');
         let templateValueMode = 'generated';
         let templateValueValid = true;
 
-        const getStepCount = () => secretMode === 'dynamic' ? 3 : 2;
+        const getStepCount = () => 2;
         const isTemplateSelected = () => secretMode === 'static' && templateSelect.value !== '';
         const getBackendType = () => {
             if (secretMode === 'dynamic') {
@@ -547,6 +599,18 @@ require base_path('resources/views/partials/auth_topbar.php');
 
         const updateTemplateSubmitState = () => {
             submitButton.disabled = isTemplateSelected() && !templateValueValid;
+        };
+
+        const syncDynamicConfig = () => {
+            const selectedIntegration = dynamicIntegrationSelect ? dynamicIntegrationSelect.value : '';
+
+            dynamicConfigs.forEach((section) => {
+                const isActive = selectedIntegration !== '' && section.getAttribute('data-dynamic-config') === selectedIntegration;
+                section.classList.toggle('hidden', !isActive);
+                section.querySelectorAll('input, select, textarea').forEach((input) => {
+                    input.disabled = secretMode !== 'dynamic' || !isActive;
+                });
+            });
         };
 
         const setMode = (mode) => {
@@ -874,8 +938,14 @@ require base_path('resources/views/partials/auth_topbar.php');
             staticValueField.classList.toggle('hidden', templateSelected);
             previewField.classList.toggle('hidden', !templateSelected || previewDisplay.value === '');
             staticValueInput.disabled = secretMode !== 'static' || templateSelected;
-            dynamicValueInput.disabled = secretMode !== 'dynamic';
             previewDisplay.disabled = secretMode !== 'static' || !templateSelected;
+            if (dynamicIntegrationSelect) {
+                dynamicIntegrationSelect.disabled = secretMode !== 'dynamic';
+            }
+            if (dynamicScheduleInput) {
+                dynamicScheduleInput.disabled = secretMode !== 'dynamic';
+            }
+            syncDynamicConfig();
 
             if (!templateSelected) {
                 clearTemplatePreview();
@@ -885,10 +955,18 @@ require base_path('resources/views/partials/auth_topbar.php');
         };
 
         const updateReview = () => {
+            if (!review) {
+                return;
+            }
             const name = document.getElementById('modal-secret-name').value.trim() || '...';
             const type = getBackendType();
-            const schedule = document.getElementById('modal-rotation-schedule').value.trim();
-            review.textContent = `${name} / ${type}${schedule !== '' ? ' / ' + schedule : ''}`;
+            const schedule = dynamicScheduleInput ? dynamicScheduleInput.value.trim() : '';
+            const integrationName = dynamicIntegrationSelect && dynamicIntegrationSelect.selectedOptions[0]
+                ? dynamicIntegrationSelect.selectedOptions[0].textContent.trim()
+                : '';
+            review.textContent = secretMode === 'dynamic'
+                ? `${name} / ${type}${integrationName !== '' ? ' / ' + integrationName : ''}${schedule !== '' ? ' / ' + schedule : ''}`
+                : `${name} / ${type}`;
         };
 
         const renderStep = () => {
@@ -926,6 +1004,12 @@ require base_path('resources/views/partials/auth_topbar.php');
                 renderStep();
             });
         });
+        if (dynamicIntegrationSelect) {
+            dynamicIntegrationSelect.addEventListener('change', () => {
+                syncDynamicConfig();
+                updateReview();
+            });
+        }
         templateSelect.addEventListener('change', () => {
             syncTypeFields();
             updateReview();
@@ -984,11 +1068,13 @@ require base_path('resources/views/partials/auth_topbar.php');
                 currentStep = 1;
                 setMode('static');
                 clearTemplatePreview();
+                syncDynamicConfig();
                 renderStep();
             });
         }
 
         setMode('static');
+        syncDynamicConfig();
         renderStep();
     })();
     </script>

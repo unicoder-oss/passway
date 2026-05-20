@@ -4,6 +4,47 @@ $topbarLinks = [
     ['href' => '/rotation-services', 'label' => __('ui.home.rotation_services')],
     ['href' => '/auth/logout', 'label' => __('ui.app.logout')],
 ];
+$renderRotationField = static function (array $field, string $namePrefix, bool $required = true): void {
+    $fieldName = isset($field['name']) && is_string($field['name']) ? trim($field['name']) : '';
+    if ($fieldName === '') {
+        return;
+    }
+
+    $label = isset($field['label']) && is_string($field['label']) && trim($field['label']) !== '' ? $field['label'] : $fieldName;
+    $type = isset($field['type']) && is_string($field['type']) ? $field['type'] : 'string';
+    $placeholder = isset($field['placeholder']) && is_string($field['placeholder']) ? $field['placeholder'] : '';
+    $helpText = isset($field['help_text']) && is_string($field['help_text']) ? $field['help_text'] : '';
+    $inputName = $namePrefix . '[' . $fieldName . ']';
+    $inputId = $namePrefix . '-' . preg_replace('/[^a-z0-9_-]+/i', '-', $fieldName);
+    $isRequired = $required && (($field['required'] ?? false) === true);
+    ?>
+    <div>
+        <label for="<?= e($inputId) ?>"><?= e($label) ?></label>
+        <?php if ($type === 'enum'): ?>
+            <select id="<?= e($inputId) ?>" name="<?= e($inputName) ?>"<?= $isRequired ? ' required' : '' ?>>
+                <?php foreach (($field['options'] ?? []) as $option): ?>
+                    <?php
+                    $optionValue = is_array($option) ? (string) ($option['value'] ?? '') : (string) $option;
+                    $optionLabel = is_array($option) ? (string) ($option['label'] ?? $optionValue) : (string) $option;
+                    ?>
+                    <option value="<?= e($optionValue) ?>"><?= e($optionLabel) ?></option>
+                <?php endforeach; ?>
+            </select>
+        <?php elseif ($type === 'boolean'): ?>
+            <label style="display:flex; gap:.5rem; align-items:center;">
+                <input type="hidden" name="<?= e($inputName) ?>" value="false">
+                <input id="<?= e($inputId) ?>" type="checkbox" name="<?= e($inputName) ?>" value="true">
+                <span><?= e($label) ?></span>
+            </label>
+        <?php elseif (in_array($type, ['secret_text', 'readonly_text', 'textarea'], true)): ?>
+            <textarea id="<?= e($inputId) ?>" class="mono" name="<?= e($inputName) ?>" rows="5" placeholder="<?= e($placeholder) ?>"<?= $isRequired ? ' required' : '' ?>></textarea>
+        <?php else: ?>
+            <input id="<?= e($inputId) ?>" class="<?= $type === 'integer' ? 'mono' : '' ?>" name="<?= e($inputName) ?>" type="<?= e($type === 'integer' ? 'number' : 'text') ?>" placeholder="<?= e($placeholder) ?>"<?= $isRequired ? ' required' : '' ?>>
+        <?php endif; ?>
+        <?php if ($helpText !== ''): ?><div class="muted" style="font-size:.92rem;"><?= e($helpText) ?></div><?php endif; ?>
+    </div>
+    <?php
+};
 require base_path('resources/views/partials/auth_topbar.php');
 ?>
 
@@ -32,9 +73,22 @@ require base_path('resources/views/partials/auth_topbar.php');
                     <?php endforeach; ?>
                 </select>
             </div>
-            <div>
-                <label for="integration-credentials"><?= e(__('ui.integrations.credentials_json')) ?></label>
-                <textarea id="integration-credentials" name="credentials_json" rows="8" placeholder='{"token":"..."}'>{}</textarea>
+            <div id="integration-credential-configs" class="grid" style="gap:1rem;">
+                <?php foreach ($services as $service): ?>
+                    <?php if ($service->isActive && $service->isVerified): ?>
+                        <div class="hidden" data-credential-config="<?= e($service->uuid) ?>">
+                            <?php if ($service->integrationFields() !== []): ?>
+                                <div class="grid" style="gap:1rem;">
+                                    <?php foreach ($service->integrationFields() as $field): ?>
+                                        <?php $renderRotationField($field, 'credentials'); ?>
+                                    <?php endforeach; ?>
+                                </div>
+                            <?php else: ?>
+                                <div class="muted"><?= e(__('ui.integrations.no_schema_fields')) ?></div>
+                            <?php endif; ?>
+                        </div>
+                    <?php endif; ?>
+                <?php endforeach; ?>
             </div>
             <button type="submit"><?= e(__('ui.integrations.create_submit')) ?></button>
         </form>
@@ -62,7 +116,15 @@ require base_path('resources/views/partials/auth_topbar.php');
                         </label>
                         <div>
                             <label><?= e(__('ui.integrations.replace_credentials_optional')) ?></label>
-                            <textarea name="credentials_json" rows="6" placeholder='{"token":"new-value"}'></textarea>
+                            <?php if ($service !== null && $service->integrationFields() !== []): ?>
+                                <div class="grid" style="gap:1rem;">
+                                    <?php foreach ($service->integrationFields() as $field): ?>
+                                        <?php $renderRotationField($field, 'credentials', false); ?>
+                                    <?php endforeach; ?>
+                                </div>
+                            <?php else: ?>
+                                <div class="muted"><?= e(__('ui.integrations.no_schema_fields')) ?></div>
+                            <?php endif; ?>
                         </div>
                         <div class="actions">
                             <button type="submit"><?= e(__('ui.integrations.save')) ?></button>
@@ -75,3 +137,27 @@ require base_path('resources/views/partials/auth_topbar.php');
         </div>
     </section>
 </div>
+
+<script>
+(() => {
+    const serviceSelect = document.getElementById('integration-service');
+    if (!serviceSelect) {
+        return;
+    }
+
+    const configs = Array.from(document.querySelectorAll('[data-credential-config]'));
+    const syncConfigs = () => {
+        const serviceUuid = serviceSelect.value;
+        configs.forEach((section) => {
+            const isActive = section.getAttribute('data-credential-config') === serviceUuid;
+            section.classList.toggle('hidden', !isActive);
+            section.querySelectorAll('input, select, textarea').forEach((input) => {
+                input.disabled = !isActive;
+            });
+        });
+    };
+
+    serviceSelect.addEventListener('change', syncConfigs);
+    syncConfigs();
+})();
+</script>

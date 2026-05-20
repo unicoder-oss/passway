@@ -145,6 +145,7 @@ final class WebController
         $templateOverrides = $this->parseTemplateOverridesRequestInput($request->input('template_overrides'));
         $rotationIntegrationUuid = \trim((string) ($request->input('rotation_integration_uuid') ?? ''));
         $rotationSchedule = \trim((string) ($request->input('rotation_schedule') ?? ''));
+        $rotationInput = $request->input('rotation_input');
 
         try {
             if ($type === 'template' && $templateUuid !== '') {
@@ -157,6 +158,16 @@ final class WebController
                     $templateOverrides,
                     $rotationSchedule !== '' ? $rotationSchedule : null,
                     $value,
+                );
+            } elseif ($type === 'dynamic') {
+                $secret = $this->rotationService->provisionDynamicSecret(
+                    $org->id,
+                    $dirUuid,
+                    $name,
+                    $rotationIntegrationUuid,
+                    $rotationSchedule !== '' ? $rotationSchedule : null,
+                    \is_array($rotationInput) ? $rotationInput : [],
+                    $user->id,
                 );
             } else {
                 $secret = $this->secretService->create(
@@ -267,6 +278,7 @@ final class WebController
             'currentDirPath' => $currentDirPath,
             'templates' => $this->templateService->listAvailable($org->id),
             'integrations' => $this->listActiveIntegrationsForOrg($org->id),
+            'rotationServiceMap' => $this->buildRotationServiceMap(),
             'canManageOrganization' => $canManageOrganization,
             'canViewAudit' => $canViewAudit,
             'canEditContent' => $canEditContent,
@@ -860,13 +872,16 @@ final class WebController
         $org = $this->findOrgOrFail($request);
         $name = \trim((string) ($request->input('name') ?? ''));
         $serviceUuid = \trim((string) ($request->input('rotation_service_uuid') ?? ''));
+        $credentials = $request->input('credentials');
 
         try {
             $this->organizationIntegrationService->create(
                 $org->id,
                 $serviceUuid,
                 $name,
-                $this->parseJsonObjectInput((string) ($request->input('credentials_json') ?? ''), true),
+                \is_array($credentials)
+                    ? (array) $credentials
+                    : $this->parseJsonObjectInput((string) ($request->input('credentials_json') ?? ''), true),
                 $user->id,
             );
         } catch (\Throwable $e) {
@@ -883,6 +898,7 @@ final class WebController
         $integrationUuid = (string) $request->routeParam('intUuid');
         $name = \trim((string) ($request->input('name') ?? ''));
         $credentialsJson = \trim((string) ($request->input('credentials_json') ?? ''));
+        $credentials = $request->input('credentials');
 
         try {
             $this->organizationIntegrationService->update(
@@ -890,7 +906,9 @@ final class WebController
                 $org->id,
                 $user->id,
                 $name,
-                $credentialsJson !== '' ? $this->parseJsonObjectInput($credentialsJson, false) : null,
+                \is_array($credentials)
+                    ? (array) $credentials
+                    : ($credentialsJson !== '' ? $this->parseJsonObjectInput($credentialsJson, false) : null),
                 $request->input('is_active') !== null,
             );
         } catch (\Throwable $e) {
@@ -935,6 +953,7 @@ final class WebController
         $templateOverrides = [];
         $templateParameterSchema = [];
         $templateExtraFields = [];
+        $dynamicRotationView = ['input' => [], 'outputs' => [], 'primary_field' => null, 'service' => null];
 
         if ($secret->type === 'template' && $secret->templateId !== null) {
             $template = Template::findById($secret->templateId);
@@ -951,6 +970,8 @@ final class WebController
                     'type' => $template->type,
                 ];
             }
+        } elseif ($secret->type === 'dynamic') {
+            $dynamicRotationView = $this->secretService->getDynamicSecretView($secret->uuid, $org->id, $user->id);
         }
 
         return $this->html($this->view->render('web/secret_show', [
@@ -970,6 +991,7 @@ final class WebController
             'templateOverrides' => $templateOverrides,
             'templateParameterSchema' => $templateParameterSchema,
             'templateExtraFields' => $templateExtraFields,
+            'dynamicRotationView' => $dynamicRotationView,
             'error' => $request->query('error'),
         ]));
     }

@@ -74,23 +74,20 @@ final class SchedulerServiceTest extends DatabaseTestCase
         $org = $this->orgService->create('Org', $owner->id);
         $dir = $this->dirService->create($org->id, null, 'Secrets', $owner->id);
 
-        $template = Database::getInstance()->fetchOne(
-            'SELECT uuid FROM templates WHERE type = ? ORDER BY id ASC LIMIT 1',
-            ['password']
-        );
-
-        $due = $this->secretService->createFromTemplate(
+        $due = $this->secretService->create(
             $org->id,
             $dir->uuid,
             'Due secret',
-            (string) $template['uuid'],
+            'dynamic',
+            'due-value',
             $owner->id,
         );
-        $future = $this->secretService->createFromTemplate(
+        $future = $this->secretService->create(
             $org->id,
             $dir->uuid,
             'Future secret',
-            (string) $template['uuid'],
+            'dynamic',
+            'future-value',
             $owner->id,
         );
 
