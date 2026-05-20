@@ -105,8 +105,10 @@ final class RotationService
     /** @return self[] */
     public static function findAllActive(): array
     {
+        $isActiveCondition = Database::getInstance()->getDriver() === 'pgsql' ? 'is_active = TRUE' : 'is_active = 1';
+
         $rows = Database::getInstance()->fetchAll(
-            'SELECT * FROM rotation_services WHERE is_active = 1 ORDER BY name ASC'
+            "SELECT * FROM rotation_services WHERE {$isActiveCondition} ORDER BY name ASC"
         );
 
         return \array_map(fn($row) => self::fromRow($row), $rows);

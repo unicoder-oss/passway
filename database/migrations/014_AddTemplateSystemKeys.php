@@ -21,9 +21,11 @@ final class AddTemplateSystemKeys extends Migration
             'ssh_key.ed25519' => ['ssh_key', 'SSH Key Ed25519'],
         ];
 
+        $isSystemCondition = $this->driver === 'pgsql' ? 'is_system = TRUE' : 'is_system = 1';
+
         foreach ($updates as $systemKey => [$type, $name]) {
             $this->db->getPdo()->prepare(
-                'UPDATE templates SET system_key = ? WHERE is_system = 1 AND organization_id IS NULL AND type = ? AND name = ?'
+                "UPDATE templates SET system_key = ? WHERE {$isSystemCondition} AND organization_id IS NULL AND type = ? AND name = ?"
             )->execute([$systemKey, $type, $name]);
         }
     }
