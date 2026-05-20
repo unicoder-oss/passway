@@ -76,8 +76,8 @@ final class SecretController
             ? \trim((string) $request->input('rotation_schedule'))
             : null;
         $templateOverrides = $this->parseTemplateOverridesInput($request->input('template_overrides'));
-        $generatedValue = $request->input('generated_value');
-        $generatedValue = \is_string($generatedValue) ? $generatedValue : null;
+        $templateValue = $request->input('value');
+        $templateValue = \is_string($templateValue) ? $templateValue : null;
 
         if ($name === '') {
             return Response::validationError(['name' => [__('ui.backend.common.name_required')]]);
@@ -98,7 +98,7 @@ final class SecretController
                     $user->id,
                     $templateOverrides,
                     $rotationSchedule !== '' ? $rotationSchedule : null,
-                    $generatedValue,
+                    $templateValue,
                 )
                 : $this->secretService->create(
                     $org->id,
@@ -131,6 +131,8 @@ final class SecretController
         $org = $this->findOrgOrFail($request);
         $dirUuid = (string) $request->routeParam('dirUuid');
         $templateUuid = \trim((string) ($request->input('template_uuid') ?? ''));
+        $providedValue = $request->input('value');
+        $providedValue = \is_string($providedValue) ? $providedValue : null;
 
         if ($templateUuid === '') {
             return Response::validationError(['template_uuid' => [__('ui.backend.secret.template_not_found')]]);
@@ -143,6 +145,8 @@ final class SecretController
                 $user->id,
                 $templateUuid,
                 $this->parseTemplateOverridesInput($request->input('template_overrides')),
+                $providedValue,
+                $this->parseBooleanInput($request->input('normalize_value')),
             );
         } catch (AuthException $e) {
             return Response::error($e->getMessage(), $e->getCode() ?: 403);
@@ -195,7 +199,7 @@ final class SecretController
                 $org->id,
                 $user->id,
                 $this->parseTemplateOverridesInput($request->input('template_overrides')),
-                \is_string($request->input('generated_value')) ? (string) $request->input('generated_value') : null,
+                \is_string($request->input('value')) ? (string) $request->input('value') : null,
             );
         } catch (AuthException $e) {
             return Response::error($e->getMessage(), $e->getCode() ?: 403);
@@ -402,5 +406,22 @@ final class SecretController
         }
 
         return $decoded;
+    }
+
+    private function parseBooleanInput(mixed $input): bool
+    {
+        if (\is_bool($input)) {
+            return $input;
+        }
+
+        if (\is_string($input)) {
+            return \in_array(\strtolower($input), ['1', 'true', 'on', 'yes'], true);
+        }
+
+        if (\is_int($input)) {
+            return $input === 1;
+        }
+
+        return false;
     }
 }

@@ -141,8 +141,6 @@ final class WebController
         $name = \trim((string) ($request->input('name') ?? ''));
         $type = \trim((string) ($request->input('type') ?? 'static'));
         $value = (string) ($request->input('value') ?? '');
-        $generatedValue = $request->input('generated_value');
-        $generatedValue = \is_string($generatedValue) ? $generatedValue : null;
         $templateUuid = \trim((string) ($request->input('template_uuid') ?? ''));
         $templateOverrides = $this->parseTemplateOverridesRequestInput($request->input('template_overrides'));
         $rotationIntegrationUuid = \trim((string) ($request->input('rotation_integration_uuid') ?? ''));
@@ -150,7 +148,7 @@ final class WebController
 
         try {
             if ($type === 'template' && $templateUuid !== '') {
-                $this->secretService->createFromTemplate(
+                $secret = $this->secretService->createFromTemplate(
                     $org->id,
                     $dirUuid,
                     $name,
@@ -158,10 +156,10 @@ final class WebController
                     $user->id,
                     $templateOverrides,
                     $rotationSchedule !== '' ? $rotationSchedule : null,
-                    $generatedValue,
+                    $value,
                 );
             } else {
-                $this->secretService->create(
+                $secret = $this->secretService->create(
                     $org->id,
                     $dirUuid,
                     $name,
@@ -176,7 +174,7 @@ final class WebController
             return Response::redirect($this->organizationUrl($org->uuid, $this->isRootSecretDirectoryUuid($org, $dirUuid) ? null : $dirUuid, $e->getMessage()));
         }
 
-        return Response::redirect($successRedirect);
+        return Response::redirect($this->secretUrl($org->uuid, $dirUuid, $secret->uuid));
     }
 
     public function showOrganization(Request $request): Response
@@ -1040,7 +1038,7 @@ final class WebController
                 $org->id,
                 $user->id,
                 $this->parseTemplateOverridesRequestInput($request->input('template_overrides')),
-                \is_string($request->input('generated_value')) ? (string) $request->input('generated_value') : null,
+                \is_string($request->input('value')) ? (string) $request->input('value') : null,
             );
         } catch (\Throwable $e) {
             return Response::redirect($this->secretUrl($org->uuid, $dirUuid, $secUuid, $e->getMessage()));

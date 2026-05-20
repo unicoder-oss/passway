@@ -9,7 +9,10 @@ $secretAction = $currentDir !== null
     ? '/organizations/' . $organization->uuid . '/directories/' . $currentDir->uuid . '/secrets'
     : '/organizations/' . $organization->uuid . '/secrets';
 $secretDirUuid = $currentDir?->uuid ?? $rootSecretDirectory?->uuid ?? '';
-$secretContextName = $currentDir?->name ?? __('ui.app.root');
+$templateNamesById = [];
+foreach ($templates as $template) {
+    $templateNamesById[$template->id] = $template->name;
+}
 require base_path('resources/views/partials/auth_topbar.php');
 ?>
 
@@ -268,7 +271,13 @@ require base_path('resources/views/partials/auth_topbar.php');
                         </svg>
                         <div class="org-entry-copy">
                             <div class="org-entry-title"><?= e($secret->name) ?></div>
-                            <div class="muted" style="font-size:.92rem;"><?= e(__('ui.secret.meta', ['type' => __('ui.home.types.' . $secret->type), 'version' => (string) $secret->version, 'directory' => $secretContextName])) ?></div>
+                            <div class="muted" style="font-size:.92rem;">
+                                <?= e(__('ui.home.types.' . $secret->type)) ?>
+                                <?php if ($secret->type === 'template' && $secret->templateId !== null && isset($templateNamesById[$secret->templateId])): ?>
+                                    <?= e(' · ' . $templateNamesById[$secret->templateId]) ?>
+                                <?php endif; ?>
+                                <?= e(' · ' . __('ui.home.version', ['version' => (string) $secret->version])) ?>
+                            </div>
                         </div>
                     </div>
                 </a>
@@ -344,7 +353,6 @@ require base_path('resources/views/partials/auth_topbar.php');
             <form id="secret-modal-form" method="POST" action="<?= e($secretAction) ?>" class="grid" style="gap:1rem;">
                 <input type="hidden" id="modal-secret-type" name="type" value="static">
                 <input type="hidden" id="modal-template-overrides" name="template_overrides" value="{}">
-                <input type="hidden" id="modal-generated-value" name="generated_value" value="">
                 <section class="wizard-step" data-step="1">
                     <div>
                         <label for="modal-secret-name"><?= e(__('ui.home.secret_name')) ?></label>
@@ -373,9 +381,13 @@ require base_path('resources/views/partials/auth_topbar.php');
                             <textarea id="modal-secret-value" class="mono" name="value" rows="6" placeholder="<?= e(__('ui.home.value_placeholder')) ?>"></textarea>
                         </div>
                         <div id="modal-template-preview-field" class="hidden">
-                            <label for="modal-generated-display"><?= e(__('ui.home.generated_value')) ?></label>
+                            <label for="modal-generated-display"><?= e(__('ui.home.secret_value')) ?></label>
+                            <div class="actions hidden" id="modal-template-upload-actions" style="margin-bottom:.5rem;">
+                                <button type="button" class="secondary" id="modal-template-upload-button"><?= e(__('ui.home.upload_private_key')) ?></button>
+                                <input type="file" id="modal-template-file" class="hidden" accept=".pem,.key,.txt,.ppk,.openssh,*/*">
+                            </div>
                             <div class="grid field-actions-2" style="gap:.75rem; align-items:start;">
-                                <textarea id="modal-generated-display" class="mono" rows="8" readonly></textarea>
+                                <textarea id="modal-generated-display" class="mono" name="value" rows="8"></textarea>
                                 <div class="grid" style="gap:.5rem; align-content:start;">
                                     <button type="button" class="secondary" id="modal-regenerate-button"><?= e(__('ui.home.regenerate')) ?></button>
                                     <div class="wizard-meta" id="modal-template-status"></div>
@@ -508,15 +520,20 @@ require base_path('resources/views/partials/auth_topbar.php');
         const previewDisplay = document.getElementById('modal-generated-display');
         const previewStatus = document.getElementById('modal-template-status');
         const regenerateButton = document.getElementById('modal-regenerate-button');
+        const templateUploadActions = document.getElementById('modal-template-upload-actions');
+        const templateFileInput = document.getElementById('modal-template-file');
+        const templateUploadButton = document.getElementById('modal-template-upload-button');
         const templateParams = document.getElementById('modal-template-params');
         const templateExtraFields = document.getElementById('modal-template-extra-fields');
         const templateOverridesInput = document.getElementById('modal-template-overrides');
-        const generatedValueInput = document.getElementById('modal-generated-value');
         const previewUrl = <?= json_encode('/api/v1/organizations/' . $organization->uuid . '/directories/' . $secretDirUuid . '/secrets/template-preview') ?>;
         let currentStep = 1;
         let secretMode = 'static';
         let previewRequestId = 0;
         let previewTimer = null;
+        let currentTemplateType = null;
+        let templateValueMode = 'generated';
+        let templateValueValid = true;
 
         const getStepCount = () => secretMode === 'dynamic' ? 3 : 2;
         const isTemplateSelected = () => secretMode === 'static' && templateSelect.value !== '';
@@ -526,6 +543,10 @@ require base_path('resources/views/partials/auth_topbar.php');
             }
 
             return templateSelect.value !== '' ? 'template' : 'static';
+        };
+
+        const updateTemplateSubmitState = () => {
+            submitButton.disabled = isTemplateSelected() && !templateValueValid;
         };
 
         const setMode = (mode) => {
@@ -557,7 +578,7 @@ require base_path('resources/views/partials/auth_topbar.php');
             });
         };
 
-        const schedulePreviewRefresh = () => {
+        const schedulePreviewRefresh = (providedValue = null, replaceDisplay = true, normalizeValue = false) => {
             if (!isTemplateSelected()) {
                 return;
             }
@@ -568,7 +589,7 @@ require base_path('resources/views/partials/auth_topbar.php');
 
             previewTimer = window.setTimeout(() => {
                 previewTimer = null;
-                void refreshTemplatePreview(false);
+                void refreshTemplatePreview(false, providedValue, replaceDisplay, normalizeValue);
             }, 220);
         };
 
@@ -740,23 +761,33 @@ require base_path('resources/views/partials/auth_topbar.php');
             }
 
             templateParams.querySelectorAll('[data-template-param]').forEach((input) => {
-                input.addEventListener(input.type === 'checkbox' ? 'change' : 'input', schedulePreviewRefresh);
+                input.addEventListener(input.type === 'checkbox' ? 'change' : 'input', () => {
+                    schedulePreviewRefresh(
+                        templateValueMode === 'manual' ? previewDisplay.value : null,
+                        templateValueMode !== 'manual',
+                        false,
+                    );
+                });
             });
         };
 
         const clearTemplatePreview = () => {
-            generatedValueInput.value = '';
             templateOverridesInput.value = '{}';
             previewDisplay.value = '';
             previewStatus.textContent = '';
+            currentTemplateType = null;
+            templateValueMode = 'generated';
+            templateValueValid = true;
             previewField.classList.add('hidden');
+            templateUploadActions.classList.add('hidden');
             templateParams.innerHTML = '';
             templateParams.classList.add('hidden');
             templateExtraFields.innerHTML = '';
             templateExtraFields.classList.add('hidden');
+            updateTemplateSubmitState();
         };
 
-        const refreshTemplatePreview = async (isManual) => {
+        const refreshTemplatePreview = async (isManual, providedValue = null, replaceDisplay = true, normalizeValue = false) => {
             if (previewTimer !== null) {
                 window.clearTimeout(previewTimer);
                 previewTimer = null;
@@ -769,6 +800,8 @@ require base_path('resources/views/partials/auth_topbar.php');
 
             previewRequestId += 1;
             const requestId = previewRequestId;
+            templateValueValid = false;
+            updateTemplateSubmitState();
             previewStatus.textContent = <?= json_encode((string) __('ui.home.template_generating')) ?>;
             regenerateButton.disabled = true;
 
@@ -783,6 +816,8 @@ require base_path('resources/views/partials/auth_topbar.php');
                     body: JSON.stringify({
                         template_uuid: templateSelect.value,
                         template_overrides: collectTemplateOverrides(),
+                        value: providedValue,
+                        normalize_value: normalizeValue,
                     }),
                 });
                 const payload = await response.json();
@@ -796,20 +831,28 @@ require base_path('resources/views/partials/auth_topbar.php');
                 }
 
                 const data = payload.data;
-                generatedValueInput.value = data.value;
+                currentTemplateType = data.template_type || null;
                 templateOverridesInput.value = JSON.stringify(data.template_overrides);
-                previewDisplay.value = data.display_value;
+                if (replaceDisplay || providedValue === null) {
+                    previewDisplay.value = data.display_value;
+                }
                 previewField.classList.remove('hidden');
+                templateUploadActions.classList.toggle('hidden', currentTemplateType !== 'ssh_key');
+                templateValueValid = true;
                 previewStatus.textContent = isManual ? <?= json_encode((string) __('ui.home.regenerated')) ?> : '';
                 renderParameterSchema(data.parameter_schema || []);
                 renderExtraFields(data.extra_fields || []);
+                updateTemplateSubmitState();
             } catch (error) {
                 if (requestId !== previewRequestId) {
                     return;
                 }
 
-                generatedValueInput.value = '';
+                templateValueValid = false;
+                templateExtraFields.innerHTML = '';
+                templateExtraFields.classList.add('hidden');
                 previewStatus.textContent = error instanceof Error ? error.message : <?= json_encode((string) __('ui.home.template_preview_error')) ?>;
+                updateTemplateSubmitState();
             } finally {
                 if (requestId === previewRequestId) {
                     regenerateButton.disabled = false;
@@ -829,12 +872,15 @@ require base_path('resources/views/partials/auth_topbar.php');
             });
 
             staticValueField.classList.toggle('hidden', templateSelected);
-            previewField.classList.toggle('hidden', !templateSelected || generatedValueInput.value === '');
+            previewField.classList.toggle('hidden', !templateSelected || previewDisplay.value === '');
             staticValueInput.disabled = secretMode !== 'static' || templateSelected;
             dynamicValueInput.disabled = secretMode !== 'dynamic';
+            previewDisplay.disabled = secretMode !== 'static' || !templateSelected;
 
             if (!templateSelected) {
                 clearTemplatePreview();
+            } else {
+                updateTemplateSubmitState();
             }
         };
 
@@ -884,18 +930,48 @@ require base_path('resources/views/partials/auth_topbar.php');
             syncTypeFields();
             updateReview();
             if (isTemplateSelected()) {
-                void refreshTemplatePreview(false);
+                templateValueMode = 'generated';
+                void refreshTemplatePreview(false, null, true, false);
             }
         });
         regenerateButton.addEventListener('click', () => {
-            void refreshTemplatePreview(true);
+            templateValueMode = 'generated';
+            void refreshTemplatePreview(true, null, true, false);
         });
         wizardForm.addEventListener('submit', (event) => {
-            if (isTemplateSelected() && generatedValueInput.value === '') {
+            if (isTemplateSelected() && (!templateValueValid || previewDisplay.value.trim() === '')) {
                 event.preventDefault();
-                void refreshTemplatePreview(true);
+                void refreshTemplatePreview(true, previewDisplay.value, false, false);
             }
         });
+
+        previewDisplay.addEventListener('input', () => {
+            if (!isTemplateSelected()) {
+                return;
+            }
+
+            templateValueMode = 'manual';
+            schedulePreviewRefresh(previewDisplay.value, false, false);
+        });
+
+        if (templateUploadButton !== null && templateFileInput !== null) {
+            templateUploadButton.addEventListener('click', () => {
+                templateFileInput.click();
+            });
+
+            templateFileInput.addEventListener('change', async () => {
+                const file = templateFileInput.files && templateFileInput.files[0] ? templateFileInput.files[0] : null;
+                if (!file) {
+                    return;
+                }
+
+                const text = await file.text();
+                previewDisplay.value = text;
+                templateValueMode = 'manual';
+                await refreshTemplatePreview(false, text, true, true);
+                templateFileInput.value = '';
+            });
+        }
         wizardForm.addEventListener('input', updateReview);
 
         if (secretModal) {

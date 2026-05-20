@@ -89,7 +89,7 @@ final class TemplateServiceTest extends DatabaseTestCase
         ]);
     }
 
-    public function test_generate_ssh_key_returns_json_pair(): void
+    public function test_generate_ssh_key_returns_private_key_string(): void
     {
         $template = Database::getInstance()->fetchOne(
             'SELECT uuid FROM templates WHERE type = ? AND name = ? LIMIT 1',
@@ -97,12 +97,21 @@ final class TemplateServiceTest extends DatabaseTestCase
         );
 
         $value = $this->svc->generate((string) $template['uuid']);
-        $decoded = \json_decode($value, true);
 
-        $this->assertIsArray($decoded);
-        $this->assertStringStartsWith('-----BEGIN OPENSSH PRIVATE KEY-----', (string) $decoded['private_key']);
-        $this->assertStringStartsWith('ssh-ed25519 ', (string) $decoded['public_key']);
-        $this->assertSame('ed25519', $decoded['algorithm']);
+        $this->assertStringStartsWith('-----BEGIN OPENSSH PRIVATE KEY-----', $value);
+    }
+
+    public function test_generate_ssh_key_returns_new_value_each_time(): void
+    {
+        $template = Database::getInstance()->fetchOne(
+            'SELECT uuid FROM templates WHERE type = ? AND name = ? LIMIT 1',
+            ['ssh_key', 'SSH Key Ed25519']
+        );
+
+        $first = $this->svc->generate((string) $template['uuid']);
+        $second = $this->svc->generate((string) $template['uuid']);
+
+        $this->assertNotSame($first, $second);
     }
 
     public function test_preview_password_returns_parameter_schema(): void
@@ -133,5 +142,19 @@ final class TemplateServiceTest extends DatabaseTestCase
         $this->assertCount(1, $preview['extra_fields']);
         $this->assertSame('public_key', $preview['extra_fields'][0]['key']);
         $this->assertStringStartsWith('ssh-ed25519 ', $preview['extra_fields'][0]['value']);
+    }
+
+    public function test_describe_provided_ssh_private_key_normalizes_and_derives_public_key(): void
+    {
+        $template = Database::getInstance()->fetchOne(
+            'SELECT uuid FROM templates WHERE type = ? AND name = ? LIMIT 1',
+            ['ssh_key', 'SSH Key Ed25519']
+        );
+        $generated = $this->svc->generate((string) $template['uuid']);
+
+        $described = $this->svc->describeProvidedValue((string) $template['uuid'], $generated);
+
+        $this->assertStringStartsWith('-----BEGIN OPENSSH PRIVATE KEY-----', $described['value']);
+        $this->assertStringStartsWith('ssh-ed25519 ', $described['extra_fields'][0]['value']);
     }
 }

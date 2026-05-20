@@ -1,6 +1,5 @@
 <?php
 $topbarLinks = [
-    ['href' => $directoryBackUrl, 'label' => __('ui.secret.back_to_directory')],
     ['href' => '/auth/logout', 'label' => __('ui.app.logout')],
 ];
 require base_path('resources/views/partials/auth_topbar.php');
@@ -24,6 +23,15 @@ $templatePreviewUrl = '/api/v1/organizations/' . $organization->uuid . '/directo
     .template-params-layout {
         display: grid;
         gap: 1rem;
+    }
+    .secret-page-shell {
+        display: grid;
+        gap: 1rem;
+        align-items: start;
+    }
+    .secret-back-link {
+        width: fit-content;
+        min-width: 120px;
     }
     .template-range-field {
         display: grid;
@@ -69,6 +77,9 @@ $templatePreviewUrl = '/api/v1/organizations/' . $organization->uuid . '/directo
         text-align: left;
     }
     @media (min-width: 720px) {
+        .secret-page-shell {
+            grid-template-columns: auto minmax(0, 1fr);
+        }
         .template-params-columns {
             grid-template-columns: minmax(0, 1fr) minmax(0, 1fr);
             align-items: start;
@@ -76,11 +87,16 @@ $templatePreviewUrl = '/api/v1/organizations/' . $organization->uuid . '/directo
     }
 </style>
 
-<div class="grid grid-2-compact" style="align-items:start; padding-bottom:2rem;">
+<div class="secret-page-shell" style="padding-bottom:2rem;">
+    <div>
+        <a class="button secondary secret-back-link" href="<?= e($directoryBackUrl) ?>"><?= e(__('ui.secret.back')) ?></a>
+    </div>
+
+    <div class="grid grid-2-compact" style="align-items:start;">
     <section class="panel" style="padding:1.5rem; display:grid; gap:1rem;">
         <div>
             <h1 style="margin:0; font-size:1.6rem;"><?= e($secret->name) ?></h1>
-            <p class="muted" style="margin:.45rem 0 0;"><?= e(__('ui.secret.meta', ['type' => __('ui.home.types.' . $secret->type), 'version' => (string) $secret->version, 'directory' => $directoryDisplayName])) ?></p>
+            <p class="muted" style="margin:.45rem 0 0;"><?= e(__('ui.home.version', ['version' => (string) $secret->version])) ?></p>
             <div class="actions" style="margin-top:.75rem;">
                 <span class="pill"><?= e(__('ui.home.types.' . $secret->type)) ?></span>
                 <?php if ($isDynamicSecret && $secret->rotationSchedule !== null && $secret->rotationSchedule !== ''): ?><span class="pill mono"><?= e(__('ui.secret.schedule', ['schedule' => $secret->rotationSchedule])) ?></span><?php endif; ?>
@@ -95,6 +111,7 @@ $templatePreviewUrl = '/api/v1/organizations/' . $organization->uuid . '/directo
             <button type="button" class="secondary" id="secret-value-mask" style="justify-content:flex-start; min-height:120px; text-align:left;"><?= e(__('ui.secret.click_to_reveal')) ?></button>
             <textarea id="secret-value-display" class="mono hidden" rows="8" readonly><?= e($displayValue ?? $value) ?></textarea>
             <div class="actions hidden" id="secret-value-actions">
+                <button type="button" class="secondary" data-copy-target="secret-value-display"><?= e(__('ui.secret.copy_value')) ?></button>
                 <button type="button" class="secondary" id="secret-value-hide"><?= e(__('ui.secret.hide_value')) ?></button>
             </div>
         </div>
@@ -102,7 +119,11 @@ $templatePreviewUrl = '/api/v1/organizations/' . $organization->uuid . '/directo
         <?php foreach ($templateExtraFields as $field): ?>
             <div class="panel panel-muted" style="padding:1rem; display:grid; gap:.75rem;">
                 <label><?= e($field['label']) ?></label>
-                <textarea class="mono" rows="4" readonly><?= e($field['value']) ?></textarea>
+                <?php $fieldId = 'template-extra-field-' . preg_replace('/[^a-z0-9_-]+/i', '-', (string) $field['key']); ?>
+                <textarea id="<?= e($fieldId) ?>" class="mono" rows="4" readonly><?= e($field['value']) ?></textarea>
+                <div class="actions">
+                    <button type="button" class="secondary" data-copy-target="<?= e($fieldId) ?>"><?= e(__('ui.secret.copy_value')) ?></button>
+                </div>
             </div>
         <?php endforeach; ?>
     </section>
@@ -119,9 +140,7 @@ $templatePreviewUrl = '/api/v1/organizations/' . $organization->uuid . '/directo
                         <button type="submit"><?= e(__('ui.secret.rotate_secret')) ?></button>
                     </form>
                 <?php endif; ?>
-                <form method="POST" action="<?= e($deleteAction) ?>">
-                    <button type="submit" class="danger"><?= e(__('ui.secret.delete_secret')) ?></button>
-                </form>
+                <button type="button" class="danger" data-open-modal="delete-secret-modal"><?= e(__('ui.secret.delete_secret')) ?></button>
             </div>
         </div>
         <div class="panel" style="padding:1rem;">
@@ -167,7 +186,6 @@ $templatePreviewUrl = '/api/v1/organizations/' . $organization->uuid . '/directo
         <?php if ($isTemplateSecret && $templateDetails !== null): ?>
             <form method="POST" action="<?= e($regenerateAction) ?>" id="template-secret-form" class="grid" style="gap:1rem;">
                 <input type="hidden" name="template_overrides" id="template-secret-overrides" value='<?= e(json_encode($templateOverrides, JSON_UNESCAPED_UNICODE | JSON_UNESCAPED_SLASHES) ?: '{}') ?>'>
-                <input type="hidden" name="generated_value" id="template-secret-generated-value" value="<?= e($value) ?>">
                 <div>
                     <label for="template-secret-select"><?= e(__('ui.home.template')) ?></label>
                     <select id="template-secret-select" disabled>
@@ -175,9 +193,15 @@ $templatePreviewUrl = '/api/v1/organizations/' . $organization->uuid . '/directo
                     </select>
                 </div>
                 <div>
-                    <label for="template-secret-display"><?= e(__('ui.home.generated_value')) ?></label>
+                    <label for="template-secret-display"><?= e(__('ui.home.secret_value')) ?></label>
+                    <?php if ($templateDetails['type'] === 'ssh_key'): ?>
+                        <div class="actions" style="margin-bottom:.5rem;">
+                            <button type="button" class="secondary" id="template-secret-upload-button"><?= e(__('ui.home.upload_private_key')) ?></button>
+                            <input type="file" id="template-secret-file" class="hidden" accept=".pem,.key,.txt,.ppk,.openssh,*/*">
+                        </div>
+                    <?php endif; ?>
                     <div class="grid field-actions-2" style="gap:.75rem; align-items:start;">
-                        <textarea id="template-secret-display" class="mono" rows="8" readonly><?= e($displayValue) ?></textarea>
+                        <textarea id="template-secret-display" class="mono" name="value" rows="8"><?= e($displayValue) ?></textarea>
                         <div class="grid" style="gap:.5rem; align-content:start;">
                             <button type="button" class="secondary" id="template-secret-regenerate-button"><?= e(__('ui.home.regenerate')) ?></button>
                             <div class="wizard-meta" id="template-secret-status"></div>
@@ -243,14 +267,48 @@ $templatePreviewUrl = '/api/v1/organizations/' . $organization->uuid . '/directo
     </dialog>
 <?php endif; ?>
 
+<dialog id="delete-secret-modal" class="modal">
+    <div class="modal-body">
+        <div>
+            <h3 style="margin:0 0 .35rem;"><?= e(__('ui.secret.delete_secret')) ?></h3>
+            <div class="wizard-meta"><?= e(__('ui.secret.delete_secret_confirm')) ?></div>
+        </div>
+        <form method="POST" action="<?= e($deleteAction) ?>" class="actions-end">
+            <button type="button" class="secondary" data-close-modal="delete-secret-modal"><?= e(__('ui.organization.cancel')) ?></button>
+            <button type="submit" class="danger"><?= e(__('ui.secret.delete_secret')) ?></button>
+        </form>
+    </div>
+</dialog>
+
+    </div>
+</div>
+
 <script>
 (() => {
     const openButtons = document.querySelectorAll('[data-open-modal]');
     const closeButtons = document.querySelectorAll('[data-close-modal]');
+    const copyButtons = document.querySelectorAll('[data-copy-target]');
     const valueMask = document.getElementById('secret-value-mask');
     const valueDisplay = document.getElementById('secret-value-display');
     const valueActions = document.getElementById('secret-value-actions');
     const valueHide = document.getElementById('secret-value-hide');
+
+    const copyText = async (text) => {
+        if (navigator.clipboard && typeof navigator.clipboard.writeText === 'function') {
+            await navigator.clipboard.writeText(text);
+            return;
+        }
+
+        const helper = document.createElement('textarea');
+        helper.value = text;
+        helper.setAttribute('readonly', 'readonly');
+        helper.style.position = 'absolute';
+        helper.style.left = '-9999px';
+        document.body.appendChild(helper);
+        helper.select();
+        document.execCommand('copy');
+        document.body.removeChild(helper);
+    };
 
     openButtons.forEach((button) => {
         button.addEventListener('click', () => {
@@ -266,6 +324,30 @@ $templatePreviewUrl = '/api/v1/organizations/' . $organization->uuid . '/directo
             const dialog = document.getElementById(button.getAttribute('data-close-modal'));
             if (dialog) {
                 dialog.close();
+            }
+        });
+    });
+
+    copyButtons.forEach((button) => {
+        button.addEventListener('click', async () => {
+            const targetId = button.getAttribute('data-copy-target');
+            const target = targetId !== null ? document.getElementById(targetId) : null;
+            if (target === null) {
+                return;
+            }
+
+            try {
+                await copyText(target.value || target.textContent || '');
+                const original = button.textContent;
+                button.textContent = <?= json_encode((string) __('ui.secret.copied')) ?>;
+                window.setTimeout(() => {
+                    button.textContent = original;
+                }, 1200);
+            } catch (_error) {
+                button.textContent = <?= json_encode((string) __('ui.secret.copy_failed')) ?>;
+                window.setTimeout(() => {
+                    button.textContent = <?= json_encode((string) __('ui.secret.copy_value')) ?>;
+                }, 1200);
             }
         });
     });
@@ -293,12 +375,14 @@ $templatePreviewUrl = '/api/v1/organizations/' . $organization->uuid . '/directo
     const templateUuid = <?= json_encode($templateDetails['uuid'] ?? '') ?>;
     const status = document.getElementById('template-secret-status');
     const display = document.getElementById('template-secret-display');
+    const templateFileInput = document.getElementById('template-secret-file');
+    const templateUploadButton = document.getElementById('template-secret-upload-button');
     const extraFields = document.getElementById('template-secret-extra-fields');
     const params = document.getElementById('template-secret-params');
     const overridesInput = document.getElementById('template-secret-overrides');
-    const generatedValueInput = document.getElementById('template-secret-generated-value');
     const regenerateButton = document.getElementById('template-secret-regenerate-button');
     const replaceModal = document.getElementById('replace-secret-modal');
+    const saveButton = templateForm.querySelector('button[type="submit"]');
     const initialSchema = <?= json_encode($templateParameterSchema, JSON_UNESCAPED_UNICODE | JSON_UNESCAPED_SLASHES) ?>;
     const initialExtraFields = <?= json_encode($templateExtraFields, JSON_UNESCAPED_UNICODE | JSON_UNESCAPED_SLASHES) ?>;
     const initialOverrides = <?= json_encode($templateOverrides, JSON_UNESCAPED_UNICODE | JSON_UNESCAPED_SLASHES) ?>;
@@ -306,15 +390,23 @@ $templatePreviewUrl = '/api/v1/organizations/' . $organization->uuid . '/directo
     const initialDisplayValue = <?= json_encode($displayValue, JSON_UNESCAPED_UNICODE | JSON_UNESCAPED_SLASHES) ?>;
     let previewRequestId = 0;
     let previewTimer = null;
+    let templateValueMode = 'generated';
+    let templateValueValid = true;
 
-    const schedulePreviewRequest = () => {
+    const updateSaveState = () => {
+        if (saveButton !== null) {
+            saveButton.disabled = !templateValueValid;
+        }
+    };
+
+    const schedulePreviewRequest = (providedValue = null, replaceDisplay = true, normalizeValue = false) => {
         if (previewTimer !== null) {
             window.clearTimeout(previewTimer);
         }
 
         previewTimer = window.setTimeout(() => {
             previewTimer = null;
-            void requestPreview(false);
+            void requestPreview(false, providedValue, replaceDisplay, normalizeValue);
         }, 220);
     };
 
@@ -357,7 +449,7 @@ $templatePreviewUrl = '/api/v1/organizations/' . $organization->uuid . '/directo
         return overrides;
     };
 
-    const requestPreview = async (isManual) => {
+    const requestPreview = async (isManual, providedValue = null, replaceDisplay = true, normalizeValue = false) => {
         if (previewTimer !== null) {
             window.clearTimeout(previewTimer);
             previewTimer = null;
@@ -365,6 +457,8 @@ $templatePreviewUrl = '/api/v1/organizations/' . $organization->uuid . '/directo
 
         previewRequestId += 1;
         const requestId = previewRequestId;
+        templateValueValid = false;
+        updateSaveState();
         regenerateButton.disabled = true;
         status.textContent = <?= json_encode((string) __('ui.home.template_generating')) ?>;
 
@@ -379,6 +473,8 @@ $templatePreviewUrl = '/api/v1/organizations/' . $organization->uuid . '/directo
                 body: JSON.stringify({
                     template_uuid: templateUuid,
                     template_overrides: collectOverrides(),
+                    value: providedValue,
+                    normalize_value: normalizeValue,
                 }),
             });
             const payload = await response.json();
@@ -391,10 +487,14 @@ $templatePreviewUrl = '/api/v1/organizations/' . $organization->uuid . '/directo
                 throw new Error(payload.error || <?= json_encode((string) __('ui.home.template_preview_error')) ?>);
             }
 
-            applyPreview(payload.data, isManual);
+            applyPreview(payload.data, isManual, replaceDisplay || providedValue === null);
         } catch (error) {
             if (requestId === previewRequestId) {
+                templateValueValid = false;
+                extraFields.innerHTML = '';
+                extraFields.classList.add('hidden');
                 status.textContent = error instanceof Error ? error.message : <?= json_encode((string) __('ui.home.template_preview_error')) ?>;
+                updateSaveState();
             }
         } finally {
             if (requestId === previewRequestId) {
@@ -478,7 +578,11 @@ $templatePreviewUrl = '/api/v1/organizations/' . $organization->uuid . '/directo
 
                 const syncLengthValue = (source, target) => {
                     target.value = source.value;
-                    schedulePreviewRequest();
+                    schedulePreviewRequest(
+                        templateValueMode === 'manual' ? display.value : null,
+                        templateValueMode !== 'manual',
+                        false,
+                    );
                 };
 
                 rangeInput.addEventListener('input', () => syncLengthValue(rangeInput, numberInput));
@@ -548,30 +652,62 @@ $templatePreviewUrl = '/api/v1/organizations/' . $organization->uuid . '/directo
 
         params.querySelectorAll('[data-template-param]').forEach((input) => {
             input.addEventListener(input.type === 'checkbox' ? 'change' : 'input', () => {
-                schedulePreviewRequest();
+                schedulePreviewRequest(
+                    templateValueMode === 'manual' ? display.value : null,
+                    templateValueMode !== 'manual',
+                    false,
+                );
             });
         });
     };
 
-    const applyPreview = (data, isManual) => {
+    const applyPreview = (data, isManual, replaceDisplay = true) => {
         overridesInput.value = JSON.stringify(data.template_overrides);
-        generatedValueInput.value = data.value;
-        display.value = data.display_value;
+        if (replaceDisplay) {
+            display.value = data.display_value;
+        }
         renderSchema(data.parameter_schema || [], data.template_overrides || {});
         renderExtraFields(data.extra_fields || []);
+        templateValueValid = true;
         status.textContent = isManual ? <?= json_encode((string) __('ui.home.regenerated')) ?> : '';
+        updateSaveState();
     };
 
     regenerateButton.addEventListener('click', () => {
-        void requestPreview(true);
+        templateValueMode = 'generated';
+        void requestPreview(true, null, true, false);
     });
 
     templateForm.addEventListener('submit', (event) => {
-        if (generatedValueInput.value === '') {
+        if (!templateValueValid || display.value.trim() === '') {
             event.preventDefault();
-            void requestPreview(true);
+            void requestPreview(true, display.value, false, false);
         }
     });
+
+    display.addEventListener('input', () => {
+        templateValueMode = 'manual';
+        schedulePreviewRequest(display.value, false, false);
+    });
+
+    if (templateUploadButton !== null && templateFileInput !== null) {
+        templateUploadButton.addEventListener('click', () => {
+            templateFileInput.click();
+        });
+
+        templateFileInput.addEventListener('change', async () => {
+            const file = templateFileInput.files && templateFileInput.files[0] ? templateFileInput.files[0] : null;
+            if (!file) {
+                return;
+            }
+
+            const text = await file.text();
+            display.value = text;
+            templateValueMode = 'manual';
+            await requestPreview(false, text, true, true);
+            templateFileInput.value = '';
+        });
+    }
 
     if (replaceModal) {
         replaceModal.addEventListener('close', () => {
@@ -579,6 +715,8 @@ $templatePreviewUrl = '/api/v1/organizations/' . $organization->uuid . '/directo
                 window.clearTimeout(previewTimer);
                 previewTimer = null;
             }
+            templateValueMode = 'generated';
+            templateValueValid = true;
             applyPreview({
                 value: initialValue,
                 display_value: initialDisplayValue,

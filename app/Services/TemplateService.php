@@ -6,6 +6,7 @@ namespace Passway\Services;
 
 use Passway\Models\Template;
 use phpseclib3\Crypt\EC;
+use phpseclib3\Crypt\PublicKeyLoader;
 use phpseclib3\Crypt\RSA;
 
 /**
@@ -48,18 +49,11 @@ final class TemplateService
 
         $value = match ($template->type) {
             'password' => $this->generatePassword($config),
-            'ssh_key'  => $this->generateSshKeyPair($config),
+            'ssh_key'  => $this->generateSshPrivateKey($config),
             default    => throw new \InvalidArgumentException(__('ui.backend.template.unsupported_type', ['type' => $template->type])),
         };
 
-        return [
-            'value' => $value,
-            'display_value' => $this->extractDisplayValue($template, $value),
-            'extra_fields' => $this->extractExtraFields($template, $value),
-            'parameter_schema' => $this->buildParameterSchema($template, $config),
-            'overrides' => $config,
-            'template' => $template,
-        ];
+        return $this->buildDescription($template, $config, $value, true);
     }
 
     /**
@@ -78,14 +72,45 @@ final class TemplateService
         $template = $this->resolveTemplate($templateUuid, $orgId);
         $config = \array_replace($template->config(), $this->normalizeOverrides($template, $overrides));
 
-        return [
-            'value' => $value,
-            'display_value' => $this->extractDisplayValue($template, $value),
-            'extra_fields' => $this->extractExtraFields($template, $value),
-            'parameter_schema' => $this->buildParameterSchema($template, $config),
-            'overrides' => $config,
-            'template' => $template,
-        ];
+        return $this->buildDescription($template, $config, $value, false);
+    }
+
+    /**
+     * @param array<string, mixed> $overrides
+     * @return array{
+     *   value:string,
+     *   display_value:string,
+     *   extra_fields:array<int, array{key:string, label:string, value:string}>,
+     *   parameter_schema:array<int, array<string, mixed>>,
+     *   overrides:array<string, mixed>,
+     *   template:Template
+     * }
+     */
+    public function describeProvidedValue(string $templateUuid, string $value, ?string $orgId = null, array $overrides = []): array
+    {
+        $template = $this->resolveTemplate($templateUuid, $orgId);
+        $config = \array_replace($template->config(), $this->normalizeOverrides($template, $overrides));
+
+        return $this->buildDescription($template, $config, $value, false);
+    }
+
+    /**
+     * @param array<string, mixed> $overrides
+     * @return array{
+     *   value:string,
+     *   display_value:string,
+     *   extra_fields:array<int, array{key:string, label:string, value:string}>,
+     *   parameter_schema:array<int, array<string, mixed>>,
+     *   overrides:array<string, mixed>,
+     *   template:Template
+     * }
+     */
+    public function describeUploadedValue(string $templateUuid, string $value, ?string $orgId = null, array $overrides = []): array
+    {
+        $template = $this->resolveTemplate($templateUuid, $orgId);
+        $config = \array_replace($template->config(), $this->normalizeOverrides($template, $overrides));
+
+        return $this->buildDescription($template, $config, $value, true);
     }
 
     private function resolveTemplate(string $templateUuid, ?string $orgId = null): Template
@@ -188,42 +213,89 @@ final class TemplateService
         ];
     }
 
-    /** @return array<int, array{key:string, label:string, value:string}> */
-    private function extractExtraFields(Template $template, string $value): array
+    /**
+     * @param array<string, mixed> $config
+     * @return array{
+     *   value:string,
+     *   display_value:string,
+     *   extra_fields:array<int, array{key:string, label:string, value:string}>,
+     *   parameter_schema:array<int, array<string, mixed>>,
+     *   overrides:array<string, mixed>,
+     *   template:Template
+     * }
+     */
+    private function buildDescription(Template $template, array $config, string $value, bool $normalizeValue): array
     {
-        if ($template->type !== 'ssh_key') {
-            return [];
-        }
+        $describedValue = match ($template->type) {
+            'password' => $this->describePasswordValue($value),
+            'ssh_key' => $this->describeSshValue($value, $config, $normalizeValue),
+            default => throw new \InvalidArgumentException(__('ui.backend.template.unsupported_type', ['type' => $template->type])),
+        };
 
-        $decoded = \json_decode($value, true);
-        if (!\is_array($decoded)) {
-            return [];
-        }
-
-        $publicKey = $decoded['public_key'] ?? null;
-        if (!\is_string($publicKey) || $publicKey === '') {
-            return [];
-        }
-
-        return [[
-            'key' => 'public_key',
-            'label' => __('ui.secret.public_key'),
-            'value' => $publicKey,
-        ]];
+        return [
+            'value' => $describedValue['value'],
+            'display_value' => $describedValue['display_value'],
+            'extra_fields' => $describedValue['extra_fields'],
+            'parameter_schema' => $this->buildParameterSchema($template, $config),
+            'overrides' => $config,
+            'template' => $template,
+        ];
     }
 
-    private function extractDisplayValue(Template $template, string $value): string
+    /** @return array{value:string, display_value:string, extra_fields:array<int, array{key:string, label:string, value:string}>} */
+    private function describePasswordValue(string $value): array
     {
-        if ($template->type !== 'ssh_key') {
-            return $value;
+        $length = \strlen($value);
+        if ($length < 8 || $length > 256) {
+            throw new \InvalidArgumentException(__('ui.backend.template.password_length'));
         }
 
-        $decoded = \json_decode($value, true);
-        if (!\is_array($decoded) || !isset($decoded['private_key']) || !\is_string($decoded['private_key'])) {
-            return $value;
+        return [
+            'value' => $value,
+            'display_value' => $value,
+            'extra_fields' => [],
+        ];
+    }
+
+    /** @return array{value:string, display_value:string, extra_fields:array<int, array{key:string, label:string, value:string}>} */
+    private function describeSshValue(string $value, array $config, bool $normalizeValue): array
+    {
+        $legacyDecoded = \json_decode($value, true);
+        if (\is_array($legacyDecoded) && isset($legacyDecoded['private_key'], $legacyDecoded['public_key'])) {
+            $privateKey = (string) $legacyDecoded['private_key'];
+            $publicKey = (string) $legacyDecoded['public_key'];
+
+            return [
+                'value' => $normalizeValue ? $privateKey : $value,
+                'display_value' => $privateKey,
+                'extra_fields' => [[
+                    'key' => 'public_key',
+                    'label' => __('ui.secret.public_key'),
+                    'value' => $publicKey,
+                ]],
+            ];
         }
 
-        return $decoded['private_key'];
+        $comment = (string) ($config['comment'] ?? 'passway-generated');
+
+        try {
+            $privateKey = PublicKeyLoader::loadPrivateKey($value);
+        } catch (\Throwable $e) {
+            throw new \InvalidArgumentException(__('ui.backend.template.ssh_private_key_invalid'));
+        }
+
+        $normalizedPrivateKey = $privateKey->toString('OpenSSH', ['comment' => $comment]);
+        $publicKey = $privateKey->getPublicKey()->toString('OpenSSH', ['comment' => $comment]);
+
+        return [
+            'value' => $normalizeValue ? $normalizedPrivateKey : $value,
+            'display_value' => $normalizeValue ? $normalizedPrivateKey : $value,
+            'extra_fields' => [[
+                'key' => 'public_key',
+                'label' => __('ui.secret.public_key'),
+                'value' => $publicKey,
+            ]],
+        ];
     }
 
     private function toBool(mixed $value): bool
@@ -296,10 +368,9 @@ final class TemplateService
     }
 
     /** @param array<string, mixed> $config */
-    private function generateSshKeyPair(array $config): string
+    private function generateSshPrivateKey(array $config): string
     {
         $algorithm = \strtolower((string) ($config['algorithm'] ?? 'ed25519'));
-        $comment = (string) ($config['comment'] ?? 'passway-generated');
 
         if ($algorithm === 'rsa') {
             $bits = (int) ($config['bits'] ?? 4096);
@@ -314,14 +385,6 @@ final class TemplateService
             throw new \InvalidArgumentException(__('ui.backend.template.ssh_algorithm_invalid', ['algorithm' => $algorithm]));
         }
 
-        $publicKey = $privateKey->getPublicKey();
-
-        return \json_encode([
-            'private_key' => $privateKey->toString('OpenSSH', ['comment' => $comment]),
-            'public_key'  => $publicKey->toString('OpenSSH', ['comment' => $comment]),
-            'algorithm'   => $algorithm,
-            'comment'     => $comment,
-        ], \JSON_UNESCAPED_SLASHES)
-            ?: throw new \RuntimeException(__('ui.backend.template.ssh_encode_failed'));
+        return $privateKey->toString('OpenSSH', ['comment' => (string) ($config['comment'] ?? 'passway-generated')]);
     }
 }

@@ -14,6 +14,7 @@ use Passway\Services\GroupService;
 use Passway\Services\OrganizationService;
 use Passway\Services\PermissionService;
 use Passway\Services\SecretService;
+use Passway\Services\TemplateService;
 use Passway\Tests\DatabaseTestCase;
 
 /**
@@ -594,6 +595,80 @@ final class SecretServiceTest extends DatabaseTestCase
         $this->assertFalse($overrides['use_special']);
     }
 
+    public function test_create_template_allows_manual_password_value(): void
+    {
+        $owner = $this->createTestUser();
+        $org = $this->orgSvc->create('Org', $owner->id);
+        $dir = $this->dirSvc->create($org->id, null, 'Dir', $owner->id);
+        $template = Database::getInstance()->fetchOne(
+            'SELECT uuid FROM templates WHERE type = ? ORDER BY id ASC LIMIT 1',
+            ['password']
+        );
+
+        $secret = $this->svc->createFromTemplate(
+            $org->id,
+            $dir->uuid,
+            'Manual template secret',
+            (string) $template['uuid'],
+            $owner->id,
+            ['min_length' => 24, 'max_length' => 24],
+            null,
+            'manual-password-value',
+        );
+        ['value' => $value] = $this->svc->get($secret->uuid, $org->id, $owner->id);
+
+        $this->assertSame('manual-password-value', $value);
+    }
+
+    public function test_create_template_rejects_short_manual_password_value(): void
+    {
+        $owner = $this->createTestUser();
+        $org = $this->orgSvc->create('Org', $owner->id);
+        $dir = $this->dirSvc->create($org->id, null, 'Dir', $owner->id);
+        $template = Database::getInstance()->fetchOne(
+            'SELECT uuid FROM templates WHERE type = ? ORDER BY id ASC LIMIT 1',
+            ['password']
+        );
+
+        $this->expectException(\InvalidArgumentException::class);
+        $this->svc->createFromTemplate(
+            $org->id,
+            $dir->uuid,
+            'Manual template secret',
+            (string) $template['uuid'],
+            $owner->id,
+            [],
+            null,
+            'short',
+        );
+    }
+
+    public function test_create_template_preserves_manual_ssh_private_key_text(): void
+    {
+        $owner = $this->createTestUser();
+        $org = $this->orgSvc->create('Org', $owner->id);
+        $dir = $this->dirSvc->create($org->id, null, 'Dir', $owner->id);
+        $template = Database::getInstance()->fetchOne(
+            'SELECT uuid FROM templates WHERE type = ? AND name = ? LIMIT 1',
+            ['ssh_key', 'SSH Key Ed25519']
+        );
+        $privateKey = (new TemplateService())->generate((string) $template['uuid']);
+
+        $secret = $this->svc->createFromTemplate(
+            $org->id,
+            $dir->uuid,
+            'Manual SSH secret',
+            (string) $template['uuid'],
+            $owner->id,
+            [],
+            null,
+            $privateKey,
+        );
+        ['value' => $value] = $this->svc->get($secret->uuid, $org->id, $owner->id);
+
+        $this->assertSame($privateKey, $value);
+    }
+
     public function test_configure_rotation_rejects_static_secret(): void
     {
         $owner = $this->createTestUser();
@@ -662,6 +737,66 @@ final class SecretServiceTest extends DatabaseTestCase
         $this->assertSame(24, $overrides['max_length']);
         $this->assertFalse($overrides['use_special']);
         $this->assertSame(2, $result['secret']->version);
+    }
+
+    public function test_regenerate_from_template_accepts_manual_password_value(): void
+    {
+        $owner = $this->createTestUser();
+        $org = $this->orgSvc->create('Org', $owner->id);
+        $dir = $this->dirSvc->create($org->id, null, 'Dir', $owner->id);
+        $template = Database::getInstance()->fetchOne(
+            'SELECT uuid FROM templates WHERE type = ? ORDER BY id ASC LIMIT 1',
+            ['password']
+        );
+        $secret = $this->svc->createFromTemplate(
+            $org->id,
+            $dir->uuid,
+            'Template secret',
+            (string) $template['uuid'],
+            $owner->id,
+        );
+
+        $result = $this->svc->regenerateFromTemplate(
+            $secret->uuid,
+            $org->id,
+            $owner->id,
+            [],
+            'manual-password-value',
+        );
+        ['value' => $value] = $this->svc->get($secret->uuid, $org->id, $owner->id);
+
+        $this->assertSame('manual-password-value', $value);
+        $this->assertSame('manual-password-value', $result['value']);
+    }
+
+    public function test_regenerate_from_template_preserves_manual_ssh_private_key_text(): void
+    {
+        $owner = $this->createTestUser();
+        $org = $this->orgSvc->create('Org', $owner->id);
+        $dir = $this->dirSvc->create($org->id, null, 'Dir', $owner->id);
+        $template = Database::getInstance()->fetchOne(
+            'SELECT uuid FROM templates WHERE type = ? AND name = ? LIMIT 1',
+            ['ssh_key', 'SSH Key Ed25519']
+        );
+        $secret = $this->svc->createFromTemplate(
+            $org->id,
+            $dir->uuid,
+            'Template SSH secret',
+            (string) $template['uuid'],
+            $owner->id,
+        );
+        $privateKey = (new TemplateService())->generate((string) $template['uuid']);
+
+        $this->svc->regenerateFromTemplate(
+            $secret->uuid,
+            $org->id,
+            $owner->id,
+            [],
+            $privateKey,
+        );
+        ['value' => $value] = $this->svc->get($secret->uuid, $org->id, $owner->id);
+
+        $this->assertSame($privateKey, $value);
     }
 
     public function test_create_and_read_write_audit_log_entries(): void

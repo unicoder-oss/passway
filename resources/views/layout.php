@@ -72,6 +72,7 @@
             padding: .55rem .75rem;
             border: 1px solid var(--border);
             background: var(--panel);
+            color: var(--fg);
             cursor: pointer;
         }
         .profile-menu { position: relative; }

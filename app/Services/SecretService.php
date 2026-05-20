@@ -179,9 +179,10 @@ final class SecretService
         }
 
         $preview = $this->getTemplateService()->preview($templateUuid, $orgId, $overrides);
-        $value = $providedValue !== null && $providedValue !== ''
-            ? $providedValue
-            : $preview['value'];
+        $describedValue = $providedValue !== null
+            ? $this->getTemplateService()->describeProvidedValue($templateUuid, $providedValue, $orgId, $preview['overrides'])
+            : $preview;
+        $value = $describedValue['value'];
         $overrides = $preview['overrides'];
         $rotationSchedule = $this->normalizeRotationSchedule($rotationSchedule);
 
@@ -309,13 +310,19 @@ final class SecretService
         string $userId,
         string $templateUuid,
         array $overrides = [],
+        ?string $providedValue = null,
+        bool $normalizeProvidedValue = false,
     ): array {
         $dir = $this->findDirInOrg($dirUuid, $orgId);
         $this->assertCan('write', $userId, 'directory', $dir->id, $orgId);
 
-        return $this->formatTemplatePreview(
-            $this->getTemplateService()->preview($templateUuid, $orgId, $overrides)
-        );
+        $preview = $providedValue !== null
+            ? ($normalizeProvidedValue
+                ? $this->getTemplateService()->describeUploadedValue($templateUuid, $providedValue, $orgId, $overrides)
+                : $this->getTemplateService()->describeProvidedValue($templateUuid, $providedValue, $orgId, $overrides))
+            : $this->getTemplateService()->preview($templateUuid, $orgId, $overrides);
+
+        return $this->formatTemplatePreview($preview);
     }
 
     /**
@@ -347,7 +354,10 @@ final class SecretService
             $orgId,
             $overrides ?? $storedOverrides
         );
-        $targetValue = $providedValue !== null && $providedValue !== '' ? $providedValue : $preview['value'];
+        $target = $providedValue !== null
+            ? $this->getTemplateService()->describeProvidedValue($template->uuid, $providedValue, $orgId, $preview['overrides'])
+            : $preview;
+        $targetValue = $target['value'];
         $currentValue = $this->encryptionService->decrypt($secret->encryptedValue, $secret->nonce, $secret->uuid);
 
         if ($targetValue === $currentValue && $preview['overrides'] === $storedOverrides) {
@@ -370,7 +380,7 @@ final class SecretService
 
         return \array_merge(
             ['secret' => $updated],
-            $this->formatTemplatePreview($preview)
+            $this->formatTemplatePreview($target)
         );
     }
 
