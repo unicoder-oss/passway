@@ -41,7 +41,7 @@ php install.php
 4. Start the application:
 
 ```bash
-php -S 0.0.0.0:8000 -t public public/index.php
+cd public && php -S 0.0.0.0:8000 index.php
 ```
 
 5. Open in your browser:

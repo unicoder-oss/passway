@@ -26,9 +26,7 @@ require base_path('resources/views/partials/auth_topbar.php');
         .org-manage-invite-link {
             width: 100%;
             min-width: 0;
-        }
-        .org-manage-invite-copy {
-            overflow-wrap: anywhere;
+            cursor: pointer;
         }
     </style>
     <section class="panel" style="padding:1.5rem;">
@@ -70,7 +68,7 @@ require base_path('resources/views/partials/auth_topbar.php');
                 <form method="POST" action="/organizations/<?= e($organization->uuid) ?>/manage" class="grid js-avatar-editor" style="gap:.75rem;">
                     <div style="display:flex; align-items:center; gap:1rem; flex-wrap:wrap;">
                         <?php if (!empty($organization->avatarPath)): ?>
-                            <img class="avatar-square avatar-image" src="<?= e($organization->avatarPath) ?>" alt="<?= e($organization->name) ?>" width="64" height="64" style="width:64px; height:64px; flex:0 0 64px;">
+                            <img class="avatar-square avatar-image" src="<?= e($organization->avatarPath) ?>" alt="<?= e($organization->name) ?>" width="64" height="64" decoding="async" style="width:64px; height:64px; flex:0 0 64px;">
                         <?php else: ?>
                             <div class="avatar-square" style="width:64px; height:64px; flex:0 0 64px; background:<?= e(avatar_fallback_color()) ?>; font-size:1.4rem;"><?= e(avatar_initial($organization->name)) ?></div>
                         <?php endif; ?>
@@ -128,10 +126,9 @@ require base_path('resources/views/partials/auth_topbar.php');
                 <?php foreach ($invites as $invite): ?>
                     <?php $inviteUrl = app_url('/invite/' . $invite->token); ?>
                     <div class="panel panel-muted org-manage-invite-card" style="padding:1rem;">
-                        <div style="font-weight:700;"><?= e(__('ui.organization_manage.role')) ?>: <?= e($invite->role) ?></div>
+                        <div style="font-weight:700;"><?= e(__('ui.organization_manage.role')) ?>: <?= e(__('ui.organization_manage.roles.' . $invite->role)) ?></div>
                         <div class="muted" style="font-size:.92rem;"><?= __('ui.organization_manage.expires', ['date' => local_datetime($invite->expiresAt)]) ?></div>
                         <div style="margin:.5rem 0 .75rem;">
-                            <label class="org-manage-invite-copy"><?= e(__('ui.organization_manage.link', ['link' => $inviteUrl])) ?></label>
                             <input class="mono js-copy-on-click org-manage-invite-link" value="<?= e($inviteUrl) ?>" readonly>
                         </div>
                         <form method="POST" action="/organizations/<?= e($organization->uuid) ?>/invites/<?= e($invite->uuid) ?>/revoke">
@@ -146,7 +143,7 @@ require base_path('resources/views/partials/auth_topbar.php');
 </div>
 
 <script>
-(() => {
+window.addEventListener('DOMContentLoaded', () => {
     const editors = document.querySelectorAll('.js-avatar-editor');
 
     for (const editor of editors) {
@@ -274,18 +271,37 @@ require base_path('resources/views/partials/auth_topbar.php');
     }
 
     const fields = document.querySelectorAll('.js-copy-on-click');
+    const linkCopied = <?= json_encode((string) __('ui.home.invite_link_copied')) ?>;
+    const linkCopyFailed = <?= json_encode((string) __('ui.home.invite_link_copy_failed')) ?>;
+
+    const showToast = (message, type = 'success') => {
+        if (window.passwayToast && typeof window.passwayToast.show === 'function') {
+            window.passwayToast.show(message, type);
+        }
+    };
+
+    const selectLink = (field) => {
+        field.focus();
+        field.select();
+    };
+
+    const copyLink = async (field) => {
+        selectLink(field);
+
+        try {
+            if (navigator.clipboard && typeof navigator.clipboard.writeText === 'function') {
+                await navigator.clipboard.writeText(field.value);
+            } else if (!document.execCommand('copy')) {
+                throw new Error('Copy failed');
+            }
+            showToast(linkCopied, 'success');
+        } catch (error) {
+            showToast(linkCopyFailed, 'error');
+        }
+    };
 
     for (const field of fields) {
-        field.addEventListener('click', async () => {
-            field.focus();
-            field.select();
-
-            try {
-                await navigator.clipboard.writeText(field.value);
-            } catch (error) {
-                document.execCommand('copy');
-            }
-        });
+        field.addEventListener('click', () => copyLink(field));
     }
-})();
+});
 </script>

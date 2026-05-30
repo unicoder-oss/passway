@@ -13,6 +13,13 @@ Header always set Permissions-Policy "geolocation=(), microphone=(), camera=()"
 # CSP — базовый, конкретизируется в приложении
 Header always set Content-Security-Policy "default-src 'self'; script-src 'self' 'nonce-%{REQUEST_ID}e'; style-src 'self' 'unsafe-inline'; img-src 'self' data:; connect-src 'self'; font-src 'self'; object-src 'none'; base-uri 'self'; form-action 'self'"
 
+# Uploaded avatars use content-addressed filenames, so browsers can cache them aggressively.
+<IfModule mod_headers.c>
+    <FilesMatch "\.(?:avif|webp|png|jpe?g|gif|svg)$">
+        Header set Cache-Control "public, max-age=31536000, immutable" "expr=%{REQUEST_URI} =~ m#^/uploads/#"
+    </FilesMatch>
+</IfModule>
+
 # HSTS — только production
 # Header always set Strict-Transport-Security "max-age=31536000; includeSubDomains; preload"
 

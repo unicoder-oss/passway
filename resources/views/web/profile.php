@@ -23,7 +23,7 @@ require base_path('resources/views/partials/auth_topbar.php');
             <h3 style="margin:0;"><?= e(__('ui.profile.avatar_settings')) ?></h3>
             <div style="display:flex; align-items:center; gap:1rem; flex-wrap:wrap;">
                 <?php if (!empty($user->avatarPath)): ?>
-                    <img class="avatar-square avatar-image" src="<?= e($user->avatarPath) ?>" alt="<?= e($user->email) ?>" width="64" height="64" style="width:64px; height:64px; flex:0 0 64px;">
+                    <img class="avatar-square avatar-image" src="<?= e($user->avatarPath) ?>" alt="<?= e($user->email) ?>" width="64" height="64" decoding="async" style="width:64px; height:64px; flex:0 0 64px;">
                 <?php else: ?>
                     <div class="avatar-square" style="width:64px; height:64px; flex:0 0 64px; background:<?= e(avatar_color_for_user($user)) ?>; font-size:1.4rem;"><?= e(avatar_initial(display_name_for_user($user))) ?></div>
                 <?php endif; ?>

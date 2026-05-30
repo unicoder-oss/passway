@@ -31,7 +31,7 @@ php install.php
 ```
 4. Запустите приложение:
 ```bash
-php -S 0.0.0.0:8000 -t public public/index.php
+cd public && php -S 0.0.0.0:8000 index.php
 ```
 5. Откройте в браузере:
 ```text

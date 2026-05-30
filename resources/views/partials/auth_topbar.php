@@ -49,7 +49,7 @@ $profileAvatarInitial = avatar_initial($profileDisplayName);
             <button type="button" class="profile-link profile-menu-trigger" aria-haspopup="true" aria-expanded="false">
                 <span><?= e($profileDisplayName) ?></span>
                 <?php if ($profileAvatarPath !== ''): ?>
-                    <img class="avatar-square avatar-image" src="<?= e($profileAvatarPath) ?>" alt="<?= e($profileDisplayName) ?>" width="32" height="32">
+                    <img class="avatar-square avatar-image" src="<?= e($profileAvatarPath) ?>" alt="<?= e($profileDisplayName) ?>" width="32" height="32" decoding="async" loading="eager" fetchpriority="high">
                 <?php else: ?>
                     <span class="avatar-square" style="background: <?= e($profileAvatarColor) ?>;"><?= e($profileAvatarInitial) ?></span>
                 <?php endif; ?>

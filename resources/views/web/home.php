@@ -14,6 +14,11 @@ require base_path('resources/views/partials/auth_topbar.php');
 <?php if (!empty($querySuccess)): ?><div class="success" data-toast="true"><?= e((string) $querySuccess) ?></div><?php endif; ?>
 
 <section style="width:min(920px, 100%); margin:0 auto; padding-bottom:2rem;">
+    <style>
+        .js-copy-on-click {
+            cursor: pointer;
+        }
+    </style>
     <div style="display:grid; gap:1rem; margin-bottom:1rem;">
         <div>
             <h1 style="margin:0 0 .35rem; font-size:2rem;"><?= e(__('ui.home.organizations')) ?></h1>
@@ -66,24 +71,43 @@ require base_path('resources/views/partials/auth_topbar.php');
 </section>
 
 <script>
-(() => {
+window.addEventListener('DOMContentLoaded', () => {
     const searchInput = document.getElementById('home-search');
     const results = document.getElementById('home-organization-results');
     const fields = document.querySelectorAll('.js-copy-on-click');
+    const linkCopied = <?= json_encode((string) __('ui.home.invite_link_copied')) ?>;
+    const linkCopyFailed = <?= json_encode((string) __('ui.home.invite_link_copy_failed')) ?>;
     let searchTimer = null;
     let searchController = null;
 
-    for (const field of fields) {
-        field.addEventListener('click', async () => {
-            field.focus();
-            field.select();
+    const showToast = (message, type = 'success') => {
+        if (window.passwayToast && typeof window.passwayToast.show === 'function') {
+            window.passwayToast.show(message, type);
+        }
+    };
 
-            try {
+    const selectLink = (field) => {
+        field.focus();
+        field.select();
+    };
+
+    const copyLink = async (field) => {
+        selectLink(field);
+
+        try {
+            if (navigator.clipboard && typeof navigator.clipboard.writeText === 'function') {
                 await navigator.clipboard.writeText(field.value);
-            } catch (error) {
-                document.execCommand('copy');
+            } else if (!document.execCommand('copy')) {
+                throw new Error('Copy failed');
             }
-        });
+            showToast(linkCopied, 'success');
+        } catch (error) {
+            showToast(linkCopyFailed, 'error');
+        }
+    };
+
+    for (const field of fields) {
+        field.addEventListener('click', () => copyLink(field));
     }
 
     if (searchInput && results) {
@@ -141,5 +165,5 @@ require base_path('resources/views/partials/auth_topbar.php');
 
         searchInput.addEventListener('search', fetchResults);
     }
-})();
+});
 </script>

@@ -9,4 +9,5 @@ fi
 
 php /app/install.php
 
-exec php -S 0.0.0.0:8000 -t /app/public /app/public/index.php
+cd /app/public
+exec php -S 0.0.0.0:8000 index.php

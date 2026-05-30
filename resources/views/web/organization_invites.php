@@ -39,9 +39,7 @@
                 .org-manage-invite-link {
                     width: 100%;
                     min-width: 0;
-                }
-                .org-manage-invite-copy {
-                    overflow-wrap: anywhere;
+                    cursor: pointer;
                 }
             </style>
             <h2 style="margin:0 0 .75rem;"><?= e(__('ui.organization_manage.active_invites')) ?></h2>
@@ -49,10 +47,9 @@
                 <?php foreach ($invites as $invite): ?>
                     <?php $inviteUrl = app_url('/invite/' . $invite->token); ?>
                     <div class="panel panel-muted org-manage-invite-card" style="padding:1rem;">
-                        <div style="font-weight:700;"><?= e(__('ui.organization_manage.role')) ?>: <?= e($invite->role) ?></div>
+                        <div style="font-weight:700;"><?= e(__('ui.organization_manage.role')) ?>: <?= e(__('ui.organization_manage.roles.' . $invite->role)) ?></div>
                         <div class="muted" style="font-size:.92rem;"><?= __('ui.organization_manage.expires', ['date' => local_datetime($invite->expiresAt)]) ?></div>
                         <div style="margin:.5rem 0 .75rem;">
-                            <label class="org-manage-invite-copy"><?= e(__('ui.organization_manage.link', ['link' => $inviteUrl])) ?></label>
                             <input class="mono js-copy-on-click org-manage-invite-link" value="<?= e($inviteUrl) ?>" readonly>
                         </div>
                         <form method="POST" action="/organizations/<?= e($organization->uuid) ?>/invites/<?= e($invite->uuid) ?>/revoke">
@@ -65,3 +62,41 @@
         </section>
     </div>
 </div>
+
+<script>
+window.addEventListener('DOMContentLoaded', () => {
+    const fields = document.querySelectorAll('.js-copy-on-click');
+    const linkCopied = <?= json_encode((string) __('ui.home.invite_link_copied')) ?>;
+    const linkCopyFailed = <?= json_encode((string) __('ui.home.invite_link_copy_failed')) ?>;
+
+    const showToast = (message, type = 'success') => {
+        if (window.passwayToast && typeof window.passwayToast.show === 'function') {
+            window.passwayToast.show(message, type);
+        }
+    };
+
+    const selectLink = (field) => {
+        field.focus();
+        field.select();
+    };
+
+    const copyLink = async (field) => {
+        selectLink(field);
+
+        try {
+            if (navigator.clipboard && typeof navigator.clipboard.writeText === 'function') {
+                await navigator.clipboard.writeText(field.value);
+            } else if (!document.execCommand('copy')) {
+                throw new Error('Copy failed');
+            }
+            showToast(linkCopied, 'success');
+        } catch (error) {
+            showToast(linkCopyFailed, 'error');
+        }
+    };
+
+    for (const field of fields) {
+        field.addEventListener('click', () => copyLink(field));
+    }
+});
+</script>

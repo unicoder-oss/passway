@@ -7,6 +7,40 @@ if (PHP_SAPI === 'cli-server') {
     $staticFile = __DIR__ . ($requestPath !== false ? $requestPath : '/');
 
     if (is_file($staticFile)) {
+        if (is_string($requestPath) && str_starts_with($requestPath, '/uploads/')) {
+            $uploadsRoot = realpath(__DIR__ . '/uploads');
+            $resolvedStaticFile = realpath($staticFile);
+
+            if ($uploadsRoot === false || $resolvedStaticFile === false || !str_starts_with($resolvedStaticFile, $uploadsRoot . DIRECTORY_SEPARATOR)) {
+                return false;
+            }
+
+            $lastModified = filemtime($resolvedStaticFile) ?: time();
+            $etag = '"' . sha1($resolvedStaticFile . '|' . $lastModified . '|' . filesize($resolvedStaticFile)) . '"';
+            $mimeType = (new finfo(FILEINFO_MIME_TYPE))->file($resolvedStaticFile) ?: 'application/octet-stream';
+
+            header('Content-Type: ' . $mimeType);
+            header('Cache-Control: public, max-age=31536000, immutable');
+            header('Last-Modified: ' . gmdate('D, d M Y H:i:s', $lastModified) . ' GMT');
+            header('ETag: ' . $etag);
+
+            $ifNoneMatch = trim((string) ($_SERVER['HTTP_IF_NONE_MATCH'] ?? ''));
+            $ifModifiedSince = strtotime((string) ($_SERVER['HTTP_IF_MODIFIED_SINCE'] ?? '')) ?: 0;
+
+            if ($ifNoneMatch === $etag || $ifModifiedSince >= $lastModified) {
+                http_response_code(304);
+                return true;
+            }
+
+            header('Content-Length: ' . (string) filesize($resolvedStaticFile));
+
+            if (($_SERVER['REQUEST_METHOD'] ?? 'GET') !== 'HEAD') {
+                readfile($resolvedStaticFile);
+            }
+
+            return true;
+        }
+
         return false;
     }
 }
