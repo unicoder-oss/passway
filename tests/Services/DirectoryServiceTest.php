@@ -4,7 +4,10 @@ declare(strict_types=1);
 
 namespace Passway\Tests\Services;
 
+use Passway\Controllers\DirectoryController;
+use Passway\Core\AuthContext;
 use Passway\Core\Database;
+use Passway\Core\Request;
 use Passway\Exceptions\AuthException;
 use Passway\Models\Directory;
 use Passway\Services\ApiKeyService;
@@ -37,6 +40,12 @@ final class DirectoryServiceTest extends DatabaseTestCase
         Database::getInstance()->query(
             "UPDATE system_config SET value = 'team' WHERE key = 'deploy_mode'"
         );
+    }
+
+    protected function tearDown(): void
+    {
+        AuthContext::reset();
+        parent::tearDown();
     }
 
     // ------------------------------------------------------------------ //
@@ -220,6 +229,38 @@ final class DirectoryServiceTest extends DatabaseTestCase
 
         $this->assertCount(1, $roots);
         $this->assertSame($root->id, $roots[0]->id);
+    }
+
+    public function test_list_children_hides_read_denied_directories(): void
+    {
+        $owner = $this->createTestUser();
+        $reader = $this->createTestUser('reader-list-children@example.com');
+        $org = $this->orgSvc->create('Org', $owner->id);
+        $this->orgSvc->addMember($org->id, $reader->id, 'reader', null);
+        $visible = $this->svc->create($org->id, null, 'Visible', $owner->id);
+        $hidden = $this->svc->create($org->id, null, 'Hidden', $owner->id);
+
+        $this->permSvc->grant('user', $reader->id, 'directory', $hidden->id, 'read', true, null, $owner->id, $org->id);
+
+        $roots = $this->svc->listChildren($org->id, null, $reader->id);
+
+        $this->assertSame([$visible->id], array_map(static fn(Directory $dir): string => $dir->id, $roots));
+    }
+
+    public function test_list_all_hides_read_denied_directories(): void
+    {
+        $owner = $this->createTestUser();
+        $reader = $this->createTestUser('reader-list-all@example.com');
+        $org = $this->orgSvc->create('Org', $owner->id);
+        $this->orgSvc->addMember($org->id, $reader->id, 'reader', null);
+        $visible = $this->svc->create($org->id, null, 'Visible', $owner->id);
+        $hidden = $this->svc->create($org->id, null, 'Hidden', $owner->id);
+
+        $this->permSvc->grant('user', $reader->id, 'directory', $hidden->id, 'read', true, null, $owner->id, $org->id);
+
+        $directories = $this->svc->listAll($org->id, $reader->id);
+
+        $this->assertSame([$visible->id], array_map(static fn(Directory $dir): string => $dir->id, $directories));
     }
 
     // ------------------------------------------------------------------ //
@@ -534,6 +575,37 @@ final class DirectoryServiceTest extends DatabaseTestCase
             static fn($rule) => $rule->subjectType,
             $rules,
         ))));
+    }
+
+    public function test_replace_acl_rejects_revoked_api_key_subject(): void
+    {
+        $owner = $this->createTestUser();
+        $org = $this->orgSvc->create('Org', $owner->id);
+        $dir = $this->svc->create($org->id, null, 'Dir', $owner->id);
+        $apiKeyService = new ApiKeyService($this->orgSvc);
+        ['key' => $apiKey] = $apiKeyService->create('Deploy key', $org->id, $owner->id);
+        $apiKeyService->revoke($apiKey->uuid, $org->id, $owner->id);
+        AuthContext::setUser($owner);
+
+        $request = new Request(
+            ['REQUEST_METHOD' => 'PUT', 'REQUEST_URI' => '/'],
+            [],
+            ['rules' => [[
+                'subject_type' => 'api_key',
+                'subject_uuid' => $apiKey->uuid,
+                'read' => 'allow',
+                'write' => null,
+            ]]],
+            [],
+            [],
+            ''
+        );
+        $request->setRouteParams(['uuid' => $org->uuid, 'dirUuid' => $dir->uuid]);
+
+        $response = (new DirectoryController($this->svc))->replaceAcl($request);
+
+        $this->assertSame(422, $response->getStatusCode());
+        $this->assertSame([], $this->svc->listAcl($dir->uuid, $org->id, $owner->id));
     }
 
     public function test_replace_acl_stores_group_subject_rules(): void

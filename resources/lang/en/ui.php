@@ -922,6 +922,16 @@ return [
         'version_history' => 'Version History',
         'version_label' => 'Version :version',
         'version_meta' => ':rotation_type · :status · :created_at',
+        'rotation_types' => [
+            'manual' => 'Manual change',
+            'scheduled' => 'Scheduled rotation',
+            'api' => 'API',
+        ],
+        'version_statuses' => [
+            'success' => 'Success',
+            'failed' => 'Failed',
+            'rolled_back' => 'Rolled back',
+        ],
         'no_versions' => 'No version history yet.',
     ],
     'messages' => [
@@ -1097,7 +1107,9 @@ return [
             'not_found' => 'Secret not found.',
             'duplicate_name' => 'A secret with this name already exists in the directory.',
             'access_permission_required' => "Access denied: ':permission' permission required.",
+            'owner_delete_required' => 'Only the secret owner can delete this secret.',
             'owner_acl_required' => 'Only the secret owner can manage this secret ACL.',
+            'owner_acl_subject_forbidden' => 'The current secret owner cannot be added to this secret ACL.',
             'owner_transfer_required' => 'Only the secret owner can transfer ownership.',
             'new_owner_must_be_member' => 'New secret owner must be a member of the organization.',
             'rotation_integration_not_found' => 'Rotation integration not found.',

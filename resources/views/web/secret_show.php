@@ -6,6 +6,8 @@ require base_path('resources/views/partials/auth_topbar.php');
 
 $isDynamicSecret = $secret->type === 'dynamic';
 $isTemplateSecret = $secret->type === 'template';
+$hasManualActions = !empty($canWriteSecret) || !empty($canManageSecretAcl);
+$secretOwnerUuid = $secret->ownerUserId !== null ? \Passway\Models\User::findById($secret->ownerUserId)?->uuid : null;
 $replaceAction = '/organizations/' . $organization->uuid . '/directories/' . $directory->uuid . '/secrets/' . $secret->uuid . '/update';
 $regenerateAction = '/organizations/' . $organization->uuid . '/directories/' . $directory->uuid . '/secrets/' . $secret->uuid . '/regenerate';
 $rotateAction = '/organizations/' . $organization->uuid . '/directories/' . $directory->uuid . '/secrets/' . $secret->uuid . '/rotate';
@@ -260,31 +262,46 @@ $renderReadonlyRotationField = static function (array $field, array $values): vo
     </section>
 
     <section class="grid" style="gap:1rem;">
-        <div class="panel" style="padding:1rem;">
-            <h3 style="margin:0 0 .75rem;"><?= e(__('ui.secret.manual_actions')) ?></h3>
-            <div class="grid manual-actions-grid" style="gap:.75rem;">
-                <?php if (!empty($canWriteSecret)): ?><button type="button" class="secondary" data-open-modal="rename-secret-modal"><?= e(__('ui.secret.rename_secret')) ?></button><?php endif; ?>
-                <?php if (!empty($canWriteSecret) && !$isDynamicSecret): ?><button type="button" class="secondary" data-open-modal="replace-secret-modal"><?= e(__('ui.secret.replace_value')) ?></button><?php endif; ?>
-                <?php if (!empty($canWriteSecret) && $isDynamicSecret): ?>
-                    <button type="button" class="secondary" data-open-modal="rotation-secret-modal"><?= e(__('ui.secret.rotation_integration')) ?></button>
-                    <form method="POST" action="<?= e($rotateAction) ?>">
-                        <button type="submit"><?= e(__('ui.secret.rotate_secret')) ?></button>
-                    </form>
-                <?php endif; ?>
-                <?php if (!empty($canManageSecretAcl)): ?>
-                    <button type="button" class="secondary" data-open-modal="secret-acl-modal" id="open-secret-acl-modal"><?= e(__('ui.secret.configure_acl')) ?></button>
-                    <?php if (!$isSoloMode): ?><button type="button" class="secondary" data-open-modal="transfer-secret-owner-modal"><?= e(__('ui.secret.transfer_owner')) ?></button><?php endif; ?>
-                <?php endif; ?>
-                <?php if (!empty($canWriteSecret)): ?><button type="button" class="danger" data-open-modal="delete-secret-modal"><?= e(__('ui.secret.delete_secret')) ?></button><?php endif; ?>
+        <?php if ($hasManualActions): ?>
+            <div class="panel" style="padding:1rem;">
+                <h3 style="margin:0 0 .75rem;"><?= e(__('ui.secret.manual_actions')) ?></h3>
+                <div class="grid manual-actions-grid" style="gap:.75rem;">
+                    <?php if (!empty($canWriteSecret)): ?><button type="button" class="secondary" data-open-modal="rename-secret-modal"><?= e(__('ui.secret.rename_secret')) ?></button><?php endif; ?>
+                    <?php if (!empty($canWriteSecret) && !$isDynamicSecret): ?><button type="button" class="secondary" data-open-modal="replace-secret-modal"><?= e(__('ui.secret.replace_value')) ?></button><?php endif; ?>
+                    <?php if (!empty($canWriteSecret) && $isDynamicSecret): ?>
+                        <button type="button" class="secondary" data-open-modal="rotation-secret-modal"><?= e(__('ui.secret.rotation_integration')) ?></button>
+                        <form method="POST" action="<?= e($rotateAction) ?>">
+                            <button type="submit"><?= e(__('ui.secret.rotate_secret')) ?></button>
+                        </form>
+                    <?php endif; ?>
+                    <?php if (!empty($canManageSecretAcl)): ?>
+                        <button type="button" class="secondary" data-open-modal="secret-acl-modal" id="open-secret-acl-modal"><?= e(__('ui.secret.configure_acl')) ?></button>
+                        <?php if (!$isSoloMode): ?><button type="button" class="secondary" data-open-modal="transfer-secret-owner-modal"><?= e(__('ui.secret.transfer_owner')) ?></button><?php endif; ?>
+                    <?php endif; ?>
+                    <?php if (!empty($canManageSecretAcl)): ?><button type="button" class="danger" data-open-modal="delete-secret-modal"><?= e(__('ui.secret.delete_secret')) ?></button><?php endif; ?>
+                </div>
             </div>
-        </div>
+        <?php endif; ?>
         <div class="panel" style="padding:1rem;">
             <h3 style="margin:0 0 .75rem;"><?= e(__('ui.secret.version_history')) ?></h3>
             <div class="grid" style="gap:.6rem;">
                 <?php foreach ($versions as $version): ?>
+                    <?php
+                    $rotationTypeKey = 'ui.secret.rotation_types.' . $version->rotationType;
+                    $rotationTypeLabel = __($rotationTypeKey);
+                    if ($rotationTypeLabel === $rotationTypeKey) {
+                        $rotationTypeLabel = $version->rotationType;
+                    }
+
+                    $statusKey = 'ui.secret.version_statuses.' . $version->status;
+                    $statusLabel = __($statusKey);
+                    if ($statusLabel === $statusKey) {
+                        $statusLabel = $version->status;
+                    }
+                    ?>
                     <div class="panel" style="padding:.85rem; background:rgba(15,23,42,.55);">
                         <div style="font-weight:700;"><?= e(__('ui.secret.version_label', ['version' => (string) $version->version])) ?></div>
-                        <div class="muted" style="font-size:.92rem;"><?= __('ui.secret.version_meta', ['rotation_type' => e($version->rotationType), 'status' => e($version->status), 'created_at' => local_datetime($version->createdAt)]) ?></div>
+                        <div class="muted" style="font-size:.92rem;"><?= __('ui.secret.version_meta', ['rotation_type' => e($rotationTypeLabel), 'status' => e($statusLabel), 'created_at' => local_datetime($version->createdAt)]) ?></div>
                         <?php if ($version->errorMessage !== null): ?><div class="muted" style="margin-top:.25rem;"><?= e($version->errorMessage) ?></div><?php endif; ?>
                     </div>
                 <?php endforeach; ?>
@@ -408,18 +425,20 @@ $renderReadonlyRotationField = static function (array $field, array $values): vo
     </dialog>
 <?php endif; ?>
 
-<dialog id="delete-secret-modal" class="modal">
-    <div class="modal-body">
-        <div>
-            <h3 style="margin:0 0 .35rem;"><?= e(__('ui.secret.delete_secret')) ?></h3>
-            <div class="wizard-meta"><?= e(__('ui.secret.delete_secret_confirm')) ?></div>
+<?php if (!empty($canManageSecretAcl)): ?>
+    <dialog id="delete-secret-modal" class="modal">
+        <div class="modal-body">
+            <div>
+                <h3 style="margin:0 0 .35rem;"><?= e(__('ui.secret.delete_secret')) ?></h3>
+                <div class="wizard-meta"><?= e(__('ui.secret.delete_secret_confirm')) ?></div>
+            </div>
+            <form method="POST" action="<?= e($deleteAction) ?>" class="actions-end">
+                <button type="button" class="secondary" data-close-modal="delete-secret-modal"><?= e(__('ui.organization.cancel')) ?></button>
+                <button type="submit" class="danger"><?= e(__('ui.secret.delete_secret')) ?></button>
+            </form>
         </div>
-        <form method="POST" action="<?= e($deleteAction) ?>" class="actions-end">
-            <button type="button" class="secondary" data-close-modal="delete-secret-modal"><?= e(__('ui.organization.cancel')) ?></button>
-            <button type="submit" class="danger"><?= e(__('ui.secret.delete_secret')) ?></button>
-        </form>
-    </div>
-</dialog>
+    </dialog>
+<?php endif; ?>
 
 <?php if (!empty($canManageSecretAcl)): ?>
     <dialog id="secret-acl-modal" class="modal">
@@ -474,7 +493,7 @@ $renderReadonlyRotationField = static function (array $field, array $values): vo
                                 <select id="secret-acl-user-select">
                                     <option value=""><?= e(__('ui.secret.acl_select_user')) ?></option>
                                     <?php foreach ($organizationMembers as $member): ?>
-                                        <?php if ($member['role'] === 'owner') { continue; } ?>
+                                        <?php if ($member['uuid'] === $secretOwnerUuid) { continue; } ?>
                                         <option value="<?= e($member['uuid']) ?>"><?= e($member['name'] . ' <' . $member['email'] . '>') ?></option>
                                     <?php endforeach; ?>
                                 </select>
@@ -829,7 +848,7 @@ $renderReadonlyRotationField = static function (array $field, array $values): vo
     const organizationGroups = <?= json_encode($organizationGroups, JSON_UNESCAPED_UNICODE | JSON_UNESCAPED_SLASHES) ?>;
     const organizationApiKeys = <?= json_encode($organizationApiKeys, JSON_UNESCAPED_UNICODE | JSON_UNESCAPED_SLASHES) ?>;
     const currentUserUuid = <?= json_encode($user->uuid) ?>;
-    const secretOwnerUuid = <?= json_encode($secret->ownerUserId !== null ? \Passway\Models\User::findById($secret->ownerUserId)?->uuid : null) ?>;
+    const secretOwnerUuid = <?= json_encode($secretOwnerUuid) ?>;
     const aclLabels = {
         inherit: <?= json_encode((string) __('ui.secret.acl_effect_inherit')) ?>,
         allow: <?= json_encode((string) __('ui.secret.acl_effect_allow')) ?>,
@@ -1246,7 +1265,7 @@ $renderReadonlyRotationField = static function (array $field, array $values): vo
                 return;
             }
 
-            const member = organizationMembers.find((item) => item.uuid === subjectUuid && item.role !== 'owner');
+            const member = organizationMembers.find((item) => item.uuid === subjectUuid && item.uuid !== secretOwnerUuid);
             if (!member) {
                 secretAclStatus.textContent = aclLabels.addUser;
                 return;

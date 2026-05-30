@@ -2629,6 +2629,7 @@ final class WebController
         if ($search !== '') {
             ['directories' => $searchDirectories, 'secrets' => $searchSecrets] = $this->searchOrganizationSubtree(
                 $org,
+                $user,
                 $currentDir,
                 $search,
             );
@@ -2689,6 +2690,10 @@ final class WebController
         $keys = [];
 
         foreach (ApiKey::findByOrgId($orgId) as $apiKey) {
+            if (!$apiKey->isActive) {
+                continue;
+            }
+
             $keys[] = [
                 'uuid' => $apiKey->uuid,
                 'name' => $apiKey->name,
@@ -2891,7 +2896,7 @@ final class WebController
     /**
      * @return array{directories: array<int, array{directory: Directory, path: string}>, secrets: array<int, array{secret: Secret, directory: Directory, path: string}>}
      */
-    private function searchOrganizationSubtree(Organization $organization, ?Directory $currentDir, string $search): array
+    private function searchOrganizationSubtree(Organization $organization, User $user, ?Directory $currentDir, string $search): array
     {
         $search = mb_strtolower($search, 'UTF-8');
         $allDirectories = Directory::findByOrgId($organization->id);
@@ -2909,6 +2914,9 @@ final class WebController
                 continue;
             }
             if ($this->isHiddenDirectory($directory)) {
+                continue;
+            }
+            if (!$this->permissionService->can('read', $user->id, 'directory', $directory->id, $organization->id)) {
                 continue;
             }
             if (mb_stripos($directory->name, $search, 0, 'UTF-8') !== false) {
@@ -2932,6 +2940,9 @@ final class WebController
             }
             $isRootSecret = $this->isHiddenDirectory($directory);
             if ($basePath !== null && $directory->path !== $basePath && !str_starts_with($directory->path, $basePath . '/')) {
+                continue;
+            }
+            if (!$this->permissionService->can('read', $user->id, 'secret', $secret->id, $organization->id)) {
                 continue;
             }
             if (mb_stripos($secret->name, $search, 0, 'UTF-8') !== false) {

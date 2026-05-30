@@ -922,6 +922,16 @@ return [
         'version_history' => 'История версий',
         'version_label' => 'Версия :version',
         'version_meta' => ':rotation_type · :status · :created_at',
+        'rotation_types' => [
+            'manual' => 'Ручное изменение',
+            'scheduled' => 'Плановая ротация',
+            'api' => 'API',
+        ],
+        'version_statuses' => [
+            'success' => 'Успешно',
+            'failed' => 'Ошибка',
+            'rolled_back' => 'Откат',
+        ],
         'no_versions' => 'История версий пока пуста.',
     ],
     'messages' => [
@@ -1097,7 +1107,9 @@ return [
             'not_found' => 'Секрет не найден.',
             'duplicate_name' => 'Секрет с таким названием уже существует в каталоге.',
             'access_permission_required' => "Доступ запрещён: требуется право ':permission'.",
+            'owner_delete_required' => 'Удалить этот секрет может только его владелец.',
             'owner_acl_required' => 'Управлять ACL этого секрета может только его владелец.',
+            'owner_acl_subject_forbidden' => 'Текущего владельца секрета нельзя добавить в ACL этого секрета.',
             'owner_transfer_required' => 'Передать владение секретом может только его владелец.',
             'new_owner_must_be_member' => 'Новый владелец секрета должен быть участником организации.',
             'rotation_integration_not_found' => 'Интеграция ротации не найдена.',

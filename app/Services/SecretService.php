@@ -357,7 +357,11 @@ final class SecretService
     {
         $dir = $this->findDirInOrg($dirUuid, $orgId);
         $this->assertCan('read', $userId, 'directory', $dir->id, $orgId);
-        return Secret::findByDirId($dir->id);
+
+        return \array_values(\array_filter(
+            Secret::findByDirId($dir->id),
+            fn(Secret $secret): bool => $this->permissionService->can('read', $userId, 'secret', $secret->id, $orgId)
+        ));
     }
 
     public function getMeta(string $secretUuid, string $orgId, string $userId): Secret
@@ -631,13 +635,13 @@ final class SecretService
     /**
      * Soft-delete a secret (sets deleted_at).
      *
-     * @throws AuthException     if permission is missing (requires editor+)
+     * @throws AuthException     if requester is not the secret owner
      * @throws \RuntimeException if not found
      */
     public function delete(string $secretUuid, string $orgId, string $userId): void
     {
         $secret = $this->findSecretInOrg($secretUuid, $orgId);
-        $this->assertCan('write', $userId, 'secret', $secret->id, $orgId);
+        $this->assertOwnedBy($secret, $userId, 'ui.backend.secret.owner_delete_required');
         $secret->update(['deleted_at' => now()->format('Y-m-d H:i:s')]);
 
         $this->getAuditService()->record(
@@ -701,6 +705,12 @@ final class SecretService
     {
         $secret = $this->findSecretInOrg($secretUuid, $orgId);
         $this->assertOwnedBy($secret, $requesterId, 'ui.backend.secret.owner_acl_required');
+
+        foreach ($rules as $rule) {
+            if (($rule['subject_type'] ?? null) === 'user' && (string) ($rule['subject_id'] ?? '') === (string) $secret->ownerUserId) {
+                throw new \InvalidArgumentException(__('ui.backend.secret.owner_acl_subject_forbidden'));
+            }
+        }
 
         return $this->permissionService->replaceForResource('secret', $secret->id, $rules, $requesterId);
     }

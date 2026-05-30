@@ -126,7 +126,11 @@ final class DirectoryService
     public function listAll(string $orgId, string $userId): array
     {
         $this->assertHasPermission($orgId, $userId, 'reader');
-        return Directory::findByOrgId($orgId);
+
+        return \array_values(\array_filter(
+            Directory::findByOrgId($orgId),
+            fn(Directory $dir): bool => $this->permissionService->can('read', $userId, 'directory', $dir->id, $orgId)
+        ));
     }
 
     /**
@@ -149,7 +153,10 @@ final class DirectoryService
             $parentId = $parent->id;
         }
 
-        return Directory::findChildren($orgId, $parentId);
+        return \array_values(\array_filter(
+            Directory::findChildren($orgId, $parentId),
+            fn(Directory $dir): bool => $this->permissionService->can('read', $userId, 'directory', $dir->id, $orgId)
+        ));
     }
 
     /**

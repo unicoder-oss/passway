@@ -235,6 +235,23 @@ final class SecretServiceTest extends DatabaseTestCase
         $this->assertCount(0, $secrets);
     }
 
+    public function test_list_in_directory_hides_read_denied_secrets(): void
+    {
+        $owner = $this->createTestUser();
+        $reader = $this->createTestUser('reader-secret-list@example.com');
+        $org = $this->orgSvc->create('Org', $owner->id);
+        $this->orgSvc->addMember($org->id, $reader->id, 'reader', null);
+        $dir = $this->dirSvc->create($org->id, null, 'Dir', $owner->id);
+        $visible = $this->svc->create($org->id, $dir->uuid, 'A Visible', 'static', 'v', $owner->id);
+        $hidden = $this->svc->create($org->id, $dir->uuid, 'B Hidden', 'static', 'v', $owner->id);
+
+        $this->permSvc->grant('user', $reader->id, 'secret', $hidden->id, 'read', true, null, $owner->id, $org->id);
+
+        $secrets = $this->svc->listInDirectory($dir->uuid, $org->id, $reader->id);
+
+        $this->assertSame([$visible->id], array_map(static fn(Secret $secret): string => $secret->id, $secrets));
+    }
+
     public function test_list_in_directory_throws_for_non_member(): void
     {
         $owner    = $this->createTestUser();
@@ -428,6 +445,23 @@ final class SecretServiceTest extends DatabaseTestCase
         $this->assertNull(Secret::findByUuid($secret->uuid));
     }
 
+    public function test_secret_delete_requires_secret_owner_even_with_write_access(): void
+    {
+        $owner = $this->createTestUser();
+        $editor = $this->createTestUser('editor-delete@example.com');
+        $org = $this->orgSvc->create('Org', $owner->id);
+        $this->orgSvc->addMember($org->id, $editor->id, 'editor', null);
+        $dir = $this->dirSvc->create($org->id, null, 'Dir', $owner->id);
+        $secret = $this->svc->create($org->id, $dir->uuid, 'Secret', 'static', 'value', $owner->id);
+
+        try {
+            $this->svc->delete($secret->uuid, $org->id, $editor->id);
+            $this->fail('Expected AuthException when non-owner deletes a secret.');
+        } catch (AuthException) {
+            $this->assertNotNull(Secret::findByUuid($secret->uuid));
+        }
+    }
+
     public function test_transfer_ownership_updates_secret_owner(): void
     {
         $owner = $this->createTestUser();
@@ -489,6 +523,43 @@ final class SecretServiceTest extends DatabaseTestCase
         $this->assertCount(2, $rules);
         $stored = $this->svc->listAcl($secret->uuid, $org->id, $owner->id);
         $this->assertCount(2, $stored);
+    }
+
+    public function test_replace_acl_allows_organization_owner_when_not_secret_owner(): void
+    {
+        $organizationOwner = $this->createTestUser('org-owner-acl@example.com');
+        $secretOwner = $this->createTestUser('secret-owner-acl@example.com');
+        $org = $this->orgSvc->create('Org', $organizationOwner->id);
+        $this->orgSvc->addMember($org->id, $secretOwner->id, 'editor', null);
+        $dir = $this->dirSvc->create($org->id, null, 'Dir', $organizationOwner->id);
+        $secret = $this->svc->create($org->id, $dir->uuid, 'Secret', 'static', 'value', $secretOwner->id);
+
+        $rules = $this->svc->replaceAcl($secret->uuid, $org->id, $secretOwner->id, [[
+            'subject_type' => 'user',
+            'subject_id' => $organizationOwner->id,
+            'read' => 'deny',
+            'write' => 'deny',
+        ]]);
+
+        $this->assertCount(2, $rules);
+        $this->assertSame($organizationOwner->id, $rules[0]->subjectId);
+    }
+
+    public function test_replace_acl_rejects_current_secret_owner(): void
+    {
+        $owner = $this->createTestUser();
+        $org = $this->orgSvc->create('Org', $owner->id);
+        $dir = $this->dirSvc->create($org->id, null, 'Dir', $owner->id);
+        $secret = $this->svc->create($org->id, $dir->uuid, 'Secret', 'static', 'value', $owner->id);
+
+        $this->expectException(\InvalidArgumentException::class);
+
+        $this->svc->replaceAcl($secret->uuid, $org->id, $owner->id, [[
+            'subject_type' => 'user',
+            'subject_id' => $owner->id,
+            'read' => 'deny',
+            'write' => null,
+        ]]);
     }
 
     public function test_replace_acl_stores_api_key_subject_rules(): void

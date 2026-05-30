@@ -732,7 +732,7 @@ final class SecretController
     private function resolveApiKeySubjectId(string $subjectUuid, string $orgId): ?string
     {
         $apiKey = ApiKey::findByUuid($subjectUuid);
-        if ($apiKey === null || $apiKey->organizationId !== $orgId) {
+        if ($apiKey === null || $apiKey->organizationId !== $orgId || !$apiKey->isActive) {
             return null;
         }
 
