@@ -126,23 +126,129 @@ final class Router
                 ->withContentType('application/json')
                 ->withBody(json_encode([
                     'success' => false,
-                    'error'   => 'Method Not Allowed',
-                ]));
+                    'error'   => __('ui.errors.method_not_allowed'),
+                ], JSON_UNESCAPED_UNICODE | JSON_UNESCAPED_SLASHES));
         }
 
         // Route not found
         if ($request->expectsJson()) {
-            return Response::notFound('Route not found');
+            return Response::notFound(__('ui.errors.route_not_found'));
         }
 
         return Response::make(404)
             ->withContentType('text/html; charset=utf-8')
-            ->withBody('<h1>404 Not Found</h1>');
+            ->withBody($this->renderNotFoundHtml());
     }
 
     // ------------------------------------------------------------------ //
     //  Private methods                                                    //
     // ------------------------------------------------------------------ //
+
+    private function renderNotFoundHtml(): string
+    {
+        $locale = htmlspecialchars(app_locale(), ENT_QUOTES | ENT_SUBSTITUTE, 'UTF-8');
+        $title = htmlspecialchars(__('ui.errors.not_found_title'), ENT_QUOTES | ENT_SUBSTITUTE, 'UTF-8');
+        $heading = htmlspecialchars(__('ui.errors.not_found_title'), ENT_QUOTES | ENT_SUBSTITUTE, 'UTF-8');
+        $message = htmlspecialchars(__('ui.errors.not_found_message'), ENT_QUOTES | ENT_SUBSTITUTE, 'UTF-8');
+        $homeLabel = htmlspecialchars(__('ui.invite.go_home'), ENT_QUOTES | ENT_SUBSTITUTE, 'UTF-8');
+        $styles = $this->renderErrorPageStyles();
+
+        return <<<HTML
+        <!DOCTYPE html>
+        <html lang="{$locale}">
+        <head>
+            <meta charset="UTF-8">
+            <meta name="viewport" content="width=device-width, initial-scale=1.0">
+            <title>{$title}</title>
+            <style>
+                {$styles}
+            </style>
+        </head>
+        <body>
+            <div class="card">
+                <div class="brand">passway</div>
+                <h1>{$heading}</h1>
+                <p>{$message}</p>
+                <a class="button" href="/">{$homeLabel}</a>
+            </div>
+        </body>
+        </html>
+        HTML;
+    }
+
+    private function renderErrorPageStyles(): string
+    {
+        return <<<'CSS'
+                :root {
+                    color-scheme: light dark;
+                    --bg: #f5f5f5;
+                    --fg: #161616;
+                    --muted: #606060;
+                    --panel: #ffffff;
+                    --border: #d0d0d0;
+                    --button: #4b4b4b;
+                    --button-fg: #ffffff;
+                    --shadow: 0 12px 32px rgba(0, 0, 0, .05);
+                }
+                @media (prefers-color-scheme: dark) {
+                    :root {
+                        --bg: #111111;
+                        --fg: #f3f3f3;
+                        --muted: #a4a4a4;
+                        --panel: #1a1a1a;
+                        --border: #393939;
+                        --button: #d6d6d6;
+                        --button-fg: #111111;
+                        --shadow: none;
+                    }
+                }
+                * { box-sizing: border-box; }
+                body {
+                    margin: 0;
+                    min-height: 100vh;
+                    display: flex;
+                    align-items: center;
+                    justify-content: center;
+                    padding: 1rem;
+                    background: var(--bg);
+                    color: var(--fg);
+                    font-family: ui-monospace, SFMono-Regular, Menlo, Consolas, "Liberation Mono", monospace;
+                    line-height: 1.5;
+                }
+                a { color: inherit; text-decoration: none; }
+                .card {
+                    width: 100%;
+                    max-width: 520px;
+                    padding: 2rem;
+                    border: 1px solid var(--border);
+                    background: var(--panel);
+                    box-shadow: var(--shadow);
+                }
+                .brand {
+                    margin-bottom: 1rem;
+                    font-weight: 700;
+                    letter-spacing: .02em;
+                    text-transform: lowercase;
+                }
+                h1 { margin: .2rem 0 1rem; font-size: 2rem; }
+                p { margin: 0 0 1.25rem; color: var(--muted); }
+                .button {
+                    display: inline-flex;
+                    align-items: center;
+                    justify-content: center;
+                    width: 100%;
+                    border: 1px solid var(--button);
+                    background: var(--button);
+                    color: var(--button-fg);
+                    padding: .8rem 1rem;
+                    font: inherit;
+                    cursor: pointer;
+                    transition: opacity .15s ease;
+                }
+                .button:hover { opacity: .88; }
+                .button:focus { outline: 2px solid var(--fg); outline-offset: 2px; }
+        CSS;
+    }
 
     private function addRoute(string $method, string $path, callable|array $handler, array $middleware): void
     {

@@ -89,7 +89,7 @@ try {
     http_response_code(500);
     header('Content-Type: application/json');
 
-    $body = ['error' => 'Internal Server Error'];
+    $body = ['error' => function_exists('__') ? __('ui.errors.server_error_title') : 'Internal Server Error'];
 
     // Show details in development
     if (($_ENV['APP_DEBUG'] ?? 'false') === 'true') {

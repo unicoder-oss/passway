@@ -529,7 +529,7 @@ final class Application
         $debug = $this->config->get('APP_DEBUG', false);
 
         if ($request->expectsJson()) {
-            $body = ['success' => false, 'error' => 'Internal Server Error'];
+            $body = ['success' => false, 'error' => __('ui.errors.server_error_title')];
 
             if ($debug) {
                 $body['debug'] = [
@@ -544,21 +544,134 @@ final class Application
         }
 
         if ($debug) {
-            $html = sprintf(
-                '<h1>500 Internal Server Error</h1><pre>%s: %s&#10;in %s:%d&#10;&#10;%s</pre>',
-                htmlspecialchars(get_class($e)),
-                htmlspecialchars($e->getMessage()),
-                htmlspecialchars($e->getFile()),
+            $details = sprintf(
+                "%s: %s\nin %s:%d\n\n%s",
+                get_class($e),
+                $e->getMessage(),
+                $e->getFile(),
                 $e->getLine(),
-                htmlspecialchars($e->getTraceAsString())
+                $e->getTraceAsString()
             );
             return Response::make(500)
                 ->withContentType('text/html; charset=utf-8')
-                ->withBody($html);
+                ->withBody($this->renderServerErrorHtml(__('ui.errors.server_error_title'), __('ui.errors.server_error_message'), $details));
         }
 
         return Response::make(500)
             ->withContentType('text/html; charset=utf-8')
-            ->withBody('<h1>500 Internal Server Error</h1>');
+            ->withBody($this->renderServerErrorHtml(__('ui.errors.server_error_title'), __('ui.errors.server_error_message')));
+    }
+
+    private function renderServerErrorHtml(string $title, string $message, ?string $details = null): string
+    {
+        $locale = htmlspecialchars(app_locale(), ENT_QUOTES | ENT_SUBSTITUTE, 'UTF-8');
+        $titleHtml = htmlspecialchars($title, ENT_QUOTES | ENT_SUBSTITUTE, 'UTF-8');
+        $messageHtml = htmlspecialchars($message, ENT_QUOTES | ENT_SUBSTITUTE, 'UTF-8');
+        $styles = $this->renderErrorPageStyles();
+        $detailsHtml = $details !== null
+            ? '<pre>' . htmlspecialchars($details, ENT_QUOTES | ENT_SUBSTITUTE, 'UTF-8') . '</pre>'
+            : '';
+
+        return <<<HTML
+        <!DOCTYPE html>
+        <html lang="{$locale}">
+        <head>
+            <meta charset="UTF-8">
+            <meta name="viewport" content="width=device-width, initial-scale=1.0">
+            <title>{$titleHtml}</title>
+            <style>
+                {$styles}
+            </style>
+        </head>
+        <body>
+            <div class="card">
+                <div class="brand">passway</div>
+                <h1>{$titleHtml}</h1>
+                <div class="error">{$messageHtml}</div>
+                {$detailsHtml}
+            </div>
+        </body>
+        </html>
+        HTML;
+    }
+
+    private function renderErrorPageStyles(): string
+    {
+        return <<<'CSS'
+                :root {
+                    color-scheme: light dark;
+                    --bg: #f5f5f5;
+                    --fg: #161616;
+                    --muted: #606060;
+                    --panel: #ffffff;
+                    --panel-subtle: #ededed;
+                    --border: #d0d0d0;
+                    --error-bg: #f5e6e6;
+                    --error-border: #c79494;
+                    --error-fg: #5f1e1e;
+                    --shadow: 0 12px 32px rgba(0, 0, 0, .05);
+                }
+                @media (prefers-color-scheme: dark) {
+                    :root {
+                        --bg: #111111;
+                        --fg: #f3f3f3;
+                        --muted: #a4a4a4;
+                        --panel: #1a1a1a;
+                        --panel-subtle: #242424;
+                        --border: #393939;
+                        --error-bg: #351b1b;
+                        --error-border: #6a2d2d;
+                        --error-fg: #f1cdcd;
+                        --shadow: none;
+                    }
+                }
+                * { box-sizing: border-box; }
+                body {
+                    margin: 0;
+                    min-height: 100vh;
+                    display: flex;
+                    align-items: center;
+                    justify-content: center;
+                    padding: 1rem;
+                    background: var(--bg);
+                    color: var(--fg);
+                    font-family: ui-monospace, SFMono-Regular, Menlo, Consolas, "Liberation Mono", monospace;
+                    line-height: 1.5;
+                }
+                .card {
+                    width: 100%;
+                    max-width: 760px;
+                    padding: 2rem;
+                    border: 1px solid var(--border);
+                    background: var(--panel);
+                    box-shadow: var(--shadow);
+                }
+                .brand {
+                    margin-bottom: 1rem;
+                    font-weight: 700;
+                    letter-spacing: .02em;
+                    text-transform: lowercase;
+                }
+                h1 { margin: .2rem 0 1rem; font-size: 2rem; }
+                .error {
+                    border: 1px solid var(--error-border);
+                    background: var(--error-bg);
+                    color: var(--error-fg);
+                    padding: .9rem 1rem;
+                    margin-bottom: 1rem;
+                }
+                pre {
+                    margin: 0;
+                    max-height: 60vh;
+                    overflow: auto;
+                    white-space: pre-wrap;
+                    word-break: break-word;
+                    border: 1px solid var(--border);
+                    background: var(--panel-subtle);
+                    color: var(--fg);
+                    padding: 1rem;
+                    font: inherit;
+                }
+        CSS;
     }
 }

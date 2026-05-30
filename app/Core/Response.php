@@ -79,25 +79,25 @@ final class Response
     /**
      * Response 404.
      */
-    public static function notFound(string $message = 'Not Found'): self
+    public static function notFound(?string $message = null): self
     {
-        return self::error($message, 404);
+        return self::error($message ?? __('ui.errors.not_found_title'), 404);
     }
 
     /**
      * Response 401.
      */
-    public static function unauthorized(string $message = 'Unauthorized'): self
+    public static function unauthorized(?string $message = null): self
     {
-        return self::error($message, 401);
+        return self::error($message ?? __('ui.errors.unauthorized'), 401);
     }
 
     /**
      * Response 403.
      */
-    public static function forbidden(string $message = 'Forbidden'): self
+    public static function forbidden(?string $message = null): self
     {
-        return self::error($message, 403);
+        return self::error($message ?? __('ui.errors.forbidden'), 403);
     }
 
     /**
@@ -105,17 +105,17 @@ final class Response
      *
      * @param array<string, string[]> $errors
      */
-    public static function validationError(array $errors, string $message = 'Validation failed'): self
+    public static function validationError(array $errors, ?string $message = null): self
     {
-        return self::error($message, 422, ['errors' => $errors]);
+        return self::error($message ?? __('ui.errors.validation_failed'), 422, ['errors' => $errors]);
     }
 
     /**
      * Response 500.
      */
-    public static function serverError(string $message = 'Internal Server Error'): self
+    public static function serverError(?string $message = null): self
     {
-        return self::error($message, 500);
+        return self::error($message ?? __('ui.errors.server_error_title'), 500);
     }
 
     // ------------------------------------------------------------------ //

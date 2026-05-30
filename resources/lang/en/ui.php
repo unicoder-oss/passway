@@ -167,6 +167,17 @@ return [
         'invalid_heading' => 'Invalid Invite',
         'go_home' => 'Go to homepage',
     ],
+    'errors' => [
+        'not_found_title' => '404 Not Found',
+        'not_found_message' => 'The requested page could not be found.',
+        'route_not_found' => 'Route not found.',
+        'method_not_allowed' => 'Method Not Allowed.',
+        'unauthorized' => 'Unauthorized.',
+        'forbidden' => 'Forbidden.',
+        'validation_failed' => 'Validation failed.',
+        'server_error_title' => '500 Internal Server Error',
+        'server_error_message' => 'An internal server error occurred.',
+    ],
     'home' => [
         'rotation_services' => 'Rotation Services',
         'api' => 'API',

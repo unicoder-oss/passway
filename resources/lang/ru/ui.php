@@ -167,6 +167,17 @@ return [
         'invalid_heading' => 'Некорректное приглашение',
         'go_home' => 'Перейти на главную',
     ],
+    'errors' => [
+        'not_found_title' => 'Страница не найдена',
+        'not_found_message' => 'Запрошенной страницы не существует.',
+        'route_not_found' => 'Маршрут не найден.',
+        'method_not_allowed' => 'Метод не разрешён.',
+        'unauthorized' => 'Требуется авторизация.',
+        'forbidden' => 'Доступ запрещён.',
+        'validation_failed' => 'Ошибка валидации.',
+        'server_error_title' => 'Внутренняя ошибка сервера',
+        'server_error_message' => 'Произошёл сбой на стороне сервера.',
+    ],
     'home' => [
         'rotation_services' => 'Сервисы ротации',
         'api' => 'API',

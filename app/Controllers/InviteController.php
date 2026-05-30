@@ -459,6 +459,7 @@ final class InviteController
 
     private function renderAcceptForm(InviteLink $invite, ?Organization $org): string
     {
+        $styles = $this->renderInvitePageStyles();
         $roleHtml = e($invite->role);
         $locale = e(app_locale());
         $title = e(__('ui.titles.accept_invite'));
@@ -474,14 +475,7 @@ final class InviteController
             <meta name="viewport" content="width=device-width, initial-scale=1.0">
             <title>{$title}</title>
             <style>
-                :root { color-scheme: light dark; --bg:#f5f5f5; --fg:#161616; --muted:#606060; --panel:#fff; --border:#d0d0d0; --button:#4b4b4b; }
-                @media (prefers-color-scheme: dark) { :root { --bg:#111111; --fg:#f3f3f3; --muted:#a4a4a4; --panel:#1a1a1a; --border:#393939; --button:#d6d6d6; } }
-                body { font-family: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace; background: var(--bg); color: var(--fg); display: flex; align-items: center; justify-content: center; min-height: 100vh; padding: 1rem; }
-                .card { background: var(--panel); border: 1px solid var(--border); padding: 2rem; width: 100%; max-width: 420px; text-align: center; }
-                h1 { margin: 0 0 .75rem; font-size: 1.5rem; }
-                p { color: var(--muted); margin: 0 0 1.25rem; }
-                .badge { display: inline-block; padding: .35rem .75rem; border: 1px solid var(--border); background: var(--panel); font-size: .85rem; font-weight: 600; margin-bottom: 1.25rem; }
-                button { width: 100%; border: 1px solid var(--button); background: var(--button); color: var(--bg); padding: .8rem 1rem; font: inherit; cursor: pointer; }
+                {$styles}
             </style>
         </head>
         <body>
@@ -500,6 +494,7 @@ final class InviteController
 
     private function renderCreateOrganizationForm(string $token, string $error = ''): string
     {
+        $styles = $this->renderInvitePageStyles();
         $locale = e(app_locale());
         $title = e(__('ui.titles.accept_invite'));
         $heading = e(__('ui.invite.create_org_heading'));
@@ -511,7 +506,7 @@ final class InviteController
         $avatarChoose = e(__('ui.invite.organization_avatar_choose'));
         $submit = e(__('ui.invite.create_organization_submit'));
         $errorHtml = $error !== ''
-            ? '<div style="border:1px solid #c79494;background:#f5e6e6;color:#5f1e1e;padding:.9rem 1rem;margin-bottom:1rem;">' . e($error) . '</div>'
+            ? '<div class="error">' . e($error) . '</div>'
             : '';
 
         return <<<HTML
@@ -522,20 +517,7 @@ final class InviteController
             <meta name="viewport" content="width=device-width, initial-scale=1.0">
             <title>{$title}</title>
             <style>
-                :root { color-scheme: light dark; --bg:#f5f5f5; --fg:#161616; --muted:#606060; --panel:#fff; --border:#d0d0d0; --button:#4b4b4b; }
-                @media (prefers-color-scheme: dark) { :root { --bg:#111111; --fg:#f3f3f3; --muted:#a4a4a4; --panel:#1a1a1a; --border:#393939; --button:#d6d6d6; } }
-                body { font-family: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace; background: var(--bg); color: var(--fg); display: flex; align-items: center; justify-content: center; min-height: 100vh; padding: 1rem; }
-                .card { background: var(--panel); border: 1px solid var(--border); padding: 2rem; width: 100%; max-width: 520px; }
-                h1 { margin: 0 0 .75rem; font-size: 1.5rem; }
-                p { margin: 0 0 1.25rem; color: var(--muted); }
-                label { display: block; margin-bottom: .4rem; color: #606060; }
-                input { width: 100%; border: 1px solid #d0d0d0; padding: .8rem .9rem; font: inherit; box-sizing: border-box; }
-                button { width: 100%; border: 1px solid #4b4b4b; background: #4b4b4b; color: #fff; padding: .8rem 1rem; font: inherit; cursor: pointer; margin-top: 1rem; }
-                .hint { margin-top: .45rem; color: #606060; font-size: .92rem; }
-                .crop-shell { margin-top: 1rem; display: grid; gap: .75rem; }
-                .preview-wrap { width: 256px; max-width: 100%; border: 1px solid #d0d0d0; background: #ededed; }
-                canvas { display: block; width: 100%; height: auto; }
-                .range { width: 100%; margin: 0; }
+                {$styles}
             </style>
         </head>
         <body>
@@ -735,6 +717,7 @@ final class InviteController
 
     private function renderCreateOrgEntry(InviteLink $invite): string
     {
+        $styles = $this->renderInvitePageStyles();
         $locale = e(app_locale());
         $title = e(__('ui.titles.accept_invite'));
         $heading = e(__('ui.invite.heading'));
@@ -752,15 +735,7 @@ final class InviteController
             <meta name="viewport" content="width=device-width, initial-scale=1.0">
             <title>{$title}</title>
             <style>
-                :root { color-scheme: light dark; --bg:#f5f5f5; --fg:#161616; --muted:#606060; --panel:#fff; --border:#d0d0d0; --button:#4b4b4b; }
-                @media (prefers-color-scheme: dark) { :root { --bg:#111111; --fg:#f3f3f3; --muted:#a4a4a4; --panel:#1a1a1a; --border:#393939; --button:#d6d6d6; } }
-                body { font-family: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace; background: var(--bg); color: var(--fg); display: flex; align-items: center; justify-content: center; min-height: 100vh; padding: 1rem; }
-                .card { background: var(--panel); border: 1px solid var(--border); padding: 2rem; width: 100%; max-width: 520px; }
-                h1 { margin: 0 0 .75rem; font-size: 1.5rem; }
-                p { margin: 0 0 1.25rem; color: var(--muted); }
-                .actions { display: grid; gap: .75rem; }
-                .button { display: inline-flex; align-items: center; justify-content: center; border: 1px solid #4b4b4b; background: #4b4b4b; color: #fff; padding: .8rem 1rem; text-decoration: none; }
-                .button.secondary { background: #ededed; color: #161616; border-color: #d0d0d0; }
+                {$styles}
             </style>
         </head>
         <body>
@@ -779,6 +754,7 @@ final class InviteController
 
     private function renderJoinOrgEntry(InviteLink $invite, ?Organization $org): string
     {
+        $styles = $this->renderInvitePageStyles();
         $locale = e(app_locale());
         $title = e(__('ui.titles.accept_invite'));
         $heading = e(__('ui.invite.heading'));
@@ -796,15 +772,7 @@ final class InviteController
             <meta name="viewport" content="width=device-width, initial-scale=1.0">
             <title>{$title}</title>
             <style>
-                :root { color-scheme: light dark; --bg:#f5f5f5; --fg:#161616; --muted:#606060; --panel:#fff; --border:#d0d0d0; --button:#4b4b4b; }
-                @media (prefers-color-scheme: dark) { :root { --bg:#111111; --fg:#f3f3f3; --muted:#a4a4a4; --panel:#1a1a1a; --border:#393939; --button:#d6d6d6; } }
-                body { font-family: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace; background: var(--bg); color: var(--fg); display: flex; align-items: center; justify-content: center; min-height: 100vh; padding: 1rem; }
-                .card { background: var(--panel); border: 1px solid var(--border); padding: 2rem; width: 100%; max-width: 520px; }
-                h1 { margin: 0 0 .75rem; font-size: 1.5rem; }
-                p { margin: 0 0 1.25rem; color: var(--muted); }
-                .actions { display: grid; gap: .75rem; }
-                .button { display: inline-flex; align-items: center; justify-content: center; border: 1px solid #4b4b4b; background: #4b4b4b; color: #fff; padding: .8rem 1rem; text-decoration: none; }
-                .button.secondary { background: #ededed; color: #161616; border-color: #d0d0d0; }
+                {$styles}
             </style>
         </head>
         <body>
@@ -823,6 +791,7 @@ final class InviteController
 
     private function renderRegisterForm(string $token, string $error = '', string $email = ''): string
     {
+        $styles = $this->renderInvitePageStyles();
         $locale = e(app_locale());
         $title = e(__('ui.titles.accept_invite'));
         $heading = e(__('ui.invite.register_heading'));
@@ -832,7 +801,7 @@ final class InviteController
         $passwordConfirmLabel = e(__('ui.invite.confirm_password'));
         $submit = e(__('ui.invite.register_submit'));
         $errorHtml = $error !== ''
-            ? '<div style="border:1px solid #c79494;background:#f5e6e6;color:#5f1e1e;padding:.9rem 1rem;margin-bottom:1rem;">' . e($error) . '</div>'
+            ? '<div class="error">' . e($error) . '</div>'
             : '';
         $emailValue = e($email);
 
@@ -844,15 +813,7 @@ final class InviteController
             <meta name="viewport" content="width=device-width, initial-scale=1.0">
             <title>{$title}</title>
             <style>
-                :root { color-scheme: light dark; --bg:#f5f5f5; --fg:#161616; --muted:#606060; --panel:#fff; --border:#d0d0d0; --button:#4b4b4b; }
-                @media (prefers-color-scheme: dark) { :root { --bg:#111111; --fg:#f3f3f3; --muted:#a4a4a4; --panel:#1a1a1a; --border:#393939; --button:#d6d6d6; } }
-                body { font-family: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace; background: var(--bg); color: var(--fg); display: flex; align-items: center; justify-content: center; min-height: 100vh; padding: 1rem; }
-                .card { background: var(--panel); border: 1px solid var(--border); padding: 2rem; width: 100%; max-width: 520px; }
-                h1 { margin: 0 0 .75rem; font-size: 1.5rem; }
-                p { margin: 0 0 1.25rem; color: var(--muted); }
-                label { display: block; margin-bottom: .4rem; color: var(--muted); }
-                input { width: 100%; border: 1px solid var(--border); background: var(--panel); color: var(--fg); padding: .8rem .9rem; font: inherit; box-sizing: border-box; margin-bottom: .9rem; }
-                button { width: 100%; border: 1px solid var(--button); background: var(--button); color: var(--bg); padding: .8rem 1rem; font: inherit; cursor: pointer; }
+                {$styles}
             </style>
         </head>
         <body>
@@ -877,6 +838,7 @@ final class InviteController
 
     private function renderError(string $message): string
     {
+        $styles = $this->renderInvitePageStyles();
         $msg = e($message);
         $locale = e(app_locale());
         $title = e(__('ui.app.name'));
@@ -884,12 +846,155 @@ final class InviteController
         $homeLabel = e(__('ui.invite.go_home'));
 
         return <<<HTML
-        <!DOCTYPE html><html lang="{$locale}"><head><meta charset="UTF-8"><title>{$title}</title></head>
-        <body style="font-family:system-ui;text-align:center;padding:3rem">
-          <h1>{$heading}</h1><p style="color:#c00">{$msg}</p>
-          <a href="/">{$homeLabel}</a>
-        </body></html>
+        <!DOCTYPE html>
+        <html lang="{$locale}">
+        <head>
+            <meta charset="UTF-8">
+            <meta name="viewport" content="width=device-width, initial-scale=1.0">
+            <title>{$title}</title>
+            <style>
+                {$styles}
+            </style>
+        </head>
+        <body>
+            <div class="card">
+                <h1>{$heading}</h1>
+                <div class="error">{$msg}</div>
+                <a class="button" href="/">{$homeLabel}</a>
+            </div>
+        </body>
+        </html>
         HTML;
+    }
+
+    private function renderInvitePageStyles(): string
+    {
+        return <<<'CSS'
+                :root {
+                    color-scheme: light dark;
+                    --bg: #f5f5f5;
+                    --fg: #161616;
+                    --muted: #606060;
+                    --panel: #ffffff;
+                    --panel-subtle: #ededed;
+                    --border: #d0d0d0;
+                    --button: #4b4b4b;
+                    --button-fg: #ffffff;
+                    --button-secondary: #e5e5e5;
+                    --button-secondary-fg: #161616;
+                    --error-bg: #f5e6e6;
+                    --error-border: #c79494;
+                    --error-fg: #5f1e1e;
+                    --shadow: 0 12px 32px rgba(0, 0, 0, .05);
+                }
+                @media (prefers-color-scheme: dark) {
+                    :root {
+                        --bg: #111111;
+                        --fg: #f3f3f3;
+                        --muted: #a4a4a4;
+                        --panel: #1a1a1a;
+                        --panel-subtle: #242424;
+                        --border: #393939;
+                        --button: #d6d6d6;
+                        --button-fg: #111111;
+                        --button-secondary: #2a2a2a;
+                        --button-secondary-fg: #f3f3f3;
+                        --error-bg: #351b1b;
+                        --error-border: #6a2d2d;
+                        --error-fg: #f1cdcd;
+                        --shadow: none;
+                    }
+                }
+                * { box-sizing: border-box; }
+                body {
+                    margin: 0;
+                    font-family: ui-monospace, SFMono-Regular, Menlo, Consolas, "Liberation Mono", monospace;
+                    background: var(--bg);
+                    color: var(--fg);
+                    line-height: 1.5;
+                    display: flex;
+                    align-items: center;
+                    justify-content: center;
+                    min-height: 100vh;
+                    padding: 1rem;
+                }
+                a { color: inherit; text-decoration: none; }
+                h1 { margin: 0 0 .75rem; font-size: 1.5rem; }
+                p { margin: 0 0 1.25rem; color: var(--muted); }
+                label { display: block; margin-bottom: .4rem; color: var(--muted); }
+                input {
+                    width: 100%;
+                    border: 1px solid var(--border);
+                    background: var(--panel);
+                    color: var(--fg);
+                    padding: .8rem .9rem;
+                    font: inherit;
+                    margin-bottom: .9rem;
+                }
+                input[type="range"] { padding: 0; }
+                .card {
+                    background: var(--panel);
+                    border: 1px solid var(--border);
+                    box-shadow: var(--shadow);
+                    padding: 2rem;
+                    width: 100%;
+                    max-width: 520px;
+                }
+                .button, button {
+                    display: inline-flex;
+                    align-items: center;
+                    justify-content: center;
+                    width: 100%;
+                    border: 1px solid var(--button);
+                    background: var(--button);
+                    color: var(--button-fg);
+                    padding: .8rem 1rem;
+                    font: inherit;
+                    cursor: pointer;
+                    text-decoration: none;
+                    transition: opacity .15s ease, background-color .15s ease, border-color .15s ease;
+                }
+                button { margin-top: 1rem; }
+                .button.secondary {
+                    background: var(--button-secondary);
+                    color: var(--button-secondary-fg);
+                    border-color: var(--border);
+                }
+                .button:hover, button:hover { opacity: .88; }
+                input:focus, button:focus, .button:focus {
+                    outline: 2px solid var(--fg);
+                    outline-offset: 2px;
+                }
+                .actions { display: grid; gap: .75rem; }
+                .badge {
+                    display: inline-block;
+                    padding: .35rem .75rem;
+                    border: 1px solid var(--border);
+                    background: var(--panel-subtle);
+                    color: var(--muted);
+                    font-size: .85rem;
+                    font-weight: 600;
+                    margin-bottom: 1.25rem;
+                }
+                .error {
+                    border: 1px solid var(--error-border);
+                    background: var(--error-bg);
+                    color: var(--error-fg);
+                    padding: .9rem 1rem;
+                    margin-bottom: 1rem;
+                    overflow-wrap: anywhere;
+                }
+                .hint { margin-top: -.45rem; color: var(--muted); font-size: .92rem; }
+                .crop-shell { margin-top: 1rem; display: grid; gap: .75rem; }
+                .preview-wrap {
+                    width: 256px;
+                    max-width: 100%;
+                    border: 1px solid var(--border);
+                    background: var(--panel-subtle);
+                }
+                canvas { display: block; width: 100%; height: auto; }
+                .range { width: 100%; margin: 0; }
+        CSS;
     }
 
     private function requireWebInvite(string $token): InviteLink|Response
