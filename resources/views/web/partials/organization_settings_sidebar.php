@@ -101,6 +101,9 @@
         document.title = incoming.getAttribute('data-page-title') || doc.title || document.title;
         executeScripts(incoming);
         showToasts(incoming);
+        if (window.passwayFormatLocalDatetimes && typeof window.passwayFormatLocalDatetimes === 'function') {
+            window.passwayFormatLocalDatetimes(incoming);
+        }
 
         if (pushState) {
             history.pushState({ organizationSettings: true }, '', url);

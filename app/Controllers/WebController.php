@@ -516,7 +516,7 @@ final class WebController
         $org = $this->findOrgOrFail($request);
 
         try {
-            $groupCards = $this->groupService->listWithMemberCounts($org->id, $user->id);
+            $groupCards = $this->buildOrganizationGroupCards($org, $user);
         } catch (AuthException $e) {
             return Response::redirect('/?error=' . \urlencode($e->getMessage()));
         }
@@ -552,48 +552,7 @@ final class WebController
             return Response::redirect($this->groupsUrl($org->uuid, error: $e->getMessage()));
         }
 
-        $memberRows = [];
-        $memberIds = [];
-        foreach ($members as $member) {
-            $memberUser = User::findById($member->userId);
-            if ($memberUser === null) {
-                continue;
-            }
-
-            $memberIds[$memberUser->id] = true;
-            $memberRows[] = [
-                'user_uuid' => $memberUser->uuid,
-                'name' => display_name_for_user($memberUser),
-                'email' => $memberUser->email,
-                'role_label' => ($role = $this->organizationService->getMemberRole($org->id, $memberUser->id)) !== null
-                    ? __('ui.organization_manage.roles.' . $role)
-                    : __('ui.app.unknown'),
-                'added_at' => $member->addedAt,
-            ];
-        }
-
-        $candidateRows = [];
-        foreach ($this->organizationService->listMembers($org->id) as $orgMember) {
-            if (isset($memberIds[$orgMember->userId])) {
-                continue;
-            }
-
-            $candidateUser = User::findById($orgMember->userId);
-            if ($candidateUser === null) {
-                continue;
-            }
-
-            $candidateRows[] = [
-                'uuid' => $candidateUser->uuid,
-                'name' => display_name_for_user($candidateUser),
-                'email' => $candidateUser->email,
-                'role_label' => __('ui.organization_manage.roles.' . $orgMember->role),
-            ];
-        }
-
-        usort($candidateRows, static function (array $left, array $right): int {
-            return strcasecmp($left['email'], $right['email']);
-        });
+        [$memberRows, $candidateRows] = $this->buildGroupMemberManagementRows($org, $members);
 
         return $this->html($this->view->render('web/group_show', [
             'title' => __('ui.titles.organization_group_details'),
@@ -623,7 +582,15 @@ final class WebController
         try {
             $this->groupService->create($org->id, $name, $description !== '' ? $description : null, $user->id);
         } catch (\Throwable $e) {
+            if ($request->isAjax()) {
+                return $this->renderOrganizationGroupsResponse($request, $org, $user, error: $e->getMessage());
+            }
+
             return Response::redirect($this->groupsUrl($org->uuid, error: $e->getMessage()));
+        }
+
+        if ($request->isAjax()) {
+            return $this->renderOrganizationGroupsResponse($request, $org, $user, success: __('ui.groups.group_created'));
         }
 
         return Response::redirect($this->groupsUrl($org->uuid, success: __('ui.groups.group_created')));
@@ -642,7 +609,15 @@ final class WebController
         try {
             $this->groupService->delete($grpUuid, $org->id, $user->id);
         } catch (\Throwable $e) {
+            if ($request->isAjax()) {
+                return $this->renderOrganizationGroupsResponse($request, $org, $user, error: $e->getMessage());
+            }
+
             return Response::redirect($this->groupsUrl($org->uuid, error: $e->getMessage()));
+        }
+
+        if ($request->isAjax()) {
+            return $this->renderOrganizationGroupsResponse($request, $org, $user, success: __('ui.groups.group_deleted'));
         }
 
         return Response::redirect($this->groupsUrl($org->uuid, success: __('ui.groups.group_deleted')));
@@ -2048,7 +2023,8 @@ final class WebController
         $org = $this->findOrgOrFail($request);
         $name = \trim((string) ($request->input('name') ?? ''));
         $role = \trim((string) ($request->input('role') ?? 'reader'));
-        $expiresAt = \trim((string) ($request->input('expires_at') ?? ''));
+        $expiresAtInput = $request->input('expires_at') ?? $request->input('expires_at_local') ?? '';
+        $expiresAt = $this->normalizeApiKeyExpiresAt(\trim((string) $expiresAtInput));
 
         try {
             ['key' => $apiKey, 'raw' => $rawKey] = $this->apiKeyService->create(
@@ -2056,14 +2032,18 @@ final class WebController
                 $org->id,
                 $user->id,
                 $role,
-                $expiresAt !== '' ? $expiresAt : null,
+                $expiresAt,
             );
             $keys = $this->apiKeyService->listForOrg($org->id, $user->id);
         } catch (\Throwable $e) {
+            if ($request->isAjax()) {
+                return $this->renderApiKeysResponse($request, $org, $user, error: $e->getMessage());
+            }
+
             return Response::redirect('/organizations/' . \urlencode($org->uuid) . '/api-keys?error=' . \urlencode($e->getMessage()));
         }
 
-        return $this->html($this->view->render('web/api_keys', [
+        return $this->html($this->renderOrganizationSettingsView($request, 'web/api_keys', [
             'title' => __('ui.titles.api_keys'),
             'user' => $user,
             'organization' => $org,
@@ -2086,7 +2066,15 @@ final class WebController
         try {
             $this->apiKeyService->updateRole($keyUuid, $role, $org->id, $user->id);
         } catch (\Throwable $e) {
+            if ($request->isAjax()) {
+                return $this->renderApiKeysResponse($request, $org, $user, error: $e->getMessage());
+            }
+
             return Response::redirect('/organizations/' . \urlencode($org->uuid) . '/api-keys?error=' . \urlencode($e->getMessage()));
+        }
+
+        if ($request->isAjax()) {
+            return $this->renderApiKeysResponse($request, $org, $user, success: __('ui.messages.api_key_role_updated'));
         }
 
         return Response::redirect('/organizations/' . \urlencode($org->uuid) . '/api-keys?success=' . \urlencode(__('ui.messages.api_key_role_updated')));
@@ -2101,7 +2089,15 @@ final class WebController
         try {
             $this->apiKeyService->revoke($keyUuid, $org->id, $user->id);
         } catch (\Throwable $e) {
+            if ($request->isAjax()) {
+                return $this->renderApiKeysResponse($request, $org, $user, error: $e->getMessage());
+            }
+
             return Response::redirect('/organizations/' . \urlencode($org->uuid) . '/api-keys?error=' . \urlencode($e->getMessage()));
+        }
+
+        if ($request->isAjax()) {
+            return $this->renderApiKeysResponse($request, $org, $user, success: __('ui.messages.api_key_revoked'));
         }
 
         return Response::redirect('/organizations/' . \urlencode($org->uuid) . '/api-keys?success=' . \urlencode(__('ui.messages.api_key_revoked')));
@@ -3255,6 +3251,128 @@ final class WebController
             'canManageSettings' => $this->organizationService->hasPermission($org->id, $user->id, 'admin'),
             'activeSettingsSection' => 'invites',
         ]));
+    }
+
+    private function renderOrganizationGroupsResponse(
+        Request $request,
+        Organization $org,
+        User $user,
+        ?string $error = null,
+        ?string $success = null,
+    ): Response {
+        return $this->html($this->renderOrganizationSettingsView($request, 'web/groups', [
+            'title' => __('ui.titles.organization_groups'),
+            'user' => $user,
+            'organization' => $org,
+            'groups' => $this->buildOrganizationGroupCards($org, $user),
+            'queryError' => $error,
+            'querySuccess' => $success,
+            'canManageGroups' => $this->organizationService->hasPermission($org->id, $user->id, 'admin'),
+            'activeSettingsSection' => 'groups',
+        ]));
+    }
+
+    private function renderApiKeysResponse(
+        Request $request,
+        Organization $org,
+        User $user,
+        ?string $error = null,
+        ?string $success = null,
+        ?string $createdRawKey = null,
+    ): Response {
+        return $this->html($this->renderOrganizationSettingsView($request, 'web/api_keys', [
+            'title' => __('ui.titles.api_keys'),
+            'user' => $user,
+            'organization' => $org,
+            'keys' => $this->apiKeyService->listForOrg($org->id, $user->id),
+            'createdRawKey' => $createdRawKey,
+            'queryError' => $error,
+            'querySuccess' => $success,
+            'activeSettingsSection' => 'api-keys',
+        ]));
+    }
+
+    private function normalizeApiKeyExpiresAt(string $value): ?string
+    {
+        if ($value === '') {
+            return null;
+        }
+
+        $normalized = str_replace('T', ' ', $value);
+        if (preg_match('/^\d{4}-\d{2}-\d{2} \d{2}:\d{2}$/', $normalized) === 1) {
+            $normalized .= ':00';
+        }
+
+        return $normalized;
+    }
+
+    /** @return array<int, array<string, mixed>> */
+    private function buildOrganizationGroupCards(Organization $org, User $user): array
+    {
+        $groupCards = $this->groupService->listWithMemberCounts($org->id, $user->id);
+
+        foreach ($groupCards as &$groupCard) {
+            $group = $groupCard['group'];
+            $members = $this->groupService->listMembers($group->uuid, $org->id, $user->id);
+            [$memberRows, $candidateRows] = $this->buildGroupMemberManagementRows($org, $members);
+            $groupCard['members'] = $memberRows;
+            $groupCard['candidates'] = $candidateRows;
+        }
+        unset($groupCard);
+
+        return $groupCards;
+    }
+
+    /**
+     * @param array<int, mixed> $members
+     * @return array{0: array<int, array<string, string>>, 1: array<int, array<string, string>>}
+     */
+    private function buildGroupMemberManagementRows(Organization $org, array $members): array
+    {
+        $memberRows = [];
+        $memberIds = [];
+        foreach ($members as $member) {
+            $memberUser = User::findById($member->userId);
+            if ($memberUser === null) {
+                continue;
+            }
+
+            $memberIds[$memberUser->id] = true;
+            $memberRows[] = [
+                'user_uuid' => $memberUser->uuid,
+                'name' => display_name_for_user($memberUser),
+                'email' => $memberUser->email,
+                'role_label' => ($role = $this->organizationService->getMemberRole($org->id, $memberUser->id)) !== null
+                    ? __('ui.organization_manage.roles.' . $role)
+                    : __('ui.app.unknown'),
+                'added_at' => $member->addedAt,
+            ];
+        }
+
+        $candidateRows = [];
+        foreach ($this->organizationService->listMembers($org->id) as $orgMember) {
+            if (isset($memberIds[$orgMember->userId])) {
+                continue;
+            }
+
+            $candidateUser = User::findById($orgMember->userId);
+            if ($candidateUser === null) {
+                continue;
+            }
+
+            $candidateRows[] = [
+                'uuid' => $candidateUser->uuid,
+                'name' => display_name_for_user($candidateUser),
+                'email' => $candidateUser->email,
+                'role_label' => __('ui.organization_manage.roles.' . $orgMember->role),
+            ];
+        }
+
+        usort($candidateRows, static function (array $left, array $right): int {
+            return strcasecmp($left['email'], $right['email']);
+        });
+
+        return [$memberRows, $candidateRows];
     }
 
     private function secretUrl(string $orgUuid, string $dirUuid, string $secUuid, ?string $error = null): string

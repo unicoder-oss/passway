@@ -453,29 +453,33 @@
         return Number.isNaN(date.getTime()) ? null : date;
     };
 
-    const formatter = new Intl.DateTimeFormat(document.documentElement.lang || undefined, {
-        year: 'numeric',
-        month: '2-digit',
-        day: '2-digit',
-        hour: '2-digit',
-        minute: '2-digit',
-        second: '2-digit',
-        hour12: false,
-    });
+    window.passwayFormatLocalDatetimes = (root = document) => {
+        const formatter = new Intl.DateTimeFormat(document.documentElement.lang || undefined, {
+            year: 'numeric',
+            month: '2-digit',
+            day: '2-digit',
+            hour: '2-digit',
+            minute: '2-digit',
+            second: '2-digit',
+            hour12: false,
+        });
 
-    document.querySelectorAll('[data-local-datetime]').forEach((element) => {
-        const rawValue = element.getAttribute('data-local-datetime');
-        const parsed = parseUtcDate(rawValue);
+        root.querySelectorAll('[data-local-datetime]').forEach((element) => {
+            const rawValue = element.getAttribute('data-local-datetime');
+            const parsed = parseUtcDate(rawValue);
 
-        if (parsed === null) {
-            return;
-        }
+            if (parsed === null) {
+                return;
+            }
 
-        element.textContent = formatter.format(parsed);
-        if (rawValue) {
-            element.title = `${rawValue} UTC`;
-        }
-    });
+            element.textContent = formatter.format(parsed);
+            if (rawValue) {
+                element.title = `${rawValue} UTC`;
+            }
+        });
+    };
+
+    window.passwayFormatLocalDatetimes(document);
 })();
 </script>
 </body>

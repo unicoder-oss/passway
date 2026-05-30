@@ -1,4 +1,15 @@
 <?php if (empty($organizationSettingsPartial)) { require base_path('resources/views/partials/auth_topbar.php'); } ?>
+<?php
+$activeKeys = [];
+$revokedKeys = [];
+foreach ($keys as $key) {
+    if ($key->isActive) {
+        $activeKeys[] = $key;
+    } else {
+        $revokedKeys[] = $key;
+    }
+}
+?>
 
 <div class="js-organization-settings-page" data-page-title="<?= e((string) ($title ?? 'Passway')) ?>">
 <?php if (!empty($queryError)): ?><div class="error" data-toast="true" style="margin-bottom:1rem;"><?= e((string) $queryError) ?></div><?php endif; ?>
@@ -21,7 +32,7 @@
     <div class="grid grid-2" style="align-items:start; gap:1rem;">
         <section class="panel" style="padding:1.5rem;">
             <h2 style="margin:0 0 1rem;"><?= e(__('ui.api_keys.create')) ?></h2>
-            <form method="POST" action="/organizations/<?= e($organization->uuid) ?>/api-keys" class="grid" style="gap:.75rem;">
+            <form method="POST" action="/organizations/<?= e($organization->uuid) ?>/api-keys" class="grid js-api-key-create-form" style="gap:.75rem;" data-organization-settings-form="true" onsubmit="return window.passwayOrganizationSettingsSubmit ? window.passwayOrganizationSettingsSubmit(event, this) : true;">
                 <div>
                     <label for="key-name"><?= e(__('ui.api_keys.name')) ?></label>
                     <input id="key-name" name="name" placeholder="<?= e(__('ui.api_keys.name_placeholder')) ?>" required>
@@ -35,16 +46,17 @@
                 </div>
                 <div>
                     <label for="key-expires"><?= e(__('ui.api_keys.expires_at_optional')) ?></label>
-                    <input id="key-expires" name="expires_at" placeholder="2026-12-31 23:59:59">
+                    <input id="key-expires" name="expires_at_local" type="datetime-local" step="1">
+                    <input type="hidden" name="expires_at" class="js-api-key-expires-utc" disabled>
                 </div>
                 <button type="submit"><?= e(__('ui.api_keys.create')) ?></button>
             </form>
         </section>
 
         <section class="panel" style="padding:1.5rem;">
-            <h2 style="margin:0 0 1rem;"><?= e(__('ui.api_keys.existing')) ?></h2>
+            <h2 style="margin:0 0 1rem;"><?= e(__('ui.api_keys.active')) ?></h2>
             <div class="grid" style="gap:.75rem;">
-                <?php foreach ($keys as $key): ?>
+                <?php foreach ($activeKeys as $key): ?>
                     <div class="panel panel-muted" style="padding:1rem; display:grid; gap:.75rem;">
                         <div>
                             <div style="font-weight:700;"><?= e($key->name) ?></div>
@@ -54,26 +66,69 @@
                             <div class="muted" style="font-size:.92rem;"><?= __('ui.api_keys.last_used', ['date' => $key->lastUsedAt !== null ? local_datetime($key->lastUsedAt) : e(__('ui.app.never'))]) ?></div>
                         </div>
                         <div class="actions">
-                            <?php if ($key->isActive): ?>
-                                <form method="POST" action="/organizations/<?= e($organization->uuid) ?>/api-keys/<?= e($key->uuid) ?>/role" class="actions" style="gap:.5rem;">
-                                    <select name="role">
-                                        <option value="reader"<?= $key->role === 'reader' ? ' selected' : '' ?>><?= e(__('ui.api_keys.role_reader')) ?></option>
-                                        <option value="editor"<?= $key->role === 'editor' ? ' selected' : '' ?>><?= e(__('ui.api_keys.role_editor')) ?></option>
-                                    </select>
-                                    <button type="submit" class="secondary"><?= e(__('ui.api_keys.update_role')) ?></button>
-                                </form>
-                            <?php endif; ?>
-                            <?php if ($key->isActive): ?>
-                                <form method="POST" action="/organizations/<?= e($organization->uuid) ?>/api-keys/<?= e($key->uuid) ?>/revoke">
-                                    <button type="submit" class="danger"><?= e(__('ui.api_keys.revoke_key')) ?></button>
-                                </form>
-                            <?php endif; ?>
+                            <form method="POST" action="/organizations/<?= e($organization->uuid) ?>/api-keys/<?= e($key->uuid) ?>/role" class="actions" style="gap:.5rem;" data-organization-settings-form="true" onsubmit="return window.passwayOrganizationSettingsSubmit ? window.passwayOrganizationSettingsSubmit(event, this) : true;">
+                                <select name="role">
+                                    <option value="reader"<?= $key->role === 'reader' ? ' selected' : '' ?>><?= e(__('ui.api_keys.role_reader')) ?></option>
+                                    <option value="editor"<?= $key->role === 'editor' ? ' selected' : '' ?>><?= e(__('ui.api_keys.role_editor')) ?></option>
+                                </select>
+                                <button type="submit" class="secondary"><?= e(__('ui.api_keys.update_role')) ?></button>
+                            </form>
+                            <form method="POST" action="/organizations/<?= e($organization->uuid) ?>/api-keys/<?= e($key->uuid) ?>/revoke" data-organization-settings-form="true" onsubmit="return window.passwayOrganizationSettingsSubmit ? window.passwayOrganizationSettingsSubmit(event, this) : true;">
+                                <button type="submit" class="danger"><?= e(__('ui.api_keys.revoke_key')) ?></button>
+                            </form>
                         </div>
                     </div>
                 <?php endforeach; ?>
-                <?php if ($keys === []): ?><div class="muted"><?= e(__('ui.api_keys.no_keys')) ?></div><?php endif; ?>
+                <?php if ($activeKeys === []): ?><div class="muted"><?= e(__('ui.api_keys.no_active_keys')) ?></div><?php endif; ?>
+            </div>
+        </section>
+
+        <section class="panel" style="padding:1.5rem;">
+            <h2 style="margin:0 0 1rem;"><?= e(__('ui.api_keys.revoked')) ?></h2>
+            <div class="grid" style="gap:.75rem;">
+                <?php foreach ($revokedKeys as $key): ?>
+                    <div class="panel panel-muted" style="padding:1rem; display:grid; gap:.75rem;">
+                        <div>
+                            <div style="font-weight:700;"><?= e($key->name) ?></div>
+                            <div class="muted" style="font-size:.92rem;"><?= e(__('ui.api_keys.prefix', ['prefix' => $key->keyPrefix])) ?> · <?= e(__('ui.api_keys.status_revoked')) ?></div>
+                            <div class="muted" style="font-size:.92rem;"><?= e(__('ui.api_keys.role_label', ['role' => __('ui.api_keys.role_' . $key->role)])) ?></div>
+                            <div class="muted" style="font-size:.92rem;"><?= __('ui.api_keys.created', ['created_at' => local_datetime($key->createdAt)]) ?><?= $key->expiresAt ? __('ui.api_keys.expires_suffix', ['date' => local_datetime($key->expiresAt)]) : '' ?></div>
+                            <div class="muted" style="font-size:.92rem;"><?= __('ui.api_keys.last_used', ['date' => $key->lastUsedAt !== null ? local_datetime($key->lastUsedAt) : e(__('ui.app.never'))]) ?></div>
+                        </div>
+                    </div>
+                <?php endforeach; ?>
+                <?php if ($revokedKeys === []): ?><div class="muted"><?= e(__('ui.api_keys.no_revoked_keys')) ?></div><?php endif; ?>
             </div>
         </section>
     </div>
 </div>
+
+<script>
+(() => {
+    const pad = (value) => String(value).padStart(2, '0');
+    const toUtcSqlDateTime = (value) => {
+        if (!value || !value.includes('T')) {
+            return value;
+        }
+
+        const localDate = new Date(value);
+        if (Number.isNaN(localDate.getTime())) {
+            return value;
+        }
+
+        return `${localDate.getUTCFullYear()}-${pad(localDate.getUTCMonth() + 1)}-${pad(localDate.getUTCDate())} ${pad(localDate.getUTCHours())}:${pad(localDate.getUTCMinutes())}:${pad(localDate.getUTCSeconds())}`;
+    };
+
+    document.querySelectorAll('.js-api-key-create-form').forEach((form) => {
+        form.addEventListener('submit', () => {
+            const expiresInput = form.querySelector('input[name="expires_at_local"]');
+            const utcInput = form.querySelector('.js-api-key-expires-utc');
+            if (expiresInput instanceof HTMLInputElement && utcInput instanceof HTMLInputElement) {
+                utcInput.value = toUtcSqlDateTime(expiresInput.value || '');
+                utcInput.disabled = false;
+            }
+        }, { capture: true });
+    });
+})();
+</script>
 </div>
