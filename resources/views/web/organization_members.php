@@ -1,5 +1,6 @@
-<?php require base_path('resources/views/partials/auth_topbar.php'); ?>
+<?php if (empty($organizationSettingsPartial)) { require base_path('resources/views/partials/auth_topbar.php'); } ?>
 
+<div class="js-organization-settings-page" data-page-title="<?= e((string) ($title ?? 'Passway')) ?>">
 <?php if (!empty($queryError)): ?><div class="error" data-toast="true" style="margin-bottom:1rem;"><?= e((string) $queryError) ?></div><?php endif; ?>
 <?php if (!empty($querySuccess)): ?><div class="success" data-toast="true" style="margin-bottom:1rem;"><?= e((string) $querySuccess) ?></div><?php endif; ?>
 
@@ -18,7 +19,7 @@
             }
         </style>
         <div class="grid" style="gap:.8rem;">
-            <?php foreach ($members as $member): $memberUser = \Passway\Models\User::findById($member->userId); ?>
+            <?php foreach ($memberRows as $row): $member = $row['member']; $memberUser = $row['user']; ?>
                 <div class="panel panel-muted org-manage-member-card" style="padding:1rem; display:grid; gap:.75rem;">
                     <div>
                         <div style="font-weight:700;"><?= e($memberUser?->email ?? __('ui.organization_manage.unknown_user')) ?></div>
@@ -46,4 +47,5 @@
             <?php endforeach; ?>
         </div>
     </section>
+</div>
 </div>

@@ -71,6 +71,32 @@ final class User
         return $row ? self::fromRow($row) : null;
     }
 
+    /**
+     * @param array<int, int|string> $ids
+     * @return array<string, self>
+     */
+    public static function findByIds(array $ids): array
+    {
+        $ids = array_values(array_unique(array_map(static fn(int|string $id): int => (int) $id, $ids)));
+        if ($ids === []) {
+            return [];
+        }
+
+        $placeholders = implode(', ', array_fill(0, count($ids), '?'));
+        $rows = Database::getInstance()->fetchAll(
+            'SELECT * FROM users WHERE id IN (' . $placeholders . ')',
+            $ids,
+        );
+
+        $users = [];
+        foreach ($rows as $row) {
+            $user = self::fromRow($row);
+            $users[$user->id] = $user;
+        }
+
+        return $users;
+    }
+
     public static function findByUuid(string $uuid): ?self
     {
         $row = Database::getInstance()->fetchOne(

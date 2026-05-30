@@ -374,7 +374,7 @@ final class WebController
             return Response::redirect('/?error=' . \urlencode(__('ui.messages.access_denied')));
         }
 
-        return $this->html($this->view->render('web/organization_settings', [
+        return $this->html($this->renderOrganizationSettingsView($request, 'web/organization_settings', [
             'title' => __('ui.titles.manage_organization'),
             'user' => $user,
             'organization' => $org,
@@ -399,12 +399,20 @@ final class WebController
         }
 
         $members = $this->organizationService->listMembers($org->id);
+        $memberUsers = User::findByIds(array_map(static fn(OrganizationMember $member): string => $member->userId, $members));
+        $memberRows = [];
+        foreach ($members as $member) {
+            $memberRows[] = [
+                'member' => $member,
+                'user' => $memberUsers[$member->userId] ?? null,
+            ];
+        }
 
-        return $this->html($this->view->render('web/organization_members', [
+        return $this->html($this->renderOrganizationSettingsView($request, 'web/organization_members', [
             'title' => __('ui.titles.manage_organization'),
             'user' => $user,
             'organization' => $org,
-            'members' => $members,
+            'memberRows' => $memberRows,
             'queryError' => $request->query('error'),
             'querySuccess' => $request->query('success'),
             'canManageSettings' => $this->organizationService->hasPermission($org->id, $user->id, 'admin'),
@@ -427,7 +435,7 @@ final class WebController
 
         $invites = $this->inviteService->listActive($org->id);
 
-        return $this->html($this->view->render('web/organization_invites', [
+        return $this->html($this->renderOrganizationSettingsView($request, 'web/organization_invites', [
             'title' => __('ui.titles.manage_organization'),
             'user' => $user,
             'organization' => $org,
@@ -445,6 +453,10 @@ final class WebController
         $org = $this->findOrgOrFail($request);
 
         if (!$this->organizationService->hasPermission($org->id, $user->id, 'admin')) {
+            if ($request->isAjax()) {
+                return $this->renderOrganizationSettingsResponse($request, $org, $user, error: __('ui.messages.access_denied'));
+            }
+
             return Response::redirect($this->settingsSectionUrl($org->uuid, 'settings', error: __('ui.messages.access_denied')));
         }
 
@@ -475,7 +487,20 @@ final class WebController
                 $this->deleteUploadedFile($avatarPath);
             }
 
+            if ($request->isAjax()) {
+                return $this->renderOrganizationSettingsResponse($request, $org, $user, error: $e->getMessage());
+            }
+
             return Response::redirect($this->settingsSectionUrl($org->uuid, 'settings', error: $e->getMessage()));
+        }
+
+        if ($request->isAjax()) {
+            return $this->renderOrganizationSettingsResponse(
+                $request,
+                Organization::findById($org->id) ?? $org,
+                $user,
+                success: __('ui.organization_manage.settings_saved'),
+            );
         }
 
         return Response::redirect($this->settingsSectionUrl($org->uuid, 'settings', success: __('ui.organization_manage.settings_saved')));
@@ -491,20 +516,12 @@ final class WebController
         $org = $this->findOrgOrFail($request);
 
         try {
-            $groups = $this->groupService->list($org->id, $user->id);
+            $groupCards = $this->groupService->listWithMemberCounts($org->id, $user->id);
         } catch (AuthException $e) {
             return Response::redirect('/?error=' . \urlencode($e->getMessage()));
         }
 
-        $groupCards = [];
-        foreach ($groups as $group) {
-            $groupCards[] = [
-                'group' => $group,
-                'member_count' => count($this->groupService->listMembers($group->uuid, $org->id, $user->id)),
-            ];
-        }
-
-        return $this->html($this->view->render('web/groups', [
+        return $this->html($this->renderOrganizationSettingsView($request, 'web/groups', [
             'title' => __('ui.titles.organization_groups'),
             'user' => $user,
             'organization' => $org,
@@ -733,7 +750,15 @@ final class WebController
         try {
             $this->inviteService->createJoinOrgInvite($org->id, $role, $user->id, $ttl);
         } catch (\Throwable $e) {
+            if ($request->isAjax()) {
+                return $this->renderOrganizationInvitesResponse($request, $org, $user, error: $e->getMessage());
+            }
+
             return Response::redirect($this->settingsSectionUrl($org->uuid, 'invites', error: $e->getMessage()));
+        }
+
+        if ($request->isAjax()) {
+            return $this->renderOrganizationInvitesResponse($request, $org, $user);
         }
 
         return Response::redirect($this->settingsSectionUrl($org->uuid, 'invites'));
@@ -752,7 +777,15 @@ final class WebController
         try {
             $this->inviteService->revoke($inviteUuid, $user->id);
         } catch (\Throwable $e) {
+            if ($request->isAjax()) {
+                return $this->renderOrganizationInvitesResponse($request, $org, $user, error: $e->getMessage());
+            }
+
             return Response::redirect($this->settingsSectionUrl($org->uuid, 'invites', error: $e->getMessage()));
+        }
+
+        if ($request->isAjax()) {
+            return $this->renderOrganizationInvitesResponse($request, $org, $user);
         }
 
         return Response::redirect($this->settingsSectionUrl($org->uuid, 'invites'));
@@ -1997,7 +2030,7 @@ final class WebController
             return Response::redirect($this->settingsSectionUrl($org->uuid, 'api-keys', error: $e->getMessage()));
         }
 
-        return $this->html($this->view->render('web/api_keys', [
+        return $this->html($this->renderOrganizationSettingsView($request, 'web/api_keys', [
             'title' => __('ui.titles.api_keys'),
             'user' => $user,
             'organization' => $org,
@@ -2171,17 +2204,18 @@ final class WebController
 
         try {
             $integrations = $this->organizationIntegrationService->listForOrg($org->id, $user->id);
+            $services = $this->rotationRegistryService->listAll();
         } catch (\Throwable $e) {
             return Response::redirect($this->settingsSectionUrl($org->uuid, 'integrations', error: $e->getMessage()));
         }
 
-        return $this->html($this->view->render('web/integrations', [
+        return $this->html($this->renderOrganizationSettingsView($request, 'web/integrations', [
             'title' => __('ui.titles.organization_integrations'),
             'user' => $user,
             'organization' => $org,
             'integrations' => $integrations,
-            'services' => $this->rotationRegistryService->listAll(),
-            'serviceMap' => $this->buildRotationServiceMap(),
+            'services' => $services,
+            'serviceMap' => $this->buildRotationServiceMap($services),
             'queryError' => $request->query('error'),
             'querySuccess' => $request->query('success'),
             'activeSettingsSection' => 'integrations',
@@ -2939,11 +2973,14 @@ final class WebController
         return implode(' / ', $segments);
     }
 
-    /** @return array<string, RotationServiceModel> */
-    private function buildRotationServiceMap(): array
+    /**
+     * @param RotationServiceModel[]|null $services
+     * @return array<string, RotationServiceModel>
+     */
+    private function buildRotationServiceMap(?array $services = null): array
     {
         $map = [];
-        foreach ($this->rotationRegistryService->listAll() as $service) {
+        foreach (($services ?? $this->rotationRegistryService->listAll()) as $service) {
             $map[$service->id] = $service;
         }
 
@@ -3169,6 +3206,55 @@ final class WebController
         return Response::make($status)
             ->withContentType('text/html; charset=utf-8')
             ->withBody($body);
+    }
+
+    /** @param array<string, mixed> $data */
+    private function renderOrganizationSettingsView(Request $request, string $view, array $data): string
+    {
+        $isPartial = $request->isAjax();
+
+        return $this->view->render(
+            $view,
+            array_merge($data, ['organizationSettingsPartial' => $isPartial]),
+            layout: $isPartial ? null : 'layout',
+        );
+    }
+
+    private function renderOrganizationSettingsResponse(
+        Request $request,
+        Organization $org,
+        User $user,
+        ?string $error = null,
+        ?string $success = null,
+    ): Response {
+        return $this->html($this->renderOrganizationSettingsView($request, 'web/organization_settings', [
+            'title' => __('ui.titles.manage_organization'),
+            'user' => $user,
+            'organization' => $org,
+            'queryError' => $error,
+            'querySuccess' => $success,
+            'canManageSettings' => $this->organizationService->hasPermission($org->id, $user->id, 'admin'),
+            'activeSettingsSection' => 'settings',
+        ]));
+    }
+
+    private function renderOrganizationInvitesResponse(
+        Request $request,
+        Organization $org,
+        User $user,
+        ?string $error = null,
+        ?string $success = null,
+    ): Response {
+        return $this->html($this->renderOrganizationSettingsView($request, 'web/organization_invites', [
+            'title' => __('ui.titles.manage_organization'),
+            'user' => $user,
+            'organization' => $org,
+            'invites' => $this->inviteService->listActive($org->id),
+            'queryError' => $error,
+            'querySuccess' => $success,
+            'canManageSettings' => $this->organizationService->hasPermission($org->id, $user->id, 'admin'),
+            'activeSettingsSection' => 'invites',
+        ]));
     }
 
     private function secretUrl(string $orgUuid, string $dirUuid, string $secUuid, ?string $error = null): string

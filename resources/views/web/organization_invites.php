@@ -1,5 +1,6 @@
-<?php require base_path('resources/views/partials/auth_topbar.php'); ?>
+<?php if (empty($organizationSettingsPartial)) { require base_path('resources/views/partials/auth_topbar.php'); } ?>
 
+<div class="js-organization-settings-page" data-page-title="<?= e((string) ($title ?? 'Passway')) ?>">
 <?php if (!empty($queryError)): ?><div class="error" data-toast="true" style="margin-bottom:1rem;"><?= e((string) $queryError) ?></div><?php endif; ?>
 <?php if (!empty($querySuccess)): ?><div class="success" data-toast="true" style="margin-bottom:1rem;"><?= e((string) $querySuccess) ?></div><?php endif; ?>
 
@@ -14,7 +15,7 @@
     <div class="grid grid-2" style="align-items:start; gap:1rem;">
         <section class="panel" style="padding:1rem;">
             <h2 style="margin:0 0 .75rem;"><?= e(__('ui.organization_manage.create_invite')) ?></h2>
-            <form method="POST" action="/organizations/<?= e($organization->uuid) ?>/invites" class="grid" style="gap:.75rem;">
+            <form method="POST" action="/organizations/<?= e($organization->uuid) ?>/invites" class="grid" style="gap:.75rem;" data-organization-settings-form="true" onsubmit="return window.passwayOrganizationSettingsSubmit ? window.passwayOrganizationSettingsSubmit(event, this) : true;">
                 <div>
                     <label for="invite-role"><?= e(__('ui.organization_manage.role')) ?></label>
                     <select id="invite-role" name="role">
@@ -52,7 +53,7 @@
                         <div style="margin:.5rem 0 .75rem;">
                             <input class="mono js-copy-on-click org-manage-invite-link" value="<?= e($inviteUrl) ?>" readonly>
                         </div>
-                        <form method="POST" action="/organizations/<?= e($organization->uuid) ?>/invites/<?= e($invite->uuid) ?>/revoke">
+                        <form method="POST" action="/organizations/<?= e($organization->uuid) ?>/invites/<?= e($invite->uuid) ?>/revoke" data-organization-settings-form="true" onsubmit="return window.passwayOrganizationSettingsSubmit ? window.passwayOrganizationSettingsSubmit(event, this) : true;">
                             <button type="submit" class="danger"><?= e(__('ui.organization_manage.revoke_invite')) ?></button>
                         </form>
                     </div>
@@ -64,7 +65,7 @@
 </div>
 
 <script>
-window.addEventListener('DOMContentLoaded', () => {
+(() => {
     const fields = document.querySelectorAll('.js-copy-on-click');
     const linkCopied = <?= json_encode((string) __('ui.home.invite_link_copied')) ?>;
     const linkCopyFailed = <?= json_encode((string) __('ui.home.invite_link_copy_failed')) ?>;
@@ -98,5 +99,6 @@ window.addEventListener('DOMContentLoaded', () => {
     for (const field of fields) {
         field.addEventListener('click', () => copyLink(field));
     }
-});
+})();
 </script>
+</div>

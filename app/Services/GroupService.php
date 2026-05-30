@@ -104,6 +104,39 @@ final class GroupService
     }
 
     /**
+     * @return array<int, array{group: Group, member_count: int}>
+     * @throws AuthException if permission is missing (reader+)
+     */
+    public function listWithMemberCounts(string $orgId, string $userId): array
+    {
+        $this->assertTeamMode();
+        $this->assertHasPermission($orgId, $userId, 'reader');
+
+        $rows = Database::getInstance()->fetchAll(
+            'SELECT g.*, COALESCE(c.member_count, 0) AS member_count
+             FROM groups g
+             LEFT JOIN (
+                 SELECT group_id, COUNT(*) AS member_count
+                 FROM group_members
+                 GROUP BY group_id
+             ) c ON c.group_id = g.id
+             WHERE g.organization_id = ?
+             ORDER BY g.name',
+            [(int) $orgId],
+        );
+
+        $groups = [];
+        foreach ($rows as $row) {
+            $groups[] = [
+                'group' => Group::fromRow($row),
+                'member_count' => (int) $row['member_count'],
+            ];
+        }
+
+        return $groups;
+    }
+
+    /**
      * @throws AuthException     if permission is missing (reader+)
      * @throws \RuntimeException if not found or belongs to another org.
      */

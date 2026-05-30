@@ -40,9 +40,10 @@ $renderRotationField = static function (array $field, string $namePrefix, bool $
     </div>
     <?php
 };
-require base_path('resources/views/partials/auth_topbar.php');
+if (empty($organizationSettingsPartial)) { require base_path('resources/views/partials/auth_topbar.php'); }
 ?>
 
+<div class="js-organization-settings-page" data-page-title="<?= e((string) ($title ?? 'Passway')) ?>">
 <?php if (!empty($queryError)): ?><div class="error" data-toast="true" style="margin-bottom:1rem;"><?= e((string) $queryError) ?></div><?php endif; ?>
 <?php if (!empty($querySuccess)): ?><div class="success" data-toast="true" style="margin-bottom:1rem;"><?= e((string) $querySuccess) ?></div><?php endif; ?>
 
@@ -160,3 +161,4 @@ require base_path('resources/views/partials/auth_topbar.php');
     syncConfigs();
 })();
 </script>
+</div>

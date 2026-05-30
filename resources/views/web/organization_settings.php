@@ -1,5 +1,6 @@
-<?php require base_path('resources/views/partials/auth_topbar.php'); ?>
+<?php if (empty($organizationSettingsPartial)) { require base_path('resources/views/partials/auth_topbar.php'); } ?>
 
+<div class="js-organization-settings-page" data-page-title="<?= e((string) ($title ?? 'Passway')) ?>">
 <?php if (!empty($queryError)): ?><div class="error" data-toast="true" style="margin-bottom:1rem;"><?= e((string) $queryError) ?></div><?php endif; ?>
 <?php if (!empty($querySuccess)): ?><div class="success" data-toast="true" style="margin-bottom:1rem;"><?= e((string) $querySuccess) ?></div><?php endif; ?>
 
@@ -13,7 +14,7 @@
 
     <section class="panel" style="padding:1.5rem; display:grid; gap:.75rem;">
         <h2 style="margin:0;"><?= e(__('ui.organization_manage.settings')) ?></h2>
-        <form method="POST" action="/organizations/<?= e($organization->uuid) ?>/manage" class="grid js-avatar-editor" style="gap:.75rem;">
+        <form method="POST" action="/organizations/<?= e($organization->uuid) ?>/manage" class="grid js-avatar-editor" style="gap:.75rem;" data-organization-settings-form="true" onsubmit="return window.passwayOrganizationSettingsSubmit ? window.passwayOrganizationSettingsSubmit(event, this) : true;">
             <div style="display:flex; align-items:center; gap:1rem; flex-wrap:wrap;">
                 <?php if (!empty($organization->avatarPath)): ?>
                     <img class="avatar-square avatar-image" src="<?= e($organization->avatarPath) ?>" alt="<?= e($organization->name) ?>" width="64" height="64" decoding="async" style="width:64px; height:64px; flex:0 0 64px;">
@@ -174,3 +175,4 @@
     }
 })();
 </script>
+</div>
