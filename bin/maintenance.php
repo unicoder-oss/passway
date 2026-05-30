@@ -17,6 +17,7 @@ require_once $autoloader;
 use Passway\Core\Application;
 use Passway\Services\AuditService;
 use Passway\Services\LoggerService;
+use Passway\Services\OrganizationService;
 use Passway\Services\SessionService;
 
 function info(string $msg): void
@@ -58,6 +59,21 @@ try {
                 'rate_limit_deleted' => $auditResult['rate_limit_deleted'],
                 'sessions_deleted' => $deletedSessions,
             ]);
+            exit(0);
+
+        case 'purge-organizations':
+            /** @var OrganizationService $organizationService */
+            $organizationService = $container->make(OrganizationService::class);
+            $result = $organizationService->purgeDeletedExpired();
+
+            info(sprintf(
+                'Organization purge finished: organizations_deleted=%d directories_deleted=%d secrets_deleted=%d permissions_deleted=%d',
+                $result['organizations_deleted'],
+                $result['directories_deleted'],
+                $result['secrets_deleted'],
+                $result['permissions_deleted'],
+            ));
+            $logger->info('Organization purge finished', $result);
             exit(0);
 
         default:

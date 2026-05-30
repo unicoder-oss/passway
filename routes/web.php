@@ -32,6 +32,7 @@ $router->post('/setup', [SetupController::class, 'process']);
 $router->get('/', [WebController::class, 'home'], [AuthMiddleware::class]);
 $router->get('/partials/home-organizations', [WebController::class, 'homeOrganizationsPartial'], [AuthMiddleware::class]);
 $router->get('/api', [WebController::class, 'showApiDocs'], [AuthMiddleware::class]);
+$router->get('/audit', [WebController::class, 'showInstanceAudit'], [AuthMiddleware::class]);
 
 // Health check (Docker, load balancers)
 $router->get('/health', fn() => Response::json([
@@ -102,6 +103,7 @@ $router->get('/organizations/:uuid/manage/settings', [WebController::class, 'sho
 $router->get('/organizations/:uuid/manage/members', [WebController::class, 'showOrganizationMembers'], [AuthMiddleware::class]);
 $router->get('/organizations/:uuid/manage/invites', [WebController::class, 'showOrganizationInvites'], [AuthMiddleware::class]);
 $router->post('/organizations/:uuid/manage', [WebController::class, 'updateOrganizationSettings'], [AuthMiddleware::class]);
+$router->post('/organizations/:uuid/manage/delete', [WebController::class, 'deleteOrganization'], [AuthMiddleware::class]);
 $router->get('/organizations/:uuid/groups', [WebController::class, 'showOrganizationGroups'], [AuthMiddleware::class]);
 $router->post('/organizations/:uuid/groups', [WebController::class, 'createGroup'], [AuthMiddleware::class]);
 $router->get('/organizations/:uuid/groups/:grpUuid', [WebController::class, 'showOrganizationGroup'], [AuthMiddleware::class]);

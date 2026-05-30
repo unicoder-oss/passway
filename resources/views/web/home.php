@@ -4,6 +4,9 @@ $topbarLinks = [
     ['href' => '/api', 'label' => __('ui.home.api')],
     ['href' => '/rotation-services', 'label' => __('ui.home.rotation_services')],
 ];
+if (!empty($isSetupAdmin)) {
+    array_unshift($topbarLinks, ['href' => '/audit', 'label' => __('ui.audit.instance_nav')]);
+}
 $createdOrganizationInviteUrl = $createdOrganizationInvite !== null
     ? app_url('/invite/' . $createdOrganizationInvite->token)
     : null;

@@ -23,6 +23,7 @@ x-app-environment: &app-environment
   LOG_LEVEL: debug
   LOG_PATH: /app/storage/logs/passway.log
   LOG_RETENTION_DAYS: 90
+  ORG_DELETED_PURGE_DAYS: 30
   SETUP_TOKEN_PATH: /app/storage/setup_token.txt
 
 services:
@@ -58,6 +59,17 @@ services:
   scheduler-maintenance:
     image: ghcr.io/unicoder-oss/passway:latest
     command: ["sh", "-c", "while true; do php /app/bin/maintenance.php cleanup; sleep 86400; done"]
+    restart: unless-stopped
+    environment: *app-environment
+    depends_on:
+      db:
+        condition: service_healthy
+    volumes:
+      - app-storage:/app/storage
+
+  scheduler-organization-purge:
+    image: ghcr.io/unicoder-oss/passway:latest
+    command: ["sh", "-c", "while true; do php /app/bin/maintenance.php purge-organizations; sleep 86400; done"]
     restart: unless-stopped
     environment: *app-environment
     depends_on:

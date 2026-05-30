@@ -69,6 +69,31 @@ final class AuditServiceTest extends DatabaseTestCase
         $this->assertSame(1, $result['rate_limit_deleted']);
     }
 
+    public function test_instance_admin_can_view_only_organization_lifecycle_audit(): void
+    {
+        $admin = $this->createTestUser('admin@example.com');
+        $org = $this->orgSvc->create('Global Org', $admin->id);
+        $this->svc->record('secret.read', $org->id, $admin->id, null, null, 'secret', '10', 'sec-1');
+        $this->svc->record('org.delete', $org->id, $admin->id, null, null, 'organization', $org->id, $org->uuid, null, null, [
+            'organization_name' => 'Global Org',
+            'organization_uuid' => $org->uuid,
+        ]);
+
+        $page = $this->svc->paginateForInstanceAdmin($admin->id, ['limit' => 10, 'offset' => 0]);
+
+        $this->assertSame(2, $page['total']);
+        $this->assertSame(['org.delete', 'org.create'], array_map(static fn($entry): string => $entry->action, $page['entries']));
+    }
+
+    public function test_non_instance_admin_cannot_view_global_audit(): void
+    {
+        $this->createTestUser('admin@example.com');
+        $user = $this->createTestUser('user@example.com');
+
+        $this->expectException(AuthException::class);
+        $this->svc->paginateForInstanceAdmin($user->id);
+    }
+
     public function test_paginate_supports_search_and_meta(): void
     {
         $owner = $this->createTestUser();

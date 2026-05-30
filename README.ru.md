@@ -51,7 +51,7 @@ http://localhost:8000/setup
 3. Скопируйте из лога Docker Compose токен для первоначальной настройки, нажмите `d` для отвязывания от процесса
 
 > [!NOTE]
-> Плановая ротация секретов и очистка журналов аудита требуют периодического фонового выполнения. Пример `docker-compose.yml` запускает для этого отдельные сервисы: `scheduler-rotate` запускает `php bin/rotate.php` каждые 30 секунд, а `scheduler-maintenance` запускает `php bin/maintenance.php cleanup` один раз в день. Если вы запускаете Passway напрямую в системе, настройте cron или systemd-таймеры вручную.
+> Плановая ротация секретов, очистка журналов аудита и перманентная очистка удалённых организаций требуют периодического фонового выполнения. Пример `docker-compose.yml` запускает для этого отдельные сервисы: `scheduler-rotate` запускает `php bin/rotate.php` каждые 30 секунд, `scheduler-maintenance` запускает `php bin/maintenance.php cleanup` каждый день и `scheduler-organization-purge` запускает `php bin/maintenance.php purge-organizations` один раз в день. Если вы запускаете Passway напрямую в системе, настройте cron или systemd-таймеры вручную.
 
 ## Конфигурация
 
@@ -87,6 +87,7 @@ http://localhost:8000/setup
 | `LOG_LEVEL` | Минимальный уровень логирования | `debug`, `info`, `warning`, `error` |
 | `LOG_PATH` | Путь к файлу с логами при `LOG_CHANNEL=file` | `storage/logs/passway.log` |
 | `LOG_RETENTION_DAYS` | Окно хранения журнала аудита в днях | `90` |
+| `ORG_DELETED_PURGE_DAYS` | Период хранения перед окончательным физическим удалением обратимо удалённых организаций, а также их секретов и каталогов. | `30` |
 | `SCHEDULER_SECRET` | Случайный токен для защиты эндпоинтов расписаний | Случайная строка с высокой энтропией |
 | `SETUP_TOKEN_PATH` | Путь до файла с токеном первоначальной настройки | `storage/setup_token.txt` |
 

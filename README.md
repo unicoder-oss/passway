@@ -65,7 +65,7 @@ http://localhost:8000/setup
 3. Copy the initial setup token from the Docker Compose log, then press `d` to detach from the process
 
 > [!NOTE]
-> Scheduled secret rotation and audit log cleanup require periodic background runs. The example `docker-compose.yml` starts separate scheduler services for this: `scheduler-rotate` runs `php bin/rotate.php` every 30 seconds, and `scheduler-maintenance` runs `php bin/maintenance.php cleanup` once per day. If you run Passway directly on a host, configure cron or systemd timers manually.
+> Scheduled secret rotation, audit log cleanup, and permanent removal of deleted organizations require periodic background runs. The example `docker-compose.yml` starts separate scheduler services for this: `scheduler-rotate` runs `php bin/rotate.php` every 30 seconds, `scheduler-maintenance` runs `php bin/maintenance.php cleanup` once per day, and `scheduler-organization-purge` runs `php bin/maintenance.php purge-organizations` once per day. If you run Passway directly on a host, configure cron or systemd timers manually.
 
 ## Configuration
 
@@ -101,6 +101,7 @@ http://localhost:8000/setup
 | `LOG_LEVEL` | Minimum logging level. | `debug`, `info`, `warning`, `error` |
 | `LOG_PATH` | Path to the log file when `LOG_CHANNEL=file`. | `storage/logs/passway.log` |
 | `LOG_RETENTION_DAYS` | Audit log retention window. | `90` |
+| `ORG_DELETED_PURGE_DAYS` | Retention window before soft-deleted organizations and their secrets/directories are physically removed. | `30` |
 | `SCHEDULER_SECRET` | Random token for protecting scheduler endpoints. | Random high-entropy string |
 | `SETUP_TOKEN_PATH` | Path to the initial setup token file. | `storage/setup_token.txt` |
 

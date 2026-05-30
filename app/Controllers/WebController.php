@@ -381,6 +381,8 @@ final class WebController
             'queryError' => $request->query('error'),
             'querySuccess' => $request->query('success'),
             'canManageSettings' => $this->organizationService->hasPermission($org->id, $user->id, 'admin'),
+            'canDeleteOrganization' => $this->organizationService->hasPermission($org->id, $user->id, 'owner'),
+            'organizationDeletionStats' => $this->organizationService->deletionStats($org->id),
             'activeSettingsSection' => 'settings',
         ]));
     }
@@ -460,12 +462,16 @@ final class WebController
             return Response::redirect($this->settingsSectionUrl($org->uuid, 'settings', error: __('ui.messages.access_denied')));
         }
 
+        $name = \trim((string) ($request->input('name') ?? $org->name));
         $description = $request->input('description');
         $description = \is_string($description) ? \trim($description) : '';
         $avatarData = \trim((string) ($request->input('avatar_data') ?? ''));
+        $removeAvatar = $this->parseBooleanRequestInput($request->input('remove_avatar')) && $avatarData === '';
         $avatarPath = null;
+        $oldAvatarPath = $org->avatarPath;
 
         try {
+            $org = $this->organizationService->rename($org->id, $name, $user->id);
             $avatarPath = $this->storeCroppedAvatar($avatarData, 'organizations/avatars', __('ui.organization_manage.avatar_invalid'));
 
             $update = [
@@ -475,12 +481,14 @@ final class WebController
 
             if ($avatarPath !== null) {
                 $update['avatar_path'] = $avatarPath;
+            } elseif ($removeAvatar) {
+                $update['avatar_path'] = null;
             }
 
             $org->update($update);
 
-            if ($avatarPath !== null) {
-                $this->deleteUploadedFile($org->avatarPath);
+            if ($avatarPath !== null || $removeAvatar) {
+                $this->deleteUploadedFile($oldAvatarPath);
             }
         } catch (\Throwable $e) {
             if ($avatarPath !== null) {
@@ -504,6 +512,22 @@ final class WebController
         }
 
         return Response::redirect($this->settingsSectionUrl($org->uuid, 'settings', success: __('ui.organization_manage.settings_saved')));
+    }
+
+    public function deleteOrganization(Request $request): Response
+    {
+        $user = AuthContext::requireUser();
+        $org = $this->findOrgOrFail($request);
+        $avatarPath = $org->avatarPath;
+
+        try {
+            $this->organizationService->delete($org->id, $user->id);
+            $this->deleteUploadedFile($avatarPath);
+        } catch (\Throwable $e) {
+            return Response::redirect($this->settingsSectionUrl($org->uuid, 'settings', error: $e->getMessage()));
+        }
+
+        return Response::redirect('/?success=' . \urlencode(__('ui.organization_manage.organization_deleted')));
     }
 
     public function showOrganizationGroups(Request $request): Response
@@ -795,6 +819,92 @@ final class WebController
         ]));
     }
 
+    public function showInstanceAudit(Request $request): Response
+    {
+        $user = AuthContext::requireUser();
+        $filters = $this->buildInstanceAuditFilters($request);
+        $filterState = $this->buildInstanceAuditFilterState($request);
+
+        try {
+            $result = $this->auditService->paginateForInstanceAdmin($user->id, $filters);
+        } catch (AuthException $e) {
+            return Response::redirect('/?error=' . \urlencode($e->getMessage()));
+        }
+
+        return $this->html($this->view->render('web/instance_audit', [
+            'title' => __('ui.titles.instance_audit'),
+            'user' => $user,
+            'entries' => $this->buildInstanceAuditViewEntries($result['entries']),
+            'meta' => [
+                'total' => $result['total'],
+                'limit' => $result['limit'],
+                'offset' => $result['offset'],
+                'has_more' => $result['has_more'],
+            ],
+            'filters' => $filterState,
+            'filterOptions' => [
+                'actions' => [
+                    ['value' => 'org.create', 'label' => $this->translateAuditAction('org.create')],
+                    ['value' => 'org.delete', 'label' => $this->translateAuditAction('org.delete')],
+                ],
+                'actorKinds' => [
+                    ['value' => '', 'label' => __('ui.audit.any')],
+                    ['value' => 'user', 'label' => __('ui.audit.actor_kinds.user')],
+                    ['value' => 'system', 'label' => __('ui.audit.actor_kinds.system')],
+                ],
+            ],
+        ]));
+    }
+
+    /** @return array<string, mixed> */
+    private function buildInstanceAuditFilters(Request $request): array
+    {
+        $filters = [
+            'action' => $request->query('action'),
+            'success' => $request->query('success'),
+            'actor_kind' => $request->query('actor_kind'),
+            'ip_address' => $request->query('ip_address'),
+            'search' => $request->query('search'),
+            'limit' => $request->query('limit', 50),
+            'offset' => $request->query('offset', 0),
+        ];
+
+        $actorUserEmail = \trim((string) ($request->query('actor_user_email') ?? ''));
+        if ($actorUserEmail !== '') {
+            $actorUser = User::findByEmail($actorUserEmail);
+            if ($actorUser !== null) {
+                $filters['user_id'] = $actorUser->id;
+            }
+        }
+
+        $fromDate = \trim((string) ($request->query('from_date') ?? ''));
+        if ($fromDate !== '') {
+            $filters['from'] = $fromDate . ' 00:00:00';
+        }
+
+        $toDate = \trim((string) ($request->query('to_date') ?? ''));
+        if ($toDate !== '') {
+            $filters['to'] = $toDate . ' 23:59:59';
+        }
+
+        return $filters;
+    }
+
+    /** @return array<string, string> */
+    private function buildInstanceAuditFilterState(Request $request): array
+    {
+        return [
+            'action' => (string) ($request->query('action') ?? ''),
+            'actor_kind' => (string) ($request->query('actor_kind') ?? ''),
+            'actor_user_email' => (string) ($request->query('actor_user_email') ?? ''),
+            'success' => (string) ($request->query('success') ?? ''),
+            'from_date' => (string) ($request->query('from_date') ?? ''),
+            'to_date' => (string) ($request->query('to_date') ?? ''),
+            'ip_address' => (string) ($request->query('ip_address') ?? ''),
+            'search' => (string) ($request->query('search') ?? ''),
+        ];
+    }
+
     /** @return array<string, mixed> */
     private function buildAuditFilters(Request $request, Organization $organization): array
     {
@@ -1017,6 +1127,75 @@ final class WebController
         }
 
         return $presented;
+    }
+
+    /**
+     * @param AuditLog[] $entries
+     * @return array<int, array<string, mixed>>
+     */
+    private function buildInstanceAuditViewEntries(array $entries): array
+    {
+        $lookup = [
+            'users' => [],
+            'api_keys' => [],
+            'organizations' => [],
+            'groups' => [],
+            'directories' => [],
+            'secrets' => [],
+            'integrations' => [],
+            'invites' => [],
+            'approval_requests' => [],
+            'rotation_services' => [],
+        ];
+
+        $presented = [];
+        foreach ($entries as $entry) {
+            $actor = $this->resolveAuditActor($entry, $lookup);
+            $details = $entry->details();
+            $organizationName = $this->scalarToString($details['organization_name'] ?? null)
+                ?? $this->scalarToString($entry->resourceUuid)
+                ?? __('ui.audit.resource_deleted');
+
+            $presented[] = [
+                'title_parts' => $this->auditSentenceParts([
+                    ['text' => $this->translateAuditAction($entry->action) . ' '],
+                    ['text' => $organizationName, 'accent' => true],
+                ]),
+                'timestamp_html' => local_datetime($entry->createdAt),
+                'status' => $entry->success ? __('ui.app.success') : __('ui.app.failed'),
+                'actor_label' => $actor['label'],
+                'actor_href' => $actor['href'],
+                'details' => $this->buildInstanceAuditDetailLines($entry),
+                'ip_address' => $entry->ipAddress,
+            ];
+        }
+
+        return $presented;
+    }
+
+    /** @return string[] */
+    private function buildInstanceAuditDetailLines(AuditLog $entry): array
+    {
+        $details = $entry->details();
+        $lines = [];
+
+        if (isset($details['organization_uuid']) && \is_scalar($details['organization_uuid'])) {
+            $lines[] = __('ui.audit.detail.organization_uuid', ['uuid' => (string) $details['organization_uuid']]);
+        }
+        if (isset($details['directories_count']) && \is_scalar($details['directories_count'])) {
+            $lines[] = __('ui.audit.detail.directories_count', ['count' => (string) $details['directories_count']]);
+        }
+        if (isset($details['secrets_count']) && \is_scalar($details['secrets_count'])) {
+            $lines[] = __('ui.audit.detail.secrets_count', ['count' => (string) $details['secrets_count']]);
+        }
+        if (isset($details['api_keys_total']) && \is_scalar($details['api_keys_total'])) {
+            $lines[] = __('ui.audit.detail.api_keys_total', ['count' => (string) $details['api_keys_total']]);
+        }
+        if (isset($details['api_keys_active']) && \is_scalar($details['api_keys_active'])) {
+            $lines[] = __('ui.audit.detail.api_keys_active', ['count' => (string) $details['api_keys_active']]);
+        }
+
+        return $lines;
     }
 
     /**
@@ -3241,6 +3420,8 @@ final class WebController
             'queryError' => $error,
             'querySuccess' => $success,
             'canManageSettings' => $this->organizationService->hasPermission($org->id, $user->id, 'admin'),
+            'canDeleteOrganization' => $this->organizationService->hasPermission($org->id, $user->id, 'owner'),
+            'organizationDeletionStats' => $this->organizationService->deletionStats($org->id),
             'activeSettingsSection' => 'settings',
         ]));
     }

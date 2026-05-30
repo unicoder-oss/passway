@@ -187,6 +187,77 @@ final class AuditService
         ];
     }
 
+    /**
+     * @param array<string, mixed> $filters
+     * @return array{entries: AuditLog[], total:int, limit:int, offset:int, has_more:bool}
+     */
+    public function paginateForInstanceAdmin(string $userId, array $filters = []): array
+    {
+        $this->assertInstanceAdmin($userId);
+
+        $sql = " FROM audit_log WHERE action IN ('org.create', 'org.delete')";
+        $params = [];
+
+        if (($filters['action'] ?? null) !== null && \trim((string) $filters['action']) !== '') {
+            $action = \trim((string) $filters['action']);
+            if (\in_array($action, ['org.create', 'org.delete'], true)) {
+                $sql .= ' AND action = ?';
+                $params[] = $action;
+            }
+        }
+        if (($filters['success'] ?? null) !== null && $filters['success'] !== '') {
+            $sql .= ' AND success = ?';
+            $params[] = (bool) $filters['success'] ? 1 : 0;
+        }
+        if (($filters['actor_kind'] ?? null) !== null && \trim((string) $filters['actor_kind']) !== '') {
+            $actorKind = \trim((string) $filters['actor_kind']);
+            if ($actorKind === 'user') {
+                $sql .= ' AND user_id IS NOT NULL';
+            } elseif ($actorKind === 'system') {
+                $sql .= ' AND user_id IS NULL AND api_key_id IS NULL';
+            }
+        }
+        if (($filters['ip_address'] ?? null) !== null && \trim((string) $filters['ip_address']) !== '') {
+            $sql .= ' AND ip_address = ?';
+            $params[] = \trim((string) $filters['ip_address']);
+        }
+        if (($filters['user_id'] ?? null) !== null && \trim((string) $filters['user_id']) !== '') {
+            $sql .= ' AND user_id = ?';
+            $params[] = (int) $filters['user_id'];
+        }
+        if (($filters['from'] ?? null) !== null && \trim((string) $filters['from']) !== '') {
+            $sql .= ' AND created_at >= ?';
+            $params[] = \trim((string) $filters['from']);
+        }
+        if (($filters['to'] ?? null) !== null && \trim((string) $filters['to']) !== '') {
+            $sql .= ' AND created_at <= ?';
+            $params[] = \trim((string) $filters['to']);
+        }
+        if (($filters['search'] ?? null) !== null && \trim((string) $filters['search']) !== '') {
+            $search = '%' . \trim((string) $filters['search']) . '%';
+            $sql .= ' AND (resource_uuid LIKE ? OR ip_address LIKE ? OR user_agent LIKE ? OR details_json LIKE ?)';
+            \array_push($params, $search, $search, $search, $search);
+        }
+
+        $limit = max(1, min(500, (int) ($filters['limit'] ?? 100)));
+        $offset = max(0, (int) ($filters['offset'] ?? 0));
+        $total = (int) Database::getInstance()->fetchColumn('SELECT COUNT(*)' . $sql, $params);
+        $rows = Database::getInstance()->fetchAll(
+            'SELECT *' . $sql . ' ORDER BY id DESC LIMIT ? OFFSET ?',
+            [...$params, $limit, $offset]
+        );
+
+        $entries = \array_map(fn($row) => AuditLog::fromRow($row), $rows);
+
+        return [
+            'entries' => $entries,
+            'total' => $total,
+            'limit' => $limit,
+            'offset' => $offset,
+            'has_more' => ($offset + \count($entries)) < $total,
+        ];
+    }
+
     /** @return array{audit_deleted:int, rate_limit_deleted:int} */
     public function cleanupExpired(): array
     {
@@ -212,6 +283,14 @@ final class AuditService
     {
         if ($this->organizationService === null || !$this->organizationService->hasPermission($orgId, $userId, 'admin')) {
             throw new AuthException(__('ui.backend.audit.requires_admin_view'), 403);
+        }
+    }
+
+    private function assertInstanceAdmin(string $userId): void
+    {
+        $firstUserId = Database::getInstance()->fetchColumn('SELECT id FROM users ORDER BY id ASC LIMIT 1');
+        if ((string) $firstUserId !== $userId) {
+            throw new AuthException(__('ui.backend.audit.requires_instance_admin_view'), 403);
         }
     }
 }

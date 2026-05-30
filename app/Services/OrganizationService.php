@@ -34,13 +34,7 @@ final class OrganizationService
      */
     public function create(string $name, string $ownerId): Organization
     {
-        $name = \trim($name);
-        if ($name === '') {
-            throw new \InvalidArgumentException(__('ui.backend.organization.name_empty'));
-        }
-        if (\strlen($name) > 255) {
-            throw new \InvalidArgumentException(__('ui.backend.organization.name_too_long'));
-        }
+        $name = $this->normalizeName($name);
 
         $slug = $this->generateUniqueSlug($name);
         $now  = now()->format('Y-m-d H:i:s');
@@ -79,9 +73,44 @@ final class OrganizationService
             resourceType: 'organization',
             resourceId: $org->id,
             resourceUuid: $org->uuid,
+            details: [
+                'organization_uuid' => $org->uuid,
+                'organization_name' => $org->name,
+            ],
         );
 
         return $org;
+    }
+
+    public function rename(string $orgId, string $name, string $requesterId): Organization
+    {
+        $this->assertHasPermission($orgId, $requesterId, 'admin');
+        $name = $this->normalizeName($name);
+
+        $org = Organization::findById($orgId);
+        if ($org === null) {
+            throw new \RuntimeException(__('ui.backend.common.organization_not_found'));
+        }
+
+        if ($org->name !== $name) {
+            $org->update([
+                'name' => $name,
+                'slug' => $this->generateUniqueSlug($name, $org->id),
+                'updated_at' => now()->format('Y-m-d H:i:s'),
+            ]);
+
+            $this->getAuditService()->record(
+                action: 'org.rename',
+                organizationId: $orgId,
+                userId: $requesterId,
+                resourceType: 'organization',
+                resourceId: $orgId,
+                resourceUuid: $org->uuid,
+                details: ['name' => $name],
+            );
+        }
+
+        return Organization::findById($orgId) ?? $org;
     }
 
     // ------------------------------------------------------------------ //
@@ -301,6 +330,78 @@ final class OrganizationService
         );
     }
 
+    public function delete(string $orgId, string $requesterId): void
+    {
+        $this->assertHasPermission($orgId, $requesterId, 'owner');
+
+        $org = Organization::findById($orgId);
+        if ($org === null) {
+            throw new \RuntimeException(__('ui.backend.common.organization_not_found'));
+        }
+
+        $stats = $this->deletionStats($orgId);
+        $now = now()->format('Y-m-d H:i:s');
+        $db = Database::getInstance();
+
+        $db->transaction(function () use ($db, $org, $orgId, $requesterId, $stats, $now): void {
+            $this->getAuditService()->record(
+                action: 'org.delete',
+                organizationId: $orgId,
+                userId: $requesterId,
+                resourceType: 'organization',
+                resourceId: $orgId,
+                resourceUuid: $org->uuid,
+                details: [
+                    'organization_uuid' => $org->uuid,
+                    'organization_name' => $org->name,
+                    'directories_count' => $stats['directories'],
+                    'secrets_count' => $stats['secrets'],
+                    'api_keys_total' => $stats['api_keys_total'],
+                    'api_keys_active' => $stats['api_keys_active'],
+                ],
+            );
+
+            $db->query('UPDATE secrets SET deleted_at = ? WHERE organization_id = ? AND deleted_at IS NULL', [$now, (int) $orgId]);
+            $db->query('UPDATE directories SET deleted_at = ? WHERE organization_id = ? AND deleted_at IS NULL', [$now, (int) $orgId]);
+            $db->query('UPDATE api_keys SET is_active = 0 WHERE organization_id = ?', [(int) $orgId]);
+
+            if ($db->tableExists('organization_integrations')) {
+                $db->query('UPDATE organization_integrations SET is_active = 0, updated_at = ? WHERE organization_id = ?', [$now, (int) $orgId]);
+            }
+
+            $db->update('organizations', [
+                'is_active' => 0,
+                'updated_at' => $now,
+                'deleted_at' => $now,
+            ], ['id' => (int) $orgId]);
+        });
+    }
+
+    /** @return array{organizations_deleted:int,directories_deleted:int,secrets_deleted:int,permissions_deleted:int} */
+    public function purgeDeletedExpired(): array
+    {
+        $db = Database::getInstance();
+        if (!$db->tableExists('organizations')) {
+            return ['organizations_deleted' => 0, 'directories_deleted' => 0, 'secrets_deleted' => 0, 'permissions_deleted' => 0];
+        }
+
+        $retentionDays = max(1, (int) ($_ENV['ORG_DELETED_PURGE_DAYS'] ?? 30));
+        $cutoff = now()->modify('-' . $retentionDays . ' days')->format('Y-m-d H:i:s');
+        $rows = $db->fetchAll('SELECT id FROM organizations WHERE deleted_at IS NOT NULL AND deleted_at < ? ORDER BY id ASC', [$cutoff]);
+
+        $result = ['organizations_deleted' => 0, 'directories_deleted' => 0, 'secrets_deleted' => 0, 'permissions_deleted' => 0];
+        foreach ($rows as $row) {
+            $orgId = (string) $row['id'];
+            $deleted = $this->purgeDeletedOrganization($orgId);
+            $result['organizations_deleted'] += $deleted['organizations_deleted'];
+            $result['directories_deleted'] += $deleted['directories_deleted'];
+            $result['secrets_deleted'] += $deleted['secrets_deleted'];
+            $result['permissions_deleted'] += $deleted['permissions_deleted'];
+        }
+
+        return $result;
+    }
+
     public function __construct(
         private readonly ?AuditService $auditService = null,
     ) {}
@@ -309,7 +410,7 @@ final class OrganizationService
     //  Helpers                                                    //
     // ------------------------------------------------------------------ //
 
-    private function generateUniqueSlug(string $name): string
+    private function generateUniqueSlug(string $name, ?string $ignoreOrgId = null): string
     {
         $base = \preg_replace('/[^a-z0-9]+/', '-', \strtolower($name)) ?? 'org';
         $base = \trim($base, '-');
@@ -319,10 +420,111 @@ final class OrganizationService
 
         $slug    = $base;
         $counter = 2;
-        while (Organization::findBySlug($slug) !== null) {
+        while ($this->slugExists($slug, $ignoreOrgId)) {
             $slug = $base . '-' . $counter++;
         }
         return $slug;
+    }
+
+    private function slugExists(string $slug, ?string $ignoreOrgId): bool
+    {
+        $sql = 'SELECT id FROM organizations WHERE slug = ?';
+        $params = [$slug];
+        if ($ignoreOrgId !== null) {
+            $sql .= ' AND id <> ?';
+            $params[] = (int) $ignoreOrgId;
+        }
+
+        return Database::getInstance()->fetchColumn($sql, $params) !== false;
+    }
+
+    private function normalizeName(string $name): string
+    {
+        $name = \trim($name);
+        if ($name === '') {
+            throw new \InvalidArgumentException(__('ui.backend.organization.name_empty'));
+        }
+        if (\strlen($name) > 255) {
+            throw new \InvalidArgumentException(__('ui.backend.organization.name_too_long'));
+        }
+
+        return $name;
+    }
+
+    /** @return array{directories:int,secrets:int,api_keys_total:int,api_keys_active:int} */
+    public function deletionStats(string $orgId): array
+    {
+        $db = Database::getInstance();
+        $directories = (int) $db->fetchColumn(
+            "SELECT COUNT(*) FROM directories WHERE organization_id = ? AND deleted_at IS NULL AND name <> '__passway_root_secrets__'",
+            [(int) $orgId]
+        );
+        $secrets = (int) $db->fetchColumn(
+            'SELECT COUNT(*) FROM secrets WHERE organization_id = ? AND deleted_at IS NULL',
+            [(int) $orgId]
+        );
+        $apiKeysTotal = (int) $db->fetchColumn(
+            'SELECT COUNT(*) FROM api_keys WHERE organization_id = ?',
+            [(int) $orgId]
+        );
+        $apiKeysActive = (int) $db->fetchColumn(
+            'SELECT COUNT(*) FROM api_keys WHERE organization_id = ? AND is_active = 1 AND (expires_at IS NULL OR expires_at > ?)',
+            [(int) $orgId, now()->format('Y-m-d H:i:s')]
+        );
+
+        return [
+            'directories' => $directories,
+            'secrets' => $secrets,
+            'api_keys_total' => $apiKeysTotal,
+            'api_keys_active' => $apiKeysActive,
+        ];
+    }
+
+    /** @return array{organizations_deleted:int,directories_deleted:int,secrets_deleted:int,permissions_deleted:int} */
+    private function purgeDeletedOrganization(string $orgId): array
+    {
+        $db = Database::getInstance();
+        return $db->transaction(function () use ($db, $orgId): array {
+            $secretIds = array_map(static fn(array $row): int => (int) $row['id'], $db->fetchAll(
+                'SELECT id FROM secrets WHERE organization_id = ?',
+                [(int) $orgId]
+            ));
+            $directoryIds = array_map(static fn(array $row): int => (int) $row['id'], $db->fetchAll(
+                'SELECT id FROM directories WHERE organization_id = ?',
+                [(int) $orgId]
+            ));
+
+            $permissionsDeleted = 0;
+            $permissionsDeleted += $this->deletePermissionsForResources('secret', $secretIds);
+            $permissionsDeleted += $this->deletePermissionsForResources('directory', $directoryIds);
+
+            $secretsDeleted = \count($secretIds);
+            $directoriesDeleted = \count($directoryIds);
+            $organizationsDeleted = $db->delete('organizations', ['id' => (int) $orgId]);
+
+            return [
+                'organizations_deleted' => $organizationsDeleted,
+                'directories_deleted' => $directoriesDeleted,
+                'secrets_deleted' => $secretsDeleted,
+                'permissions_deleted' => $permissionsDeleted,
+            ];
+        });
+    }
+
+    /** @param int[] $resourceIds */
+    private function deletePermissionsForResources(string $resourceType, array $resourceIds): int
+    {
+        if ($resourceIds === []) {
+            return 0;
+        }
+
+        $placeholders = \implode(', ', \array_fill(0, \count($resourceIds), '?'));
+        $stmt = Database::getInstance()->query(
+            'DELETE FROM user_permissions WHERE resource_type = ? AND resource_id IN (' . $placeholders . ')',
+            [$resourceType, ...$resourceIds]
+        );
+
+        return $stmt->rowCount();
     }
 
     /**

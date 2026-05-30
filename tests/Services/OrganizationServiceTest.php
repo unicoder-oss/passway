@@ -310,6 +310,63 @@ final class OrganizationServiceTest extends DatabaseTestCase
         $this->svc->transferOwnership($org->id, $newOwn->id, $admin->id);
     }
 
+    public function test_owner_can_delete_organization(): void
+    {
+        $owner = $this->createTestUser();
+        $org = $this->svc->create('Delete Me', $owner->id);
+        $this->createDirectoryAndSecret($org->id, $owner->id);
+        $this->createApiKey($org->id, $owner->id, true);
+        $this->createApiKey($org->id, $owner->id, false);
+
+        $this->svc->delete($org->id, $owner->id);
+
+        $this->assertNull(Organization::findById($org->id));
+        $this->assertSame(1, (int) Database::getInstance()->fetchColumn('SELECT COUNT(*) FROM directories WHERE organization_id = ? AND deleted_at IS NOT NULL', [(int) $org->id]));
+        $this->assertSame(1, (int) Database::getInstance()->fetchColumn('SELECT COUNT(*) FROM secrets WHERE organization_id = ? AND deleted_at IS NOT NULL', [(int) $org->id]));
+
+        $audit = Database::getInstance()->fetchOne("SELECT * FROM audit_log WHERE action = 'org.delete' AND resource_uuid = ?", [$org->uuid]);
+        $this->assertNotNull($audit);
+        $details = json_decode((string) $audit['details_json'], true);
+        $this->assertSame('Delete Me', $details['organization_name'] ?? null);
+        $this->assertSame(1, $details['directories_count'] ?? null);
+        $this->assertSame(1, $details['secrets_count'] ?? null);
+        $this->assertSame(2, $details['api_keys_total'] ?? null);
+        $this->assertSame(1, $details['api_keys_active'] ?? null);
+    }
+
+    public function test_delete_organization_requires_owner(): void
+    {
+        $owner = $this->createTestUser();
+        $admin = $this->createTestUser('admin-delete@example.com');
+        $org = $this->svc->create('Protected', $owner->id);
+        $this->svc->addMember($org->id, $admin->id, 'admin', null);
+
+        $this->expectException(AuthException::class);
+        $this->svc->delete($org->id, $admin->id);
+    }
+
+    public function test_purge_deleted_expired_physically_removes_old_organization_but_keeps_audit(): void
+    {
+        $_ENV['ORG_DELETED_PURGE_DAYS'] = '1';
+        $owner = $this->createTestUser();
+        $org = $this->svc->create('Old Deleted', $owner->id);
+        $this->createDirectoryAndSecret($org->id, $owner->id);
+        $this->svc->delete($org->id, $owner->id);
+
+        Database::getInstance()->query('UPDATE organizations SET deleted_at = ? WHERE id = ?', ['2000-01-01 00:00:00', (int) $org->id]);
+
+        $result = $this->svc->purgeDeletedExpired();
+
+        $this->assertSame(1, $result['organizations_deleted']);
+        $this->assertSame(1, $result['directories_deleted']);
+        $this->assertSame(1, $result['secrets_deleted']);
+        $this->assertSame(0, (int) Database::getInstance()->fetchColumn('SELECT COUNT(*) FROM organizations WHERE id = ?', [(int) $org->id]));
+
+        $audit = Database::getInstance()->fetchOne("SELECT * FROM audit_log WHERE action = 'org.delete' AND resource_uuid = ?", [$org->uuid]);
+        $this->assertNotNull($audit);
+        $this->assertNull($audit['organization_id']);
+    }
+
     // ------------------------------------------------------------------ //
     //  listMembers()                                                      //
     // ------------------------------------------------------------------ //
@@ -323,5 +380,67 @@ final class OrganizationServiceTest extends DatabaseTestCase
 
         $members = $this->svc->listMembers($org->id);
         $this->assertCount(2, $members);
+    }
+
+    private function createDirectoryAndSecret(string $orgId, string $ownerId): void
+    {
+        $db = Database::getInstance();
+        $now = now()->format('Y-m-d H:i:s');
+        $directoryUuid = generate_uuid();
+        $directoryId = (string) $db->insert('directories', [
+            'uuid' => $directoryUuid,
+            'organization_id' => (int) $orgId,
+            'parent_id' => null,
+            'name' => 'Infra',
+            'depth' => 0,
+            'path' => '/' . $directoryUuid,
+            'created_by' => (int) $ownerId,
+            'owner_user_id' => (int) $ownerId,
+            'default_read_access' => 'inherit',
+            'default_write_access' => 'inherit',
+            'created_at' => $now,
+            'updated_at' => $now,
+            'deleted_at' => null,
+        ]);
+
+        $db->insert('secrets', [
+            'uuid' => generate_uuid(),
+            'directory_id' => (int) $directoryId,
+            'organization_id' => (int) $orgId,
+            'name' => 'Prod DB',
+            'type' => 'static',
+            'encrypted_value' => 'ciphertext',
+            'nonce' => str_repeat('a', 48),
+            'template_id' => null,
+            'requires_approval' => 0,
+            'rotation_integration_id' => null,
+            'rotation_schedule' => null,
+            'last_rotated_at' => null,
+            'version' => 1,
+            'created_by' => (int) $ownerId,
+            'owner_user_id' => (int) $ownerId,
+            'default_read_access' => 'inherit',
+            'default_write_access' => 'inherit',
+            'created_at' => $now,
+            'updated_at' => $now,
+            'deleted_at' => null,
+        ]);
+    }
+
+    private function createApiKey(string $orgId, string $ownerId, bool $active): void
+    {
+        Database::getInstance()->insert('api_keys', [
+            'uuid' => generate_uuid(),
+            'organization_id' => (int) $orgId,
+            'user_id' => (int) $ownerId,
+            'name' => $active ? 'Active key' : 'Inactive key',
+            'role' => 'reader',
+            'key_hash' => hash('sha256', random_bytes(16)),
+            'key_prefix' => 'sv_test',
+            'is_active' => $active ? 1 : 0,
+            'last_used_at' => null,
+            'expires_at' => null,
+            'created_at' => now()->format('Y-m-d H:i:s'),
+        ]);
     }
 }
