@@ -87,6 +87,12 @@ $router->post('/organizations', [WebController::class, 'createOrganization'], [A
 $router->post('/organization-invites', [WebController::class, 'createOrganizationInvite'], [AuthMiddleware::class]);
 $router->get('/profile', [WebController::class, 'showProfile'], [AuthMiddleware::class]);
 $router->post('/profile', [WebController::class, 'updateProfile'], [AuthMiddleware::class]);
+$router->get('/profile/security', [WebController::class, 'showProfileSecurity'], [AuthMiddleware::class]);
+$router->get('/profile/interface', [WebController::class, 'showProfileInterface'], [AuthMiddleware::class]);
+$router->post('/profile/email', [WebController::class, 'updateProfileEmail'], [AuthMiddleware::class]);
+$router->post('/profile/password', [WebController::class, 'updateProfilePassword'], [AuthMiddleware::class]);
+$router->post('/profile/avatar/delete', [WebController::class, 'deleteProfileAvatar'], [AuthMiddleware::class]);
+$router->post('/profile/interface', [WebController::class, 'updateProfileInterface'], [AuthMiddleware::class]);
 $router->post('/profile/totp/start', [WebController::class, 'startTotpSetup'], [AuthMiddleware::class]);
 $router->post('/profile/totp/enable', [WebController::class, 'enableTotp'], [AuthMiddleware::class]);
 $router->post('/profile/totp/disable', [WebController::class, 'disableTotp'], [AuthMiddleware::class]);

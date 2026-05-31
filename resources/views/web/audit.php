@@ -15,7 +15,7 @@ $autocompleteStringsJson = json_encode([
 $memberAutocompleteOptions = array_map(
     static fn(array $member): array => [
         'value' => (string) $member['email'],
-        'label' => (string) $member['name'] . ' <' . (string) $member['email'] . '>',
+        'label' => (string) ($member['display_label'] ?? $member['email']),
     ],
     $filterOptions['members']
 );

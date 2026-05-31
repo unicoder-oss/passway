@@ -472,7 +472,7 @@ require base_path('resources/views/partials/auth_topbar.php');
                                             <option value=""><?= e(__('ui.organization.acl_select_user')) ?></option>
                                             <?php foreach ($organizationMembers as $member): ?>
                                                 <?php if ($member['role'] === 'owner') { continue; } ?>
-                                                <option value="<?= e($member['uuid']) ?>"><?= e($member['name'] . ' <' . $member['email'] . '>') ?></option>
+                                                <option value="<?= e($member['uuid']) ?>"><?= e($member['display_label']) ?></option>
                                             <?php endforeach; ?>
                                         </select>
                                     </div>
@@ -1078,7 +1078,7 @@ require base_path('resources/views/partials/auth_topbar.php');
                     return true;
                 }
 
-                return `${member.name} ${member.email} ${member.role}`.toLowerCase().includes(query);
+                return `${member.display_label || ''} ${member.name} ${member.email} ${member.role}`.toLowerCase().includes(query);
             });
 
             directoryOwnerCandidates.innerHTML = '';
@@ -1293,7 +1293,7 @@ require base_path('resources/views/partials/auth_topbar.php');
 
                 confirmDirectoryOwnerUuid.value = member.uuid;
                 confirmDirectoryOwnerText.textContent = `<?= e(__('ui.organization.transfer_owner_confirm_text', ['user' => ':user'])) ?>`
-                    .replace(':user', `${member.name} <${member.email}>`);
+                    .replace(':user', member.display_label || member.email);
                 confirmDirectoryOwnerModal.showModal();
             });
         }

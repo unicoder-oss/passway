@@ -158,6 +158,20 @@ if (!function_exists('display_name_for_user')) {
     }
 }
 
+if (!function_exists('user_label_with_email')) {
+    function user_label_with_email(object $user): string
+    {
+        $email = trim((string) ($user->email ?? 'user'));
+        $nickname = isset($user->nickname) ? trim((string) $user->nickname) : '';
+
+        if ($nickname === '' || $nickname === $email) {
+            return $email;
+        }
+
+        return $nickname . ' <' . $email . '>';
+    }
+}
+
 if (!function_exists('avatar_initial')) {
     function avatar_initial(?string $value): string
     {
@@ -286,6 +300,37 @@ if (!function_exists('request_locale')) {
         }
 
         return default_ui_locale();
+    }
+}
+
+if (!function_exists('supported_theme_preferences')) {
+    /** @return string[] */
+    function supported_theme_preferences(): array
+    {
+        return ['system', 'dark', 'light'];
+    }
+}
+
+if (!function_exists('normalize_theme_preference')) {
+    function normalize_theme_preference(?string $theme): string
+    {
+        $theme = strtolower(trim((string) $theme));
+        return in_array($theme, supported_theme_preferences(), true) ? $theme : 'system';
+    }
+}
+
+if (!function_exists('set_request_theme')) {
+    function set_request_theme(string $theme): void
+    {
+        $GLOBALS['passway_request_theme'] = normalize_theme_preference($theme);
+    }
+}
+
+if (!function_exists('request_theme')) {
+    function request_theme(): string
+    {
+        $theme = $GLOBALS['passway_request_theme'] ?? null;
+        return is_string($theme) ? normalize_theme_preference($theme) : 'system';
     }
 }
 

@@ -494,7 +494,7 @@ $renderReadonlyRotationField = static function (array $field, array $values): vo
                                     <option value=""><?= e(__('ui.secret.acl_select_user')) ?></option>
                                     <?php foreach ($organizationMembers as $member): ?>
                                         <?php if ($member['uuid'] === $secretOwnerUuid) { continue; } ?>
-                                        <option value="<?= e($member['uuid']) ?>"><?= e($member['name'] . ' <' . $member['email'] . '>') ?></option>
+                                        <option value="<?= e($member['uuid']) ?>"><?= e($member['display_label']) ?></option>
                                     <?php endforeach; ?>
                                 </select>
                             </div>
@@ -1195,7 +1195,7 @@ $renderReadonlyRotationField = static function (array $field, array $values): vo
                 return true;
             }
 
-            return `${member.name} ${member.email} ${member.role}`.toLowerCase().includes(query);
+            return `${member.display_label || ''} ${member.name} ${member.email} ${member.role}`.toLowerCase().includes(query);
         });
 
         secretOwnerCandidates.innerHTML = '';
@@ -1420,7 +1420,7 @@ $renderReadonlyRotationField = static function (array $field, array $values): vo
 
             confirmSecretOwnerUuid.value = member.uuid;
             confirmSecretOwnerText.textContent = `<?= e(__('ui.secret.transfer_owner_confirm_text', ['user' => ':user'])) ?>`
-                .replace(':user', `${member.name} <${member.email}>`);
+                .replace(':user', member.display_label || member.email);
             confirmSecretOwnerModal.showModal();
         });
     }

@@ -36,6 +36,8 @@ use Passway\Services\InviteService;
 use Passway\Services\OrganizationService;
 use Passway\Services\PermissionService;
 use Passway\Services\SecretService;
+use Passway\Services\SessionService;
+use Passway\Services\SetupService;
 use Passway\Services\TemplateService;
 use Passway\Services\TotpService;
 use Passway\Services\ViewService;
@@ -56,6 +58,8 @@ final class WebController
         private readonly AuditService $auditService,
         private readonly TotpService $totpService,
         private readonly HashingService $hashingService,
+        private readonly SetupService $setupService,
+        private readonly SessionService $sessionService,
         private readonly ApiKeyService $apiKeyService,
         private readonly GroupService $groupService,
         private readonly RotationRegistryService $rotationRegistryService,
@@ -1228,7 +1232,7 @@ final class WebController
         if ($entry->userId !== null) {
             $user = $this->auditLookupUser($entry->userId, $lookup);
             if ($user !== null) {
-                return ['label' => display_name_for_user($user), 'href' => null];
+                return ['label' => user_label_with_email($user), 'href' => null];
             }
 
             return ['label' => __('ui.audit.unknown_user'), 'href' => null];
@@ -1318,7 +1322,7 @@ final class WebController
             && !\in_array($entry->action, ['group.member_add', 'group.member_remove'], true)) {
             $user = $this->auditLookupUser((string) $targetUserId, $lookup);
             $lines[] = __('ui.audit.detail.target_user', [
-                'user' => $user !== null ? display_name_for_user($user) : __('ui.audit.unknown_user'),
+                'user' => $user !== null ? user_label_with_email($user) : __('ui.audit.unknown_user'),
             ]);
         }
 
@@ -1327,7 +1331,7 @@ final class WebController
             && !\in_array($entry->action, ['org.transfer_ownership'], true)) {
             $user = $this->auditLookupUser((string) $newOwnerId, $lookup);
             $lines[] = __('ui.audit.detail.new_owner', [
-                'user' => $user !== null ? display_name_for_user($user) : __('ui.audit.unknown_user'),
+                'user' => $user !== null ? user_label_with_email($user) : __('ui.audit.unknown_user'),
             ]);
         }
 
@@ -1514,7 +1518,7 @@ final class WebController
 
         $user = $this->auditLookupUser($userId, $lookup);
         return [
-            'text' => $user !== null ? display_name_for_user($user) : __('ui.audit.unknown_user'),
+            'text' => $user !== null ? user_label_with_email($user) : __('ui.audit.unknown_user'),
             'href' => null,
             'accent' => true,
         ];
@@ -1645,7 +1649,7 @@ final class WebController
             return ['label' => $this->formatAuditResourceFallback('user', $entry), 'href' => null];
         }
 
-        return ['label' => display_name_for_user($user), 'href' => null];
+        return ['label' => user_label_with_email($user), 'href' => null];
     }
 
     /**
@@ -1830,7 +1834,7 @@ final class WebController
     {
         if ($subjectType === 'user') {
             $user = $this->auditLookupUser($subjectId, $lookup);
-            return $user !== null ? display_name_for_user($user) : __('ui.audit.unknown_user');
+            return $user !== null ? user_label_with_email($user) : __('ui.audit.unknown_user');
         }
 
         if ($subjectType === 'group') {
@@ -2000,46 +2004,187 @@ final class WebController
 
     public function showProfile(Request $request): Response
     {
-        $user = AuthContext::requireUser();
-        $totpSetup = $this->getTotpSetupSession();
+        return $this->renderProfileSection($request, 'basic');
+    }
 
-        return $this->html($this->view->render('web/profile', [
-            'title' => __('ui.titles.profile_security'),
-            'user' => $user,
-            'passkeys' => Passkey::findByUserId($user->id),
-            'totpSetup' => $totpSetup,
-            'queryError' => $request->query('error'),
-            'querySuccess' => $request->query('success'),
-        ], layout: 'layout'));
+    public function showProfileSecurity(Request $request): Response
+    {
+        return $this->renderProfileSection($request, 'security');
+    }
+
+    public function showProfileInterface(Request $request): Response
+    {
+        return $this->renderProfileSection($request, 'interface');
+    }
+
+    private function renderProfileSection(Request $request, string $section): Response
+    {
+        $user = AuthContext::requireUser();
+
+        return $this->renderProfileSettingsResponse(
+            $request,
+            $section,
+            $user,
+            error: $request->query('error') !== null ? (string) $request->query('error') : null,
+            success: $request->query('success') !== null ? (string) $request->query('success') : null,
+        );
     }
 
     public function updateProfile(Request $request): Response
     {
         $user = AuthContext::requireUser();
+        $nickname = \trim((string) ($request->input('nickname') ?? ''));
         $avatarData = \trim((string) ($request->input('avatar_data') ?? ''));
+        $removeAvatar = $this->parseBooleanRequestInput($request->input('remove_avatar')) && $avatarData === '';
         $avatarPath = null;
+        $oldAvatarPath = $user->avatarPath;
 
         try {
             $avatarPath = $this->storeCroppedAvatar($avatarData, 'users/avatars', __('ui.profile.avatar_invalid'));
-            if ($avatarPath === null) {
-                throw new \InvalidArgumentException(__('ui.profile.avatar_required'));
+
+            $update = [
+                'nickname' => $nickname !== '' ? $nickname : null,
+                'updated_at' => now()->format('Y-m-d H:i:s'),
+            ];
+
+            if ($avatarPath !== null) {
+                $update['avatar_path'] = $avatarPath;
+            } elseif ($removeAvatar) {
+                $update['avatar_path'] = null;
             }
 
-            $user->update([
-                'avatar_path' => $avatarPath,
-                'updated_at' => now()->format('Y-m-d H:i:s'),
-            ]);
+            $user->update($update);
 
-            $this->deleteUploadedFile($user->avatarPath);
+            if ($avatarPath !== null || $removeAvatar) {
+                $this->deleteUploadedFile($oldAvatarPath);
+            }
         } catch (\Throwable $e) {
             if ($avatarPath !== null) {
                 $this->deleteUploadedFile($avatarPath);
             }
 
+            if ($request->isAjax()) {
+                return $this->renderProfileSettingsResponse($request, 'basic', User::findById($user->id) ?? $user, error: $e->getMessage());
+            }
+
             return Response::redirect('/profile?error=' . \urlencode($e->getMessage()));
         }
 
-        return Response::redirect('/profile?success=' . \urlencode(__('ui.profile.avatar_saved')));
+        if ($request->isAjax()) {
+            return $this->renderProfileSettingsResponse($request, 'basic', User::findById($user->id) ?? $user, success: __('ui.profile.basic_saved'));
+        }
+
+        return Response::redirect('/profile?success=' . \urlencode(__('ui.profile.basic_saved')));
+    }
+
+    public function updateProfileEmail(Request $request): Response
+    {
+        $user = AuthContext::requireUser();
+        $email = \strtolower(\trim((string) ($request->input('email') ?? '')));
+        $password = (string) ($request->input('password') ?? '');
+
+        if ($user->passwordHash === null || $password === '' || !$this->hashingService->verifyPassword($password, $user->passwordHash)) {
+            return Response::redirect('/profile?error=' . \urlencode(__('ui.profile.error_incorrect_password')));
+        }
+
+        if (!\filter_var($email, FILTER_VALIDATE_EMAIL)) {
+            return Response::redirect('/profile?error=' . \urlencode(__('ui.backend.setup.invalid_email')));
+        }
+
+        $existing = User::findByEmail($email);
+        if ($existing !== null && $existing->id !== $user->id) {
+            return Response::redirect('/profile?error=' . \urlencode(__('ui.profile.error_email_taken')));
+        }
+
+        $user->update([
+            'email' => $email,
+            'updated_at' => now()->format('Y-m-d H:i:s'),
+        ]);
+
+        return Response::redirect('/profile?success=' . \urlencode(__('ui.profile.email_saved')));
+    }
+
+    public function updateProfilePassword(Request $request): Response
+    {
+        $user = AuthContext::requireUser();
+        $currentPassword = (string) ($request->input('current_password') ?? '');
+        $password = (string) ($request->input('password') ?? '');
+        $passwordConfirm = (string) ($request->input('password_confirm') ?? '');
+
+        if ($user->passwordHash !== null && ($currentPassword === '' || !$this->hashingService->verifyPassword($currentPassword, $user->passwordHash))) {
+            return Response::redirect('/profile/security?error=' . \urlencode(__('ui.profile.error_incorrect_password')));
+        }
+
+        try {
+            $this->setupService->validatePassword($password);
+            if ($password !== $passwordConfirm) {
+                throw new \InvalidArgumentException(__('ui.profile.error_passwords_do_not_match'));
+            }
+
+            $user->update([
+                'password_hash' => $this->hashingService->hashPassword($password),
+                'updated_at' => now()->format('Y-m-d H:i:s'),
+            ]);
+
+            $this->sessionService->invalidateAll($user->id);
+            $rawToken = $this->sessionService->create($user->id, $request->ip(), $request->header('User-Agent'));
+            $this->sessionService->setCookie($rawToken);
+        } catch (\Throwable $e) {
+            return Response::redirect('/profile/security?error=' . \urlencode($e->getMessage()));
+        }
+
+        return Response::redirect('/profile/security?success=' . \urlencode(__('ui.profile.password_saved')));
+    }
+
+    public function deleteProfileAvatar(Request $request): Response
+    {
+        $user = AuthContext::requireUser();
+        $oldAvatarPath = $user->avatarPath;
+
+        $user->update([
+            'avatar_path' => null,
+            'updated_at' => now()->format('Y-m-d H:i:s'),
+        ]);
+        $this->deleteUploadedFile($oldAvatarPath);
+
+        return Response::redirect('/profile?success=' . \urlencode(__('ui.profile.avatar_removed')));
+    }
+
+    public function updateProfileInterface(Request $request): Response
+    {
+        $user = AuthContext::requireUser();
+        $locale = \trim((string) ($request->input('locale_preference') ?? 'system'));
+        $theme = normalize_theme_preference((string) ($request->input('theme_preference') ?? 'system'));
+
+        if ($locale !== 'system') {
+            $locale = normalize_locale_code($locale) ?? '';
+            if ($locale === '') {
+                if ($request->isAjax()) {
+                    return $this->renderProfileSettingsResponse($request, 'interface', $user, error: __('ui.profile.error_invalid_locale'));
+                }
+
+                return Response::redirect('/profile/interface?error=' . \urlencode(__('ui.profile.error_invalid_locale')));
+            }
+        }
+
+        $user->update([
+            'locale_preference' => $locale,
+            'theme_preference' => $theme,
+            'updated_at' => now()->format('Y-m-d H:i:s'),
+        ]);
+
+        set_request_theme($theme);
+        if ($locale !== 'system') {
+            set_request_locale($locale);
+        } else {
+            set_request_locale(resolve_browser_locale($request->header('Accept-Language')) ?? default_ui_locale());
+        }
+
+        if ($request->isAjax()) {
+            return $this->renderProfileSettingsResponse($request, 'interface', User::findById($user->id) ?? $user, success: __('ui.profile.interface_saved'));
+        }
+
+        return Response::redirect('/profile/interface?success=' . \urlencode(__('ui.profile.interface_saved')));
     }
 
     public function startTotpSetup(Request $request): Response
@@ -2047,7 +2192,7 @@ final class WebController
         $user = AuthContext::requireUser();
 
         if ($user->totpEnabled) {
-            return Response::redirect('/profile?error=' . \urlencode(__('ui.profile.error_totp_already_enabled')));
+            return Response::redirect('/profile/security?error=' . \urlencode(__('ui.profile.error_totp_already_enabled')));
         }
 
         try {
@@ -2071,10 +2216,10 @@ final class WebController
                 'expires' => \time() + 600,
             ];
         } catch (\Throwable $e) {
-            return Response::redirect('/profile?error=' . \urlencode($e->getMessage()));
+            return Response::redirect('/profile/security?error=' . \urlencode($e->getMessage()));
         }
 
-        return Response::redirect('/profile');
+        return Response::redirect('/profile/security');
     }
 
     public function enableTotp(Request $request): Response
@@ -2083,7 +2228,7 @@ final class WebController
         $code = \trim((string) ($request->input('code') ?? ''));
 
         if ($code === '') {
-            return Response::redirect('/profile?error=' . \urlencode(__('ui.profile.error_totp_code_required')));
+            return Response::redirect('/profile/security?error=' . \urlencode(__('ui.profile.error_totp_code_required')));
         }
 
         $this->ensureSessionStarted();
@@ -2091,7 +2236,7 @@ final class WebController
 
         if (!\is_array($setup) || (($setup['expires'] ?? 0) < \time())) {
             unset($_SESSION['totp_setup']);
-            return Response::redirect('/profile?error=' . \urlencode(__('ui.profile.error_totp_setup_expired')));
+            return Response::redirect('/profile/security?error=' . \urlencode(__('ui.profile.error_totp_setup_expired')));
         }
 
         try {
@@ -2101,11 +2246,11 @@ final class WebController
                 code: $code,
             );
         } catch (\Throwable $e) {
-            return Response::redirect('/profile?error=' . \urlencode($e->getMessage()));
+            return Response::redirect('/profile/security?error=' . \urlencode($e->getMessage()));
         }
 
         if (!$valid) {
-            return Response::redirect('/profile?error=' . \urlencode(__('ui.profile.error_invalid_totp_code')));
+            return Response::redirect('/profile/security?error=' . \urlencode(__('ui.profile.error_invalid_totp_code')));
         }
 
         $user->update([
@@ -2116,7 +2261,7 @@ final class WebController
         ]);
         unset($_SESSION['totp_setup']);
 
-        return Response::redirect('/profile?success=' . \urlencode(__('ui.profile.success_totp_enabled')));
+        return Response::redirect('/profile/security?success=' . \urlencode(__('ui.profile.success_totp_enabled')));
     }
 
     public function disableTotp(Request $request): Response
@@ -2125,13 +2270,13 @@ final class WebController
         $password = (string) ($request->input('password') ?? '');
 
         if ($password === '') {
-            return Response::redirect('/profile?error=' . \urlencode(__('ui.profile.error_disable_totp_password_required')));
+            return Response::redirect('/profile/security?error=' . \urlencode(__('ui.profile.error_disable_totp_password_required')));
         }
         if ($user->passwordHash === null) {
-            return Response::redirect('/profile?error=' . \urlencode(__('ui.profile.error_disable_totp_password_missing')));
+            return Response::redirect('/profile/security?error=' . \urlencode(__('ui.profile.error_disable_totp_password_missing')));
         }
         if (!$this->hashingService->verifyPassword($password, $user->passwordHash)) {
-            return Response::redirect('/profile?error=' . \urlencode(__('ui.profile.error_incorrect_password')));
+            return Response::redirect('/profile/security?error=' . \urlencode(__('ui.profile.error_incorrect_password')));
         }
 
         $user->update([
@@ -2141,7 +2286,7 @@ final class WebController
             'updated_at' => now()->format('Y-m-d H:i:s'),
         ]);
 
-        return Response::redirect('/profile?success=' . \urlencode(__('ui.profile.success_totp_disabled')));
+        return Response::redirect('/profile/security?success=' . \urlencode(__('ui.profile.success_totp_disabled')));
     }
 
     public function deletePasskey(Request $request): Response
@@ -2155,7 +2300,7 @@ final class WebController
         );
 
         if ($row === null) {
-            return Response::redirect('/profile?error=' . \urlencode(__('ui.profile.error_passkey_not_found')));
+            return Response::redirect('/profile/security?error=' . \urlencode(__('ui.profile.error_passkey_not_found')));
         }
 
         if ($user->passwordHash === null) {
@@ -2164,13 +2309,13 @@ final class WebController
                 [$user->id]
             );
             if ($count <= 1) {
-                return Response::redirect('/profile?error=' . \urlencode(__('ui.profile.error_last_passkey_without_password')));
+                return Response::redirect('/profile/security?error=' . \urlencode(__('ui.profile.error_last_passkey_without_password')));
             }
         }
 
         \Passway\Core\Database::getInstance()->delete('passkeys', ['uuid' => $passkeyUuid, 'user_id' => $user->id]);
 
-        return Response::redirect('/profile?success=' . \urlencode(__('ui.profile.success_passkey_removed')));
+        return Response::redirect('/profile/security?success=' . \urlencode(__('ui.profile.success_passkey_removed')));
     }
 
     public function showApiKeys(Request $request): Response
@@ -2841,7 +2986,7 @@ final class WebController
         return null;
     }
 
-    /** @return array<int, array{uuid:string,name:string,email:string,role:string}> */
+    /** @return array<int, array{uuid:string,name:string,email:string,display_label:string,role:string}> */
     private function serializeOrganizationMembers(string $orgId): array
     {
         $members = [];
@@ -2856,6 +3001,7 @@ final class WebController
                 'uuid' => $memberUser->uuid,
                 'name' => display_name_for_user($memberUser),
                 'email' => $memberUser->email,
+                'display_label' => user_label_with_email($memberUser),
                 'role' => $member->role,
             ];
         }
@@ -3424,6 +3570,25 @@ final class WebController
             'organizationDeletionStats' => $this->organizationService->deletionStats($org->id),
             'activeSettingsSection' => 'settings',
         ]));
+    }
+
+    private function renderProfileSettingsResponse(
+        Request $request,
+        string $section,
+        User $user,
+        ?string $error = null,
+        ?string $success = null,
+    ): Response {
+        return $this->html($this->view->render('web/profile', [
+            'title' => __('ui.titles.profile_security'),
+            'user' => $user,
+            'passkeys' => Passkey::findByUserId($user->id),
+            'totpSetup' => $this->getTotpSetupSession(),
+            'activeProfileSection' => $section,
+            'queryError' => $error,
+            'querySuccess' => $success,
+            'profileSettingsPartial' => $request->isAjax(),
+        ], layout: $request->isAjax() ? null : 'layout'));
     }
 
     private function renderOrganizationInvitesResponse(

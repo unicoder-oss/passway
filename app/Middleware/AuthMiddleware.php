@@ -66,6 +66,7 @@ final class AuthMiddleware
             if ($user !== null && $user->isActive) {
                 AuthContext::setApiKey(null);
                 AuthContext::setUser($user);
+                $this->applyUserInterfacePreferences($user, $request);
                 return $next($request);
             }
             // Cookie exists, but the session is invalid -> clear it
@@ -97,6 +98,7 @@ final class AuthMiddleware
 
                 AuthContext::setApiKey($authenticatedKey);
                 AuthContext::setUser($user);
+                $this->applyUserInterfacePreferences($user, $request);
                 return $next($request);
             }
         }
@@ -118,6 +120,16 @@ final class AuthMiddleware
         }
 
         return Response::redirect('/auth/login');
+    }
+
+    private function applyUserInterfacePreferences(\Passway\Models\User $user, Request $request): void
+    {
+        $localePreference = $user->localePreference;
+        if (!$request->isApi() && $localePreference !== 'system') {
+            set_request_locale($localePreference);
+        }
+
+        set_request_theme($user->themePreference);
     }
 
     private function isApiKeyRouteAllowed(Request $request, ApiKey $apiKey): bool

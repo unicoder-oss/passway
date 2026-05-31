@@ -22,7 +22,7 @@
             <?php foreach ($memberRows as $row): $member = $row['member']; $memberUser = $row['user']; ?>
                 <div class="panel panel-muted org-manage-member-card" style="padding:1rem; display:grid; gap:.75rem;">
                     <div>
-                        <div style="font-weight:700;"><?= e($memberUser?->email ?? __('ui.organization_manage.unknown_user')) ?></div>
+                        <div style="font-weight:700;"><?= e($memberUser !== null ? user_label_with_email($memberUser) : __('ui.organization_manage.unknown_user')) ?></div>
                         <div class="muted" style="font-size:.92rem;"><?= e(__('ui.organization_manage.joined', ['date' => $member->joinedAt])) ?></div>
                     </div>
                     <?php if ($member->role === 'owner' || empty($canManageSettings)): ?>

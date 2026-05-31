@@ -73,7 +73,7 @@ final class WebControllerAuditPresentationTest extends DatabaseTestCase
         $entry = $entries[0];
 
         $this->assertSame($expectedTitle, $this->flattenTitle($entry));
-        $this->assertSame('Иван', $entry['actor_label']);
+        $this->assertSame('Иван <owner@example.com>', $entry['actor_label']);
         $this->assertSame([], $entry['details']);
         $this->assertSame('1.2.3.4', $entry['ip_address']);
     }
@@ -184,8 +184,8 @@ final class WebControllerAuditPresentationTest extends DatabaseTestCase
     public static function actorTargetUserLocaleProvider(): array
     {
         return [
-            'en' => ['en', 'Change role for user Пётр to admin'],
-            'ru' => ['ru', 'Изменение роли пользователя Пётр на администратор'],
+            'en' => ['en', 'Change role for user Пётр <target@example.com> to admin'],
+            'ru' => ['ru', 'Изменение роли пользователя Пётр <target@example.com> на администратор'],
         ];
     }
 

@@ -1,5 +1,5 @@
 <!DOCTYPE html>
-<html lang="<?= e(app_locale()) ?>">
+<html lang="<?= e(app_locale()) ?>" data-theme="<?= e(request_theme()) ?>">
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
@@ -52,6 +52,52 @@
                 --error-fg: #f1cdcd;
                 --shadow: none;
             }
+        }
+
+        :root[data-theme="dark"] {
+            --bg: #111111;
+            --fg: #f3f3f3;
+            --muted: #a4a4a4;
+            --panel: #1a1a1a;
+            --panel-subtle: #242424;
+            --border: #393939;
+            --button: #d6d6d6;
+            --button-fg: #111111;
+            --button-secondary: #2a2a2a;
+            --button-secondary-fg: #f3f3f3;
+            --accent-soft: #d78cff;
+            --accent-link: #7ec8ff;
+            --danger: #dc6b6b;
+            --success-bg: #16301d;
+            --success-border: #2e5b38;
+            --success-fg: #d8efdd;
+            --error-bg: #351b1b;
+            --error-border: #6a2d2d;
+            --error-fg: #f1cdcd;
+            --shadow: none;
+        }
+
+        :root[data-theme="light"] {
+            --bg: #f5f5f5;
+            --fg: #161616;
+            --muted: #606060;
+            --panel: #ffffff;
+            --panel-subtle: #ededed;
+            --border: #d0d0d0;
+            --button: #4b4b4b;
+            --button-fg: #ffffff;
+            --button-secondary: #e5e5e5;
+            --button-secondary-fg: #161616;
+            --accent-soft: #7a2e8a;
+            --accent-link: #0f5cc0;
+            --danger: #8f1d1d;
+            --success-bg: #e7f2e9;
+            --success-border: #9cb69f;
+            --success-fg: #204028;
+            --error-bg: #f5e6e6;
+            --error-border: #c79494;
+            --error-fg: #5f1e1e;
+            --shadow: 0 12px 32px rgba(0, 0, 0, .05);
         }
 
         * { box-sizing: border-box; }

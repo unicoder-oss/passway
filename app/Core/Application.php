@@ -357,6 +357,8 @@ final class Application
                 ),
                 $c->make(\Passway\Services\TotpService::class),
                 $c->make(\Passway\Services\HashingService::class),
+                $c->make(\Passway\Services\SetupService::class),
+                $c->make(\Passway\Services\SessionService::class),
                 $c->make(\Passway\Services\ApiKeyService::class),
                 $c->make(\Passway\Services\GroupService::class),
                 $c->make(\Passway\Services\RotationRegistryService::class),
