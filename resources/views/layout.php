@@ -408,6 +408,10 @@
             .topbar { flex-direction: column; align-items: flex-start; }
             .topnav { justify-content: flex-start; }
             .grid-2, .grid-2-compact, .grid-4, .sidebar-layout, .field-actions-2, .field-actions-3 { grid-template-columns: 1fr; }
+            .settings-sidebar {
+                position: static;
+                top: auto;
+            }
             .toast-region {
                 top: .75rem;
                 right: 1rem;

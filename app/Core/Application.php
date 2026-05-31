@@ -261,6 +261,7 @@ final class Application
             \Passway\Controllers\ApprovalController::class,
             fn($c) => new \Passway\Controllers\ApprovalController(
                 $c->make(\Passway\Services\ApprovalService::class),
+                $c->make(\Passway\Services\SecretService::class),
             )
         );
 

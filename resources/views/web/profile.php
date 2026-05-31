@@ -39,15 +39,6 @@ $displayName = display_name_for_user($user);
             </div>
 
             <form method="POST" action="/profile" class="grid js-avatar-editor" style="gap:.75rem;" data-profile-settings-form="true" data-current-avatar-src="<?= e((string) ($user->avatarPath ?? '')) ?>">
-                <div style="display:flex; align-items:center; gap:1rem; flex-wrap:wrap;">
-                    <?php if (!empty($user->avatarPath)): ?>
-                        <img class="avatar-square avatar-image" src="<?= e($user->avatarPath) ?>" alt="<?= e($displayName) ?>" width="64" height="64" decoding="async" style="width:64px; height:64px; flex:0 0 64px;">
-                    <?php else: ?>
-                        <div class="avatar-square" style="width:64px; height:64px; flex:0 0 64px; background:<?= e(avatar_color_for_user($user)) ?>; font-size:1.4rem;"><?= e(avatar_initial($displayName)) ?></div>
-                    <?php endif; ?>
-                    <div class="muted" style="font-size:.92rem;"><?= e(__('ui.profile.avatar_hint')) ?></div>
-                </div>
-
                 <div>
                     <label for="profile-nickname"><?= e(__('ui.profile.nickname')) ?></label>
                     <input id="profile-nickname" name="nickname" value="<?= e((string) ($user->nickname ?? '')) ?>" maxlength="255" placeholder="<?= e(__('ui.profile.nickname_placeholder')) ?>">
@@ -64,13 +55,14 @@ $displayName = display_name_for_user($user);
                 <div>
                     <label for="profile-avatar-file"><?= e(__('ui.profile.avatar_settings')) ?></label>
                     <input id="profile-avatar-file" class="js-avatar-file" type="file" accept="image/png,image/jpeg,image/webp">
+                    <div class="muted" style="margin-top:.5rem; font-size:.92rem;"><?= e(__('ui.profile.avatar_hint')) ?></div>
                 </div>
+                <div class="preview-wrap" style="width:256px;"><canvas class="js-avatar-canvas" width="256" height="256"></canvas></div>
                 <?php if (!empty($user->avatarPath)): ?>
                     <div class="actions">
                         <button type="button" class="secondary js-avatar-clear"><?= e(__('ui.profile.clear_avatar')) ?></button>
                     </div>
                 <?php endif; ?>
-                <div class="preview-wrap" style="width:256px;"><canvas class="js-avatar-canvas" width="256" height="256"></canvas></div>
                 <div>
                     <label for="profile-avatar-zoom"><?= e(__('ui.invite.organization_avatar_choose')) ?></label>
                     <input id="profile-avatar-zoom" class="range js-avatar-zoom" type="range" min="1" max="4" step="0.01" value="1">

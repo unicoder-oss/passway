@@ -811,7 +811,7 @@ final class WebController
             'title' => __('ui.titles.audit_log'),
             'user' => $user,
             'organization' => $org,
-            'entries' => $this->buildAuditViewEntries($org, $result['entries']),
+            'entries' => $this->buildAuditViewEntries($org, $this->visibleAuditEntries($result['entries'])),
             'meta' => [
                 'total' => $result['total'],
                 'limit' => $result['limit'],
@@ -892,6 +892,18 @@ final class WebController
         }
 
         return $filters;
+    }
+
+    /**
+     * @param AuditLog[] $entries
+     * @return AuditLog[]
+     */
+    private function visibleAuditEntries(array $entries): array
+    {
+        return \array_values(\array_filter(
+            $entries,
+            static fn(AuditLog $entry): bool => $entry->action !== 'approval.token_use'
+        ));
     }
 
     /** @return array<string, string> */
@@ -1062,7 +1074,6 @@ final class WebController
             'approval.request_approve' => ['group' => 'approvals', 'fields' => ['secret_uuid']],
             'approval.request_reject' => ['group' => 'approvals', 'fields' => ['secret_uuid']],
             'approval.request_revoke' => ['group' => 'approvals', 'fields' => ['secret_uuid']],
-            'approval.token_use' => ['group' => 'approvals', 'fields' => ['secret_uuid']],
             'rotation.integration_create' => ['group' => 'integrations', 'fields' => ['integration_uuid']],
             'rotation.integration_update' => ['group' => 'integrations', 'fields' => ['integration_uuid']],
             'rotation.integration_delete' => ['group' => 'integrations', 'fields' => ['integration_uuid']],
@@ -1211,7 +1222,7 @@ final class WebController
     {
         $actor = $this->resolveAuditActor($entry, $lookup);
         $resource = $this->resolveAuditResource($organization, $entry, $lookup);
-        $title = $this->buildAuditTitleParts($entry, $resource, $lookup);
+        $title = $this->buildAuditTitleParts($organization, $entry, $resource, $lookup);
 
         return [
             'title_parts' => $title,
@@ -1334,7 +1345,7 @@ final class WebController
 
         $newOwnerId = $details['new_owner_id'] ?? null;
         if (\is_scalar($newOwnerId) && (string) $newOwnerId !== ''
-            && !\in_array($entry->action, ['org.transfer_ownership'], true)) {
+            && !\in_array($entry->action, ['org.transfer_ownership', 'secret.transfer_ownership'], true)) {
             $user = $this->auditLookupUser((string) $newOwnerId, $lookup);
             $lines[] = __('ui.audit.detail.new_owner', [
                 'user' => $user !== null ? user_label_with_email($user) : __('ui.audit.unknown_user'),
@@ -1361,6 +1372,10 @@ final class WebController
             $lines[] = __('ui.audit.detail.path', ['path' => $details['path']]);
         }
 
+        if (isset($details['group_uuid']) && \is_string($details['group_uuid']) && $details['group_uuid'] !== '') {
+            $lines[] = __('ui.audit.detail.group_uuid', ['uuid' => $details['group_uuid']]);
+        }
+
         if (isset($details['bucket']) && \is_string($details['bucket']) && $details['bucket'] !== '') {
             $lines[] = __('ui.audit.detail.bucket', ['bucket' => $this->translateAuditBucket($details['bucket'])]);
         }
@@ -1378,7 +1393,8 @@ final class WebController
             }
         }
 
-        if (isset($details['secret_uuid']) && \is_string($details['secret_uuid']) && $details['secret_uuid'] !== '') {
+        if (isset($details['secret_uuid']) && \is_string($details['secret_uuid']) && $details['secret_uuid'] !== ''
+            && !\in_array($entry->action, ['approval.request_create', 'approval.request_approve', 'approval.request_reject'], true)) {
             $secret = Secret::findByUuid($details['secret_uuid']);
             if ($secret !== null) {
                 $lines[] = __('ui.audit.detail.related_secret', ['secret' => $secret->name]);
@@ -1393,7 +1409,7 @@ final class WebController
      * @param array<string, array<string, object|null>> $lookup
      * @return array<int, array<string, mixed>>
      */
-    private function buildAuditTitleParts(AuditLog $entry, array $resource, array &$lookup): array
+    private function buildAuditTitleParts(Organization $organization, AuditLog $entry, array $resource, array &$lookup): array
     {
         $details = $entry->details();
 
@@ -1417,23 +1433,23 @@ final class WebController
             ]),
             'group.create' => $this->auditSentenceParts([
                 ['text' => __('ui.audit.templates.group_create_before')],
-                $this->auditResourcePart($resource),
+                $this->auditGroupPart($entry, $resource),
             ]),
             'group.delete' => $this->auditSentenceParts([
                 ['text' => __('ui.audit.templates.group_delete_before')],
-                $this->auditResourcePart($resource),
+                $this->auditGroupPart($entry, $resource),
             ]),
             'group.member_add' => $this->auditSentenceParts([
                 ['text' => __('ui.audit.templates.group_member_add_before')],
                 $this->auditUserPart($this->scalarToString($details['target_user_id'] ?? null), $lookup),
                 ['text' => __('ui.audit.templates.group_member_add_middle')],
-                $this->auditResourcePart($resource),
+                $this->auditGroupPart($entry, $resource),
             ]),
             'group.member_remove' => $this->auditSentenceParts([
                 ['text' => __('ui.audit.templates.group_member_remove_before')],
                 $this->auditUserPart($this->scalarToString($details['target_user_id'] ?? null), $lookup),
                 ['text' => __('ui.audit.templates.group_member_remove_middle')],
-                $this->auditResourcePart($resource),
+                $this->auditGroupPart($entry, $resource),
             ]),
             'secret.read' => $this->auditSentenceParts([
                 ['text' => __('ui.audit.templates.secret_read_before')],
@@ -1450,6 +1466,28 @@ final class WebController
             'secret.delete' => $this->auditSentenceParts([
                 ['text' => __('ui.audit.templates.secret_delete_before')],
                 $this->auditResourcePart($resource),
+            ]),
+            'secret.transfer_ownership' => $this->auditSentenceParts([
+                ['text' => __('ui.audit.templates.secret_transfer_ownership_before')],
+                $this->auditResourcePart($resource),
+                ['text' => __('ui.audit.templates.secret_transfer_ownership_middle')],
+                $this->auditUserPart($this->scalarToString($details['new_owner_id'] ?? null), $lookup),
+            ]),
+            'approval.request_create' => $this->auditSentenceParts([
+                ['text' => __('ui.audit.templates.approval_request_create_before')],
+                $this->auditApprovalSecretPart($organization, $entry, $lookup),
+            ]),
+            'approval.request_approve' => $this->auditSentenceParts([
+                ['text' => __('ui.audit.templates.approval_request_approve_before')],
+                $this->auditApprovalSecretPart($organization, $entry, $lookup),
+                ['text' => __('ui.audit.templates.approval_request_user_middle')],
+                $this->auditApprovalRequesterPart($entry, $lookup),
+            ]),
+            'approval.request_reject' => $this->auditSentenceParts([
+                ['text' => __('ui.audit.templates.approval_request_reject_before')],
+                $this->auditApprovalSecretPart($organization, $entry, $lookup),
+                ['text' => __('ui.audit.templates.approval_request_user_middle')],
+                $this->auditApprovalRequesterPart($entry, $lookup),
             ]),
             'invite.create' => $this->auditSentenceParts([
                 ['text' => __('ui.audit.templates.invite_create', [
@@ -1522,6 +1560,75 @@ final class WebController
         }
 
         return $part;
+    }
+
+    /** @return array<string, mixed> */
+    private function auditGroupPart(AuditLog $entry, array $resource): array
+    {
+        $details = $entry->details();
+        $label = (string) ($resource['label'] ?? '');
+        if ($label === '' || str_starts_with($label, $this->translateAuditResourceType('group') . ':')) {
+            $label = $this->scalarToString($details['group_name'] ?? null)
+                ?? $this->scalarToString($entry->resourceUuid)
+                ?? $this->scalarToString($entry->resourceId)
+                ?? __('ui.audit.group_deleted');
+        }
+
+        return [
+            'text' => $label,
+            'href' => $resource['href'],
+            'accent' => true,
+        ];
+    }
+
+    /**
+     * @param array<string, array<string, object|null>> $lookup
+     * @return array<string, mixed>
+     */
+    private function auditApprovalSecretPart(Organization $organization, AuditLog $entry, array &$lookup): array
+    {
+        $details = $entry->details();
+        $request = $entry->resourceId !== null ? $this->auditLookupApprovalRequest($entry->resourceId, $lookup) : null;
+        $secret = $request !== null ? $this->auditLookupSecret($request->secretId, $lookup) : null;
+
+        if ($secret === null && isset($details['secret_uuid']) && \is_string($details['secret_uuid']) && $details['secret_uuid'] !== '') {
+            $secret = Secret::findByUuid($details['secret_uuid']);
+        }
+
+        if ($secret === null) {
+            return ['text' => __('ui.audit.resource_deleted'), 'href' => null, 'accent' => true];
+        }
+
+        $directory = $this->auditLookupDirectory($secret->directoryId, $lookup);
+
+        return [
+            'text' => $secret->name,
+            'href' => $directory !== null ? $this->secretUrl($organization->uuid, $directory->uuid, $secret->uuid) : null,
+            'accent' => true,
+        ];
+    }
+
+    /**
+     * @param array<string, array<string, object|null>> $lookup
+     * @return array<string, mixed>
+     */
+    private function auditApprovalRequesterPart(AuditLog $entry, array &$lookup): array
+    {
+        $request = $entry->resourceId !== null ? $this->auditLookupApprovalRequest($entry->resourceId, $lookup) : null;
+        if ($request === null) {
+            return ['text' => __('ui.audit.unknown_user'), 'href' => null, 'accent' => true];
+        }
+
+        if ($request->requesterType === ApprovalRequest::REQUESTER_TYPE_API_KEY) {
+            $apiKey = $this->auditLookupApiKey($request->requesterId, $lookup);
+            return [
+                'text' => $apiKey !== null ? __('ui.audit.api_key_actor', ['name' => $apiKey->name]) : __('ui.audit.api_key_actor_unknown'),
+                'href' => null,
+                'accent' => true,
+            ];
+        }
+
+        return $this->auditUserPart($request->requesterId, $lookup);
     }
 
     /**
@@ -2681,9 +2788,6 @@ final class WebController
                 || $secret->ownerUserId === $user->id
                 || $this->organizationService->hasPermission($org->id, $user->id, 'editor');
             $value = null;
-            if ($canDirectRead) {
-                ['value' => $value] = $this->secretService->get($secUuid, $org->id, $user->id);
-            }
         } catch (AuthException | \RuntimeException | \Passway\Exceptions\DecryptionException $e) {
             return Response::redirect($this->organizationUrl($org->uuid, $dirUuid, $e->getMessage()));
         }
@@ -2696,23 +2800,21 @@ final class WebController
         $dynamicRotationView = ['input' => [], 'outputs' => [], 'primary_field' => null, 'service' => null];
         $pendingApprovalRequest = null;
 
-        if ($canDirectRead && $secret->type === 'template' && $secret->templateId !== null) {
+        if ($secret->type === 'template' && $secret->templateId !== null) {
             $template = Template::findById($secret->templateId);
             if ($template !== null) {
                 $templateOverrides = $this->secretService->getTemplateOverrides($secret->uuid, $org->id, $user->id);
-                $templateView = $this->templateService->describeValue($template->uuid, (string) $value, $org->id, $templateOverrides);
-                $displayValue = $templateView['display_value'];
-                $templateParameterSchema = $templateView['parameter_schema'];
-                $templateExtraFields = $templateView['extra_fields'];
-                $templateOverrides = $templateView['overrides'];
                 $templateDetails = [
                     'uuid' => $template->uuid,
                     'name' => $template->displayName(),
                     'type' => $template->type,
                 ];
             }
-        } elseif ($canDirectRead && $secret->type === 'dynamic') {
-            $dynamicRotationView = $this->secretService->getDynamicSecretView($secret->uuid, $org->id, $user->id);
+        } elseif ($secret->type === 'dynamic' && $secret->rotationIntegrationId !== null) {
+            $integration = OrganizationIntegration::findById($secret->rotationIntegrationId);
+            $dynamicRotationView['service'] = $integration !== null
+                ? RotationServiceModel::findById($integration->rotationServiceId)
+                : null;
         } elseif (!$canDirectRead && $secret->requiresApproval) {
             $pendingApprovalRequest = $this->approvalService->findPendingReadForUser($secret->id, $user->id);
         }
@@ -2750,6 +2852,61 @@ final class WebController
             'canManageSecretAcl' => $secret->ownerUserId === $user->id,
             'error' => $request->query('error'),
         ]));
+    }
+
+    public function revealSecret(Request $request): Response
+    {
+        $user = AuthContext::requireUser();
+        $org = $this->findOrgOrFail($request);
+        $secUuid = (string) $request->routeParam('secUuid');
+
+        try {
+            ['secret' => $secret, 'value' => $value] = $this->secretService->get($secUuid, $org->id, $user->id);
+            return Response::success($this->buildSecretRevealPayload($org, $secret, $value, $user->id));
+        } catch (AuthException $e) {
+            return Response::error($e->getMessage(), $e->getCode() ?: 403);
+        } catch (\Passway\Exceptions\DecryptionException $e) {
+            return Response::error(__('ui.backend.common.secret_decrypt_failed'), 500);
+        } catch (\RuntimeException $e) {
+            return Response::notFound($e->getMessage());
+        }
+    }
+
+    /** @return array<string, mixed> */
+    private function buildSecretRevealPayload(Organization $organization, Secret $secret, string $value, string $userId): array
+    {
+        $displayValue = $value;
+        $templateExtraFields = [];
+        $templateParameterSchema = [];
+        $templateOverrides = [];
+        $dynamicRotationView = ['input' => [], 'outputs' => [], 'primary_field' => null, 'service' => null];
+
+        if ($secret->type === 'template' && $secret->templateId !== null) {
+            $template = Template::findById($secret->templateId);
+            if ($template !== null) {
+                $templateOverrides = $this->secretService->getTemplateOverrides($secret->uuid, $organization->id, $userId);
+                $templateView = $this->templateService->describeValue($template->uuid, $value, $organization->id, $templateOverrides);
+                $displayValue = $templateView['display_value'];
+                $templateParameterSchema = $templateView['parameter_schema'];
+                $templateExtraFields = $templateView['extra_fields'];
+                $templateOverrides = $templateView['overrides'];
+            }
+        } elseif ($secret->type === 'dynamic') {
+            $dynamicRotationView = $this->secretService->getDynamicSecretView($secret->uuid, $organization->id, $userId);
+        }
+
+        return [
+            'value' => $value,
+            'display_value' => $displayValue,
+            'extra_fields' => $templateExtraFields,
+            'parameter_schema' => $templateParameterSchema,
+            'template_overrides' => $templateOverrides,
+            'dynamic_outputs' => $dynamicRotationView['outputs'] ?? [],
+            'dynamic_primary_field' => $dynamicRotationView['primary_field'] ?? null,
+            'dynamic_output_fields' => isset($dynamicRotationView['service']) && $dynamicRotationView['service'] instanceof RotationServiceModel
+                ? $dynamicRotationView['service']->outputFields()
+                : [],
+        ];
     }
 
     public function updateSecret(Request $request): Response

@@ -15,6 +15,7 @@ use Passway\Models\Organization;
 use Passway\Models\Secret;
 use Passway\Models\User;
 use Passway\Services\ApprovalService;
+use Passway\Services\SecretService;
 
 /**
  * Approval system controller.
@@ -32,6 +33,7 @@ final class ApprovalController
 {
     public function __construct(
         private readonly ApprovalService $approvalService,
+        private readonly SecretService $secretService,
     ) {}
 
     // ------------------------------------------------------------------ //
@@ -254,13 +256,17 @@ final class ApprovalController
                 (AuthContext::isApiKeyRequest()
                     ? $this->approvalService->useTokenForApiKey($aprUuid, $token, AuthContext::getApiKey()?->id ?? '', $org->id)
                     : $this->approvalService->useTokenForUser($aprUuid, $token, AuthContext::requireUser()->id, $org->id));
+            $dynamicView = [];
+            if (!AuthContext::isApiKeyRequest() && $secret->type === 'dynamic') {
+                $dynamicView = $this->secretService->getDynamicSecretView($secret->uuid, $org->id, AuthContext::requireUser()->id);
+            }
         } catch (AuthException $e) {
             return Response::error($e->getMessage(), $e->getCode() ?: 403);
         } catch (\RuntimeException $e) {
             return Response::notFound($e->getMessage());
         }
 
-        return Response::success($this->serializeSecretValue($secret, $value));
+        return Response::success($this->serializeSecretValue($secret, $value, $dynamicView));
     }
 
     // ------------------------------------------------------------------ //
@@ -372,13 +378,19 @@ final class ApprovalController
     }
 
     /** @return array<string, mixed> */
-    private function serializeSecretValue(Secret $s, string $value): array
+    private function serializeSecretValue(Secret $s, string $value, array $dynamicView = []): array
     {
+        $service = $dynamicView['service'] ?? null;
+
         return [
             'uuid'  => $s->uuid,
             'name'  => $s->name,
             'type'  => $s->type,
             'value' => $value,
+            'display_value' => $value,
+            'dynamic_outputs' => $dynamicView['outputs'] ?? [],
+            'dynamic_primary_field' => $dynamicView['primary_field'] ?? null,
+            'dynamic_output_fields' => $service instanceof \Passway\Models\RotationService ? $service->outputFields() : [],
         ];
     }
 }

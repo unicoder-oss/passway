@@ -136,6 +136,7 @@ $router->post('/organizations/:uuid/directories/:dirUuid/delete', [WebController
 $router->post('/organizations/:uuid/directories/:dirUuid/owner', [WebController::class, 'transferDirectoryOwnership'], [AuthMiddleware::class]);
 $router->post('/organizations/:uuid/directories/:dirUuid/secrets', [WebController::class, 'createSecret'], [AuthMiddleware::class]);
 $router->get('/organizations/:uuid/directories/:dirUuid/secrets/:secUuid', [WebController::class, 'showSecret'], [AuthMiddleware::class]);
+$router->post('/organizations/:uuid/directories/:dirUuid/secrets/:secUuid/reveal', [WebController::class, 'revealSecret'], [AuthMiddleware::class]);
 $router->post('/organizations/:uuid/directories/:dirUuid/secrets/:secUuid/update', [WebController::class, 'updateSecret'], [AuthMiddleware::class]);
 $router->post('/organizations/:uuid/directories/:dirUuid/secrets/:secUuid/regenerate', [WebController::class, 'regenerateTemplateSecret'], [AuthMiddleware::class]);
 $router->post('/organizations/:uuid/directories/:dirUuid/secrets/:secUuid/rotate', [WebController::class, 'rotateSecret'], [AuthMiddleware::class]);

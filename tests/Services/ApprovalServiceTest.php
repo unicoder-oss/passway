@@ -487,6 +487,18 @@ final class ApprovalServiceTest extends DatabaseTestCase
 
         $this->assertSame('supersecret', $value);
         $this->assertSame($secUuid, $secret->uuid);
+
+        $tokenUseAuditCount = (int) Database::getInstance()->fetchColumn(
+            "SELECT COUNT(*) FROM audit_log WHERE action = 'approval.token_use' AND resource_uuid = ?",
+            [$req->uuid]
+        );
+        $secretReadAuditCount = (int) Database::getInstance()->fetchColumn(
+            "SELECT COUNT(*) FROM audit_log WHERE action = 'secret.read' AND resource_uuid = ?",
+            [$secUuid]
+        );
+
+        $this->assertSame(0, $tokenUseAuditCount);
+        $this->assertSame(1, $secretReadAuditCount);
     }
 
     public function test_use_token_for_api_key_returns_decrypted_value_without_explicit_token(): void

@@ -13,6 +13,7 @@ $regenerateAction = '/organizations/' . $organization->uuid . '/directories/' . 
 $rotateAction = '/organizations/' . $organization->uuid . '/directories/' . $directory->uuid . '/secrets/' . $secret->uuid . '/rotate';
 $deleteAction = '/organizations/' . $organization->uuid . '/directories/' . $directory->uuid . '/secrets/' . $secret->uuid . '/delete';
 $transferOwnerAction = '/organizations/' . $organization->uuid . '/directories/' . $directory->uuid . '/secrets/' . $secret->uuid . '/owner';
+$revealAction = '/organizations/' . $organization->uuid . '/directories/' . $directory->uuid . '/secrets/' . $secret->uuid . '/reveal';
 $templatePreviewUrl = '/api/v1/organizations/' . $organization->uuid . '/directories/' . $directory->uuid . '/secrets/template-preview';
 $secretAclApiUrl = '/api/v1/organizations/' . $organization->uuid . '/secrets/' . $secret->uuid . '/acl';
 $secretAccessPolicyApiUrl = '/api/v1/organizations/' . $organization->uuid . '/secrets/' . $secret->uuid . '/access-policy';
@@ -266,13 +267,14 @@ $renderReadonlyRotationField = static function (array $field, array $values): vo
         <div class="panel panel-muted" style="padding:1rem; display:grid; gap:.75rem;">
             <label><?= e(__('ui.secret.current_value')) ?></label>
             <button type="button" class="secondary<?= !empty($canDirectReadSecret) ? '' : ($isApprovalPending ? ' is-pending' : '') ?>" id="secret-value-mask" style="justify-content:flex-start; min-height:120px; text-align:left;"<?= empty($canDirectReadSecret) && $isApprovalPending ? ' disabled' : '' ?>><?= e(!empty($canDirectReadSecret) ? __('ui.secret.click_to_reveal') : ($isApprovalPending ? __('ui.secret.approval_waiting') : __('ui.secret.click_to_reveal_requires_approval'))) ?></button>
-            <textarea id="secret-value-display" class="mono hidden" rows="8" readonly><?= e($displayValue ?? $value) ?></textarea>
+            <textarea id="secret-value-display" class="mono hidden" rows="8" readonly></textarea>
             <div class="actions hidden" id="secret-value-actions">
                 <button type="button" class="secondary" data-copy-target="secret-value-display"><?= e(__('ui.secret.copy_value')) ?></button>
                 <button type="button" class="secondary" id="secret-value-hide"><?= e(__('ui.secret.hide_value')) ?></button>
             </div>
         </div>
 
+        <div id="secret-extra-fields" class="grid<?= $templateExtraFields === [] ? ' hidden' : '' ?>" style="gap:1rem;">
         <?php foreach ($templateExtraFields as $field): ?>
             <div class="panel panel-muted" style="padding:1rem; display:grid; gap:.75rem;">
                 <label><?= e($field['label']) ?></label>
@@ -283,8 +285,10 @@ $renderReadonlyRotationField = static function (array $field, array $values): vo
                 </div>
             </div>
         <?php endforeach; ?>
+        </div>
 
         <?php if ($isDynamicSecret): ?>
+            <div id="dynamic-output-fields" class="grid<?= $dynamicRotationOutputs === [] ? ' hidden' : '' ?>" style="gap:1rem;">
             <?php foreach ($dynamicOutputFields as $field): ?>
                 <?php
                 $key = is_string($field['name'] ?? null) ? $field['name'] : null;
@@ -302,6 +306,7 @@ $renderReadonlyRotationField = static function (array $field, array $values): vo
                     </div>
                 </div>
             <?php endforeach; ?>
+            </div>
         <?php endif; ?>
     </section>
 
@@ -397,7 +402,7 @@ $renderReadonlyRotationField = static function (array $field, array $values): vo
                         </div>
                     <?php endif; ?>
                     <div class="grid field-actions-2" style="gap:.75rem; align-items:start;">
-                        <textarea id="template-secret-display" class="mono" name="value" rows="8"><?= e($displayValue) ?></textarea>
+                        <textarea id="template-secret-display" class="mono" name="value" rows="8"></textarea>
                         <div class="grid" style="gap:.5rem; align-content:start;">
                             <button type="button" class="secondary" id="template-secret-regenerate-button"><?= e(__('ui.home.regenerate')) ?></button>
                             <div class="wizard-meta" id="template-secret-status"></div>
@@ -627,16 +632,20 @@ $renderReadonlyRotationField = static function (array $field, array $values): vo
 (() => {
     const openButtons = document.querySelectorAll('[data-open-modal]');
     const closeButtons = document.querySelectorAll('[data-close-modal]');
-    const copyButtons = document.querySelectorAll('[data-copy-target]');
     const valueMask = document.getElementById('secret-value-mask');
     const valueDisplay = document.getElementById('secret-value-display');
     const valueActions = document.getElementById('secret-value-actions');
     const valueHide = document.getElementById('secret-value-hide');
+    const secretExtraFields = document.getElementById('secret-extra-fields');
+    const dynamicOutputFieldsContainer = document.getElementById('dynamic-output-fields');
     const canDirectReadSecret = <?= json_encode(!empty($canDirectReadSecret)) ?>;
     const secretRequiresApproval = <?= json_encode((bool) $secret->requiresApproval) ?>;
     const initialPendingApprovalRequestUuid = <?= json_encode($pendingApprovalRequestUuid) ?>;
     const secretApprovalCreateApiUrl = <?= json_encode($secretApprovalCreateApiUrl) ?>;
+    const secretRevealUrl = <?= json_encode($revealAction) ?>;
+    let dynamicOutputSchema = <?= json_encode($dynamicOutputFields, JSON_UNESCAPED_UNICODE | JSON_UNESCAPED_SLASHES) ?>;
     let canRevealLocally = canDirectReadSecret;
+    let revealedSecretPayload = null;
 
     const copyText = async (text) => {
         if (navigator.clipboard && typeof navigator.clipboard.writeText === 'function') {
@@ -673,28 +682,31 @@ $renderReadonlyRotationField = static function (array $field, array $values): vo
         });
     });
 
-    copyButtons.forEach((button) => {
-        button.addEventListener('click', async () => {
-            const targetId = button.getAttribute('data-copy-target');
-            const target = targetId !== null ? document.getElementById(targetId) : null;
-            if (target === null) {
-                return;
-            }
+    document.addEventListener('click', async (event) => {
+        const button = event.target instanceof Element ? event.target.closest('[data-copy-target]') : null;
+        if (!(button instanceof HTMLButtonElement)) {
+            return;
+        }
 
-            try {
-                await copyText(target.value || target.textContent || '');
-                const original = button.textContent;
-                button.textContent = <?= json_encode((string) __('ui.secret.copied')) ?>;
-                window.setTimeout(() => {
-                    button.textContent = original;
-                }, 1200);
-            } catch (_error) {
-                button.textContent = <?= json_encode((string) __('ui.secret.copy_failed')) ?>;
-                window.setTimeout(() => {
-                    button.textContent = <?= json_encode((string) __('ui.secret.copy_value')) ?>;
-                }, 1200);
-            }
-        });
+        const targetId = button.getAttribute('data-copy-target');
+        const target = targetId !== null ? document.getElementById(targetId) : null;
+        if (target === null) {
+            return;
+        }
+
+        try {
+            await copyText(target.value || target.textContent || '');
+            const original = button.textContent;
+            button.textContent = <?= json_encode((string) __('ui.secret.copied')) ?>;
+            window.setTimeout(() => {
+                button.textContent = original;
+            }, 1200);
+        } catch (_error) {
+            button.textContent = <?= json_encode((string) __('ui.secret.copy_failed')) ?>;
+            window.setTimeout(() => {
+                button.textContent = <?= json_encode((string) __('ui.secret.copy_value')) ?>;
+            }, 1200);
+        }
     });
 
     let approvalPollTimer = null;
@@ -709,6 +721,139 @@ $renderReadonlyRotationField = static function (array $field, array $values): vo
         valueMask.disabled = disabled;
     };
 
+    const makeFieldId = (prefix, key) => `${prefix}-${String(key).replace(/[^a-z0-9_-]+/ig, '-')}`;
+
+    const renderSecretExtraFields = (fields) => {
+        if (!secretExtraFields) {
+            return;
+        }
+
+        secretExtraFields.innerHTML = '';
+        secretExtraFields.classList.toggle('hidden', !Array.isArray(fields) || fields.length === 0);
+        if (!Array.isArray(fields)) {
+            return;
+        }
+
+        fields.forEach((field) => {
+            const fieldId = makeFieldId('template-extra-field', field.key || field.label || 'field');
+            const wrapper = document.createElement('div');
+            wrapper.className = 'panel panel-muted';
+            wrapper.style.padding = '1rem';
+            wrapper.style.display = 'grid';
+            wrapper.style.gap = '.75rem';
+
+            const label = document.createElement('label');
+            label.textContent = field.label || '';
+            const textarea = document.createElement('textarea');
+            textarea.id = fieldId;
+            textarea.className = 'mono';
+            textarea.rows = 4;
+            textarea.readOnly = true;
+            textarea.value = field.value || '';
+            const actions = document.createElement('div');
+            actions.className = 'actions';
+            const copyButton = document.createElement('button');
+            copyButton.type = 'button';
+            copyButton.className = 'secondary';
+            copyButton.setAttribute('data-copy-target', fieldId);
+            copyButton.textContent = <?= json_encode((string) __('ui.secret.copy_value')) ?>;
+
+            actions.appendChild(copyButton);
+            wrapper.appendChild(label);
+            wrapper.appendChild(textarea);
+            wrapper.appendChild(actions);
+            secretExtraFields.appendChild(wrapper);
+        });
+    };
+
+    const renderDynamicOutputFields = (outputs, primaryField) => {
+        if (!dynamicOutputFieldsContainer) {
+            return;
+        }
+
+        dynamicOutputFieldsContainer.innerHTML = '';
+        const outputValues = outputs && typeof outputs === 'object' ? outputs : {};
+        let rendered = 0;
+
+        dynamicOutputSchema.forEach((field) => {
+            const key = typeof field.name === 'string' ? field.name : null;
+            if (!key || key === primaryField || !Object.prototype.hasOwnProperty.call(outputValues, key)) {
+                return;
+            }
+
+            rendered += 1;
+            const fieldId = makeFieldId('dynamic-output-field', key);
+            const wrapper = document.createElement('div');
+            wrapper.className = 'panel panel-muted';
+            wrapper.style.padding = '1rem';
+            wrapper.style.display = 'grid';
+            wrapper.style.gap = '.75rem';
+
+            const label = document.createElement('label');
+            label.textContent = typeof field.label === 'string' && field.label.trim() !== '' ? field.label : key;
+            const textarea = document.createElement('textarea');
+            textarea.id = fieldId;
+            textarea.className = 'mono';
+            textarea.rows = 4;
+            textarea.readOnly = true;
+            textarea.value = String(outputValues[key] ?? '');
+            const actions = document.createElement('div');
+            actions.className = 'actions';
+            const copyButton = document.createElement('button');
+            copyButton.type = 'button';
+            copyButton.className = 'secondary';
+            copyButton.setAttribute('data-copy-target', fieldId);
+            copyButton.textContent = <?= json_encode((string) __('ui.secret.copy_value')) ?>;
+
+            actions.appendChild(copyButton);
+            wrapper.appendChild(label);
+            wrapper.appendChild(textarea);
+            wrapper.appendChild(actions);
+            dynamicOutputFieldsContainer.appendChild(wrapper);
+        });
+
+        dynamicOutputFieldsContainer.classList.toggle('hidden', rendered === 0);
+    };
+
+    const applyRevealPayload = (payload) => {
+        revealedSecretPayload = payload;
+        window.passwaySecretRevealPayload = payload;
+        if (Array.isArray(payload.dynamic_output_fields) && payload.dynamic_output_fields.length > 0) {
+            dynamicOutputSchema = payload.dynamic_output_fields;
+        }
+        renderSecretExtraFields(payload.extra_fields || []);
+        renderDynamicOutputFields(payload.dynamic_outputs || {}, payload.dynamic_primary_field || null);
+
+        const templateDisplay = document.getElementById('template-secret-display');
+        const templateOverridesInput = document.getElementById('template-secret-overrides');
+        if (templateDisplay && typeof payload.value === 'string') {
+            templateDisplay.value = payload.display_value || payload.value;
+        }
+        if (templateOverridesInput) {
+            templateOverridesInput.value = JSON.stringify(payload.template_overrides || {});
+        }
+        window.dispatchEvent(new CustomEvent('passway:secret-revealed', { detail: payload }));
+    };
+
+    const fetchSecretReveal = async () => {
+        setMaskState(<?= json_encode((string) __('ui.audit.autocomplete_loading')) ?>, true);
+        const response = await fetch(secretRevealUrl, {
+            method: 'POST',
+            headers: {
+                'Accept': 'application/json',
+                'X-Requested-With': 'XMLHttpRequest',
+            },
+            credentials: 'same-origin',
+        });
+        const payload = await response.json();
+        if (!response.ok || !payload.success || !payload.data || typeof payload.data.value !== 'string') {
+            throw new Error(payload.error || <?= json_encode((string) __('ui.secret.approval_consume_failed')) ?>);
+        }
+
+        applyRevealPayload(payload.data);
+        return payload.data;
+    };
+
     const revealSecretValue = (value, notifyMessage = null) => {
         if (!valueMask || !valueDisplay || !valueActions) {
             return;
@@ -720,6 +865,12 @@ $renderReadonlyRotationField = static function (array $field, array $values): vo
         valueMask.classList.add('hidden');
         valueDisplay.classList.remove('hidden');
         valueActions.classList.remove('hidden');
+        if (secretExtraFields && secretExtraFields.children.length > 0) {
+            secretExtraFields.classList.remove('hidden');
+        }
+        if (dynamicOutputFieldsContainer && dynamicOutputFieldsContainer.children.length > 0) {
+            dynamicOutputFieldsContainer.classList.remove('hidden');
+        }
         if (notifyMessage && window.passwayToast) {
             window.passwayToast.show(notifyMessage, 'success');
         }
@@ -758,7 +909,8 @@ $renderReadonlyRotationField = static function (array $field, array $values): vo
             window.clearTimeout(approvalPollTimer);
             approvalPollTimer = null;
         }
-        revealSecretValue(usePayload.data.value, <?= json_encode((string) __('ui.secret.approval_approved_toast')) ?>);
+        applyRevealPayload(usePayload.data);
+        revealSecretValue(usePayload.data.display_value || usePayload.data.value, <?= json_encode((string) __('ui.secret.approval_approved_toast')) ?>);
     };
 
     const pollApprovalStatus = async () => {
@@ -805,10 +957,16 @@ $renderReadonlyRotationField = static function (array $field, array $values): vo
 
     if (valueMask && valueDisplay && valueActions && valueHide) {
         if (canDirectReadSecret) {
-            valueMask.addEventListener('click', () => {
-                valueMask.classList.add('hidden');
-                valueDisplay.classList.remove('hidden');
-                valueActions.classList.remove('hidden');
+            valueMask.addEventListener('click', async () => {
+                try {
+                    const payload = revealedSecretPayload || await fetchSecretReveal();
+                    revealSecretValue(payload.display_value || payload.value);
+                } catch (error) {
+                    setMaskState(<?= json_encode((string) __('ui.secret.click_to_reveal')) ?>, false);
+                    if (window.passwayToast) {
+                        window.passwayToast.show(error instanceof Error ? error.message : <?= json_encode((string) __('ui.secret.approval_consume_failed')) ?>, 'error');
+                    }
+                }
             });
         } else if (secretRequiresApproval) {
             if (activeApprovalRequestUuid) {
@@ -859,6 +1017,12 @@ $renderReadonlyRotationField = static function (array $field, array $values): vo
             valueMask.classList.remove('hidden');
             valueDisplay.classList.add('hidden');
             valueActions.classList.add('hidden');
+            if (secretExtraFields) {
+                secretExtraFields.classList.add('hidden');
+            }
+            if (dynamicOutputFieldsContainer) {
+                dynamicOutputFieldsContainer.classList.add('hidden');
+            }
         });
     }
 
@@ -1999,6 +2163,24 @@ $renderReadonlyRotationField = static function (array $field, array $values): vo
         updateSaveState();
     };
 
+    const applyRevealedTemplatePayload = (payload) => {
+        if (!payload || typeof payload !== 'object') {
+            return;
+        }
+
+        applyPreview({
+            value: payload.value || '',
+            display_value: payload.display_value || payload.value || '',
+            extra_fields: payload.extra_fields || [],
+            parameter_schema: payload.parameter_schema || [],
+            template_overrides: payload.template_overrides || {},
+        }, false);
+    };
+
+    window.addEventListener('passway:secret-revealed', (event) => {
+        applyRevealedTemplatePayload(event.detail);
+    });
+
     regenerateButton.addEventListener('click', () => {
         templateValueMode = 'generated';
         void requestPreview(true, null, true, false);
@@ -2061,5 +2243,6 @@ $renderReadonlyRotationField = static function (array $field, array $values): vo
         parameter_schema: initialSchema,
         template_overrides: initialOverrides,
     }, false);
+    applyRevealedTemplatePayload(window.passwaySecretRevealPayload);
 })();
 </script>

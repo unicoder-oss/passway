@@ -83,6 +83,7 @@ final class GroupService
             resourceType: 'group',
             resourceId: $group->id,
             resourceUuid: $group->uuid,
+            details: ['group_name' => $group->name, 'group_uuid' => $group->uuid],
         );
 
         return $group;
@@ -176,6 +177,7 @@ final class GroupService
             resourceType: 'group',
             resourceId: $group->id,
             resourceUuid: $group->uuid,
+            details: ['group_name' => $group->name, 'group_uuid' => $group->uuid],
         );
     }
 
@@ -228,7 +230,7 @@ final class GroupService
             resourceType: 'group',
             resourceId: $group->id,
             resourceUuid: $group->uuid,
-            details: ['target_user_id' => $targetUserId],
+            details: ['target_user_id' => $targetUserId, 'group_name' => $group->name, 'group_uuid' => $group->uuid],
         );
 
         return $member;
@@ -270,7 +272,7 @@ final class GroupService
             resourceType: 'group',
             resourceId: $group->id,
             resourceUuid: $group->uuid,
-            details: ['target_user_id' => $targetUserId],
+            details: ['target_user_id' => $targetUserId, 'group_name' => $group->name, 'group_uuid' => $group->uuid],
         );
     }
 

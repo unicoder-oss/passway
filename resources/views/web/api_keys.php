@@ -20,6 +20,26 @@ foreach ($keys as $key) {
     <div class="muted" style="margin-top:.35rem;"><?= e($organization->name) ?></div>
 </section>
 
+<style>
+    @media (max-width: 900px) {
+        .api-keys-left-column {
+            display: contents;
+        }
+
+        .api-keys-create-panel {
+            order: 1;
+        }
+
+        .api-keys-active-panel {
+            order: 2;
+        }
+
+        .api-keys-revoked-panel {
+            order: 3;
+        }
+    }
+</style>
+
 <?php if (!empty($createdRawKey)): ?>
     <div class="success" style="margin-bottom:1rem;">
         <div style="font-weight:700; margin-bottom:.4rem;"><?= e(__('ui.api_keys.copy_now')) ?></div>
@@ -30,30 +50,50 @@ foreach ($keys as $key) {
 <div class="grid sidebar-layout" style="align-items:start; padding-bottom:2rem; gap:1rem;">
     <?php require base_path('resources/views/web/partials/organization_settings_sidebar.php'); ?>
     <div class="grid grid-2" style="align-items:start; gap:1rem;">
-        <section class="panel" style="padding:1.5rem;">
-            <h2 style="margin:0 0 1rem;"><?= e(__('ui.api_keys.create')) ?></h2>
-            <form method="POST" action="/organizations/<?= e($organization->uuid) ?>/api-keys" class="grid js-api-key-create-form" style="gap:.75rem;" data-organization-settings-form="true" onsubmit="return window.passwayOrganizationSettingsSubmit ? window.passwayOrganizationSettingsSubmit(event, this) : true;">
-                <div>
-                    <label for="key-name"><?= e(__('ui.api_keys.name')) ?></label>
-                    <input id="key-name" name="name" placeholder="<?= e(__('ui.api_keys.name_placeholder')) ?>" required>
-                </div>
-                <div>
-                    <label for="key-role"><?= e(__('ui.api_keys.role')) ?></label>
-                    <select id="key-role" name="role">
-                        <option value="reader"><?= e(__('ui.api_keys.role_reader')) ?></option>
-                        <option value="editor"><?= e(__('ui.api_keys.role_editor')) ?></option>
-                    </select>
-                </div>
-                <div>
-                    <label for="key-expires"><?= e(__('ui.api_keys.expires_at_optional')) ?></label>
-                    <input id="key-expires" name="expires_at_local" type="datetime-local" step="1">
-                    <input type="hidden" name="expires_at" class="js-api-key-expires-utc" disabled>
-                </div>
-                <button type="submit"><?= e(__('ui.api_keys.create')) ?></button>
-            </form>
-        </section>
+        <div class="grid api-keys-left-column" style="gap:1rem;">
+            <section class="panel api-keys-create-panel" style="padding:1.5rem;">
+                <h2 style="margin:0 0 1rem;"><?= e(__('ui.api_keys.create')) ?></h2>
+                <form method="POST" action="/organizations/<?= e($organization->uuid) ?>/api-keys" class="grid js-api-key-create-form" style="gap:.75rem;" data-organization-settings-form="true" onsubmit="return window.passwayOrganizationSettingsSubmit ? window.passwayOrganizationSettingsSubmit(event, this) : true;">
+                    <div>
+                        <label for="key-name"><?= e(__('ui.api_keys.name')) ?></label>
+                        <input id="key-name" name="name" placeholder="<?= e(__('ui.api_keys.name_placeholder')) ?>" required>
+                    </div>
+                    <div>
+                        <label for="key-role"><?= e(__('ui.api_keys.role')) ?></label>
+                        <select id="key-role" name="role">
+                            <option value="reader"><?= e(__('ui.api_keys.role_reader')) ?></option>
+                            <option value="editor"><?= e(__('ui.api_keys.role_editor')) ?></option>
+                        </select>
+                    </div>
+                    <div>
+                        <label for="key-expires"><?= e(__('ui.api_keys.expires_at_optional')) ?></label>
+                        <input id="key-expires" name="expires_at_local" type="datetime-local" step="1">
+                        <input type="hidden" name="expires_at" class="js-api-key-expires-utc" disabled>
+                    </div>
+                    <button type="submit"><?= e(__('ui.api_keys.create')) ?></button>
+                </form>
+            </section>
 
-        <section class="panel" style="padding:1.5rem;">
+            <section class="panel api-keys-revoked-panel" style="padding:1.5rem;">
+                <h2 style="margin:0 0 1rem;"><?= e(__('ui.api_keys.revoked')) ?></h2>
+                <div class="grid" style="gap:.75rem;">
+                    <?php foreach ($revokedKeys as $key): ?>
+                        <div class="panel panel-muted" style="padding:1rem; display:grid; gap:.75rem;">
+                            <div>
+                                <div style="font-weight:700;"><?= e($key->name) ?></div>
+                                <div class="muted" style="font-size:.92rem;"><?= e(__('ui.api_keys.prefix', ['prefix' => $key->keyPrefix])) ?> · <?= e(__('ui.api_keys.status_revoked')) ?></div>
+                                <div class="muted" style="font-size:.92rem;"><?= e(__('ui.api_keys.role_label', ['role' => __('ui.api_keys.role_' . $key->role)])) ?></div>
+                                <div class="muted" style="font-size:.92rem;"><?= __('ui.api_keys.created', ['created_at' => local_datetime($key->createdAt)]) ?><?= $key->expiresAt ? __('ui.api_keys.expires_suffix', ['date' => local_datetime($key->expiresAt)]) : '' ?></div>
+                                <div class="muted" style="font-size:.92rem;"><?= __('ui.api_keys.last_used', ['date' => $key->lastUsedAt !== null ? local_datetime($key->lastUsedAt) : e(__('ui.app.never'))]) ?></div>
+                            </div>
+                        </div>
+                    <?php endforeach; ?>
+                    <?php if ($revokedKeys === []): ?><div class="muted"><?= e(__('ui.api_keys.no_revoked_keys')) ?></div><?php endif; ?>
+                </div>
+            </section>
+        </div>
+
+        <section class="panel api-keys-active-panel" style="padding:1.5rem;">
             <h2 style="margin:0 0 1rem;"><?= e(__('ui.api_keys.active')) ?></h2>
             <div class="grid" style="gap:.75rem;">
                 <?php foreach ($activeKeys as $key): ?>
@@ -80,24 +120,6 @@ foreach ($keys as $key) {
                     </div>
                 <?php endforeach; ?>
                 <?php if ($activeKeys === []): ?><div class="muted"><?= e(__('ui.api_keys.no_active_keys')) ?></div><?php endif; ?>
-            </div>
-        </section>
-
-        <section class="panel" style="padding:1.5rem;">
-            <h2 style="margin:0 0 1rem;"><?= e(__('ui.api_keys.revoked')) ?></h2>
-            <div class="grid" style="gap:.75rem;">
-                <?php foreach ($revokedKeys as $key): ?>
-                    <div class="panel panel-muted" style="padding:1rem; display:grid; gap:.75rem;">
-                        <div>
-                            <div style="font-weight:700;"><?= e($key->name) ?></div>
-                            <div class="muted" style="font-size:.92rem;"><?= e(__('ui.api_keys.prefix', ['prefix' => $key->keyPrefix])) ?> · <?= e(__('ui.api_keys.status_revoked')) ?></div>
-                            <div class="muted" style="font-size:.92rem;"><?= e(__('ui.api_keys.role_label', ['role' => __('ui.api_keys.role_' . $key->role)])) ?></div>
-                            <div class="muted" style="font-size:.92rem;"><?= __('ui.api_keys.created', ['created_at' => local_datetime($key->createdAt)]) ?><?= $key->expiresAt ? __('ui.api_keys.expires_suffix', ['date' => local_datetime($key->expiresAt)]) : '' ?></div>
-                            <div class="muted" style="font-size:.92rem;"><?= __('ui.api_keys.last_used', ['date' => $key->lastUsedAt !== null ? local_datetime($key->lastUsedAt) : e(__('ui.app.never'))]) ?></div>
-                        </div>
-                    </div>
-                <?php endforeach; ?>
-                <?php if ($revokedKeys === []): ?><div class="muted"><?= e(__('ui.api_keys.no_revoked_keys')) ?></div><?php endif; ?>
             </div>
         </section>
     </div>

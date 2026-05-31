@@ -210,7 +210,7 @@ final class ApprovalService
             resourceType: 'approval_request',
             resourceId: $request->id,
             resourceUuid: $request->uuid,
-            details: ['request_type' => $requestType, 'requester_type' => $requesterType],
+            details: ['request_type' => $requestType, 'requester_type' => $requesterType, 'secret_uuid' => $secret->uuid],
         );
 
         return $request;
@@ -390,6 +390,7 @@ final class ApprovalService
 
         $updated = ApprovalRequest::findByUuid($requestUuid)
             ?? throw new \RuntimeException(__('ui.backend.approval.failed_reload_after_approve'));
+        $secret = Secret::findById($updated->secretId);
 
         $this->getAuditService()->record(
             action: 'approval.request_approve',
@@ -398,6 +399,7 @@ final class ApprovalService
             resourceType: 'approval_request',
             resourceId: $updated->id,
             resourceUuid: $updated->uuid,
+            details: $secret !== null ? ['secret_uuid' => $secret->uuid] : [],
         );
 
         return ['request' => $updated, 'token' => $rawToken];
@@ -435,6 +437,7 @@ final class ApprovalService
 
         $updated = ApprovalRequest::findByUuid($requestUuid)
             ?? throw new \RuntimeException(__('ui.backend.approval.failed_reload_after_reject'));
+        $secret = Secret::findById($updated->secretId);
 
         $this->getAuditService()->record(
             action: 'approval.request_reject',
@@ -443,6 +446,7 @@ final class ApprovalService
             resourceType: 'approval_request',
             resourceId: $updated->id,
             resourceUuid: $updated->uuid,
+            details: $secret !== null ? ['secret_uuid' => $secret->uuid] : [],
         );
 
         return $updated;
@@ -609,14 +613,14 @@ final class ApprovalService
         ]);
 
         $this->getAuditService()->record(
-            action: 'approval.token_use',
+            action: 'secret.read',
             organizationId: $orgId,
             userId: $auditUserId,
             apiKeyId: $auditApiKeyId,
-            resourceType: 'approval_request',
-            resourceId: $approvalReq->id,
-            resourceUuid: $approvalReq->uuid,
-            details: ['secret_uuid' => $secret->uuid],
+            resourceType: 'secret',
+            resourceId: $secret->id,
+            resourceUuid: $secret->uuid,
+            details: ['approval_request_uuid' => $approvalReq->uuid],
         );
 
         return ['secret' => $secret, 'value' => $value];
