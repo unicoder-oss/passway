@@ -16,6 +16,9 @@ $memberAutocompleteOptions = array_map(
     static fn(array $member): array => [
         'value' => (string) $member['email'],
         'label' => (string) ($member['display_label'] ?? $member['email']),
+        'avatar_path' => (string) ($member['avatar_path'] ?? ''),
+        'avatar_initial' => (string) ($member['avatar_initial'] ?? '?'),
+        'avatar_color' => (string) ($member['avatar_color'] ?? avatar_fallback_color()),
     ],
     $filterOptions['members']
 );
@@ -56,6 +59,23 @@ $findSelectedLabel = static function (array $options, string $selectedValue): st
     }
 
     return '';
+};
+
+$renderAuditAvatar = static function (?array $avatar, string $className, string $alt = ''): void {
+    if ($avatar === null) {
+        return;
+    }
+
+    $path = (string) ($avatar['path'] ?? '');
+    $initial = (string) ($avatar['initial'] ?? '?');
+    $color = (string) ($avatar['color'] ?? avatar_fallback_color());
+
+    if ($path !== '') {
+        ?><img class="avatar-square avatar-image <?= e($className) ?>" src="<?= e($path) ?>" alt="<?= e($alt) ?>" decoding="async" loading="lazy"><?php
+        return;
+    }
+
+    ?><span class="avatar-square <?= e($className) ?>" style="background: <?= e($color) ?>;"><?= e($initial) ?></span><?php
 };
 
 $renderAutocomplete = static function (
@@ -117,6 +137,13 @@ $renderAutocomplete = static function (
         width: 100%;
     }
 
+    .audit-autocomplete-option-content {
+        display: flex;
+        align-items: center;
+        gap: .6rem;
+        min-width: 0;
+    }
+
     .audit-autocomplete-option:hover,
     .audit-autocomplete-option:focus,
     .audit-autocomplete-option.is-active {
@@ -127,6 +154,45 @@ $renderAutocomplete = static function (
     .audit-autocomplete-empty {
         padding: .7rem .8rem;
         color: var(--muted);
+    }
+
+    .audit-avatar-sm {
+        width: 28px;
+        height: 28px;
+        flex-basis: 28px;
+        font-size: .82rem;
+    }
+
+    .audit-avatar-inline {
+        width: 1.15em;
+        height: 1.15em;
+        flex-basis: 1.15em;
+        font-size: .6em;
+    }
+
+    .audit-avatar-md {
+        width: 40px;
+        height: 40px;
+        flex-basis: 40px;
+        font-size: 1rem;
+    }
+
+    .audit-entry-with-avatar {
+        display: flex;
+        align-items: flex-start;
+        gap: .85rem;
+    }
+
+    .audit-entry-body {
+        min-width: 0;
+        flex: 1 1 auto;
+    }
+
+    .audit-title-entity {
+        display: inline-flex;
+        align-items: center;
+        gap: .35rem;
+        vertical-align: middle;
     }
 </style>
 
@@ -312,19 +378,27 @@ $nextQuery['offset'] = (string) ($meta['offset'] + $meta['limit']);
 <section class="panel" style="padding:1.5rem; display:grid; gap:.75rem;">
     <div class="muted"><?= e(__('ui.audit.summary', ['total' => (string) $meta['total'], 'offset' => (string) $meta['offset'], 'limit' => (string) $meta['limit']])) ?></div>
     <?php foreach ($entries as $entry): ?>
-        <div class="panel panel-muted" style="padding:1rem;">
-            <div>
+        <div class="panel panel-muted<?= !empty($entry['actor_avatar']) ? ' audit-entry-with-avatar' : '' ?>" style="padding:1rem;">
+            <?php if (!empty($entry['actor_avatar']) && is_array($entry['actor_avatar'])): ?>
+                <?php $renderAuditAvatar($entry['actor_avatar'], 'audit-avatar-md', (string) $entry['actor_label']); ?>
+            <?php endif; ?>
+            <div class="audit-entry-body">
                 <div style="font-weight:700; line-height:1.45;">
                     <?php foreach ($entry['title_parts'] as $part): ?>
-                        <?php if ($part['href'] !== null): ?><a href="<?= e((string) $part['href']) ?>" class="audit-title-link"><?= e((string) $part['text']) ?></a><?php else: ?><?php if (!empty($part['accent'])): ?><span class="audit-title-accent"><?= e((string) $part['text']) ?></span><?php else: ?><?= e((string) $part['text']) ?><?php endif; ?><?php endif; ?>
+                        <?php
+                            $partAvatar = isset($part['avatar']) && is_array($part['avatar']) ? $part['avatar'] : null;
+                            $partAvatarKind = (string) ($partAvatar['kind'] ?? '');
+                            $showPartAvatar = $partAvatar !== null && ($partAvatarKind === 'user' || ($partAvatarKind === 'organization' && $part['href'] !== null));
+                        ?>
+                        <?php if ($part['href'] !== null): ?><a href="<?= e((string) $part['href']) ?>" class="audit-title-link<?= $showPartAvatar ? ' audit-title-entity' : '' ?>"><?php if ($showPartAvatar) { $renderAuditAvatar($partAvatar, 'audit-avatar-inline', (string) $part['text']); } ?><?= e((string) $part['text']) ?></a><?php else: ?><?php if (!empty($part['accent'])): ?><span class="audit-title-accent<?= $showPartAvatar ? ' audit-title-entity' : '' ?>"><?php if ($showPartAvatar) { $renderAuditAvatar($partAvatar, 'audit-avatar-inline', (string) $part['text']); } ?><?= e((string) $part['text']) ?></span><?php else: ?><?= e((string) $part['text']) ?><?php endif; ?><?php endif; ?>
                     <?php endforeach; ?>
                 </div>
                 <div class="muted" style="font-size:.92rem;"><?= $entry['timestamp_html'] ?> · <?= e((string) $entry['status']) ?> · <?php if ($entry['actor_href'] !== null): ?><a href="<?= e((string) $entry['actor_href']) ?>"><?= e((string) $entry['actor_label']) ?></a><?php else: ?><?= e((string) $entry['actor_label']) ?><?php endif; ?></div>
+                <?php foreach (($entry['details'] ?? []) as $detail): ?>
+                    <div class="muted" style="margin-top:.35rem; font-size:.92rem;"><?= e((string) $detail) ?></div>
+                <?php endforeach; ?>
+                <?php if (($entry['ip_address'] ?? null) !== null): ?><div class="muted" style="margin-top:.35rem; font-size:.92rem;"><?= e(__('ui.audit.ip', ['ip' => (string) $entry['ip_address']])) ?></div><?php endif; ?>
             </div>
-            <?php foreach (($entry['details'] ?? []) as $detail): ?>
-                <div class="muted" style="margin-top:.35rem; font-size:.92rem;"><?= e((string) $detail) ?></div>
-            <?php endforeach; ?>
-            <?php if (($entry['ip_address'] ?? null) !== null): ?><div class="muted" style="margin-top:.35rem; font-size:.92rem;"><?= e(__('ui.audit.ip', ['ip' => (string) $entry['ip_address']])) ?></div><?php endif; ?>
         </div>
     <?php endforeach; ?>
     <?php if ($entries === []): ?><div class="muted"><?= e(__('ui.audit.no_entries')) ?></div><?php endif; ?>
@@ -446,7 +520,29 @@ $nextQuery['offset'] = (string) ($meta['offset'] + $meta['limit']);
                 const button = document.createElement('button');
                 button.type = 'button';
                 button.className = 'audit-autocomplete-option';
-                button.textContent = option.label || option.value || '';
+                const content = document.createElement('span');
+                content.className = 'audit-autocomplete-option-content';
+                if (option.avatar_path !== undefined || option.avatar_initial !== undefined || option.avatar_color !== undefined) {
+                    if (option.avatar_path) {
+                        const image = document.createElement('img');
+                        image.className = 'avatar-square avatar-image audit-avatar-sm';
+                        image.src = option.avatar_path;
+                        image.alt = option.label || option.value || '';
+                        image.decoding = 'async';
+                        image.loading = 'lazy';
+                        content.appendChild(image);
+                    } else {
+                        const fallback = document.createElement('span');
+                        fallback.className = 'avatar-square audit-avatar-sm';
+                        fallback.style.background = option.avatar_color || '#475569';
+                        fallback.textContent = option.avatar_initial || '?';
+                        content.appendChild(fallback);
+                    }
+                }
+                const label = document.createElement('span');
+                label.textContent = option.label || option.value || '';
+                content.appendChild(label);
+                button.appendChild(content);
                 button.addEventListener('mousedown', (event) => {
                     event.preventDefault();
                     setSelected(option);

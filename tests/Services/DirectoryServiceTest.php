@@ -509,6 +509,42 @@ final class DirectoryServiceTest extends DatabaseTestCase
         $this->assertSame($newOwner->id, $updated->ownerUserId);
     }
 
+    public function test_transfer_ownership_removes_exact_acl_for_new_directory_owner(): void
+    {
+        $owner = $this->createTestUser();
+        $newOwner = $this->createTestUser('new-owner-acl@example.com');
+        $org = $this->orgSvc->create('Org', $owner->id);
+        $this->orgSvc->addMember($org->id, $newOwner->id, 'reader', null);
+        $dir = $this->svc->create($org->id, null, 'Dir', $owner->id);
+
+        $this->permSvc->grant('user', $newOwner->id, 'directory', $dir->id, 'read', true, null, $owner->id, $org->id);
+        $this->permSvc->grant('user', $newOwner->id, 'directory', $dir->id, 'write', true, null, $owner->id, $org->id);
+        $this->assertFalse($this->permSvc->can('read', $newOwner->id, 'directory', $dir->id, $org->id));
+
+        $this->svc->transferOwnership($dir->uuid, $org->id, $newOwner->id, $owner->id);
+
+        $this->assertTrue($this->permSvc->can('read', $newOwner->id, 'directory', $dir->id, $org->id));
+        $this->assertSame($dir->id, $this->svc->findInOrg($dir->uuid, $org->id, $newOwner->id)->id);
+        $this->assertSame([], $this->svc->listAcl($dir->uuid, $org->id, $newOwner->id));
+    }
+
+    public function test_directory_owner_can_read_despite_inherited_default_deny(): void
+    {
+        $owner = $this->createTestUser();
+        $newOwner = $this->createTestUser('new-owner-default-deny@example.com');
+        $org = $this->orgSvc->create('Org', $owner->id);
+        $this->orgSvc->addMember($org->id, $newOwner->id, 'reader', null);
+        $parent = $this->svc->create($org->id, null, 'Parent', $owner->id, 'deny', 'deny');
+        $child = $this->svc->create($org->id, $parent->uuid, 'Child', $owner->id);
+
+        $this->assertFalse($this->permSvc->can('read', $newOwner->id, 'directory', $child->id, $org->id));
+
+        $this->svc->transferOwnership($child->uuid, $org->id, $newOwner->id, $owner->id);
+
+        $this->assertTrue($this->permSvc->can('read', $newOwner->id, 'directory', $child->id, $org->id));
+        $this->assertSame($child->id, $this->svc->findInOrg($child->uuid, $org->id, $newOwner->id)->id);
+    }
+
     public function test_transfer_ownership_requires_directory_owner(): void
     {
         $owner = $this->createTestUser();

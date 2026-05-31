@@ -17,13 +17,34 @@
             .org-manage-member-card {
                 min-width: 0;
             }
+
+            .org-manage-member-heading {
+                display: flex;
+                align-items: center;
+                gap: .75rem;
+                min-width: 0;
+            }
+
+            .org-manage-member-heading-text {
+                min-width: 0;
+            }
         </style>
         <div class="grid" style="gap:.8rem;">
             <?php foreach ($memberRows as $row): $member = $row['member']; $memberUser = $row['user']; ?>
                 <div class="panel panel-muted org-manage-member-card" style="padding:1rem; display:grid; gap:.75rem;">
-                    <div>
-                        <div style="font-weight:700;"><?= e($memberUser !== null ? user_label_with_email($memberUser) : __('ui.organization_manage.unknown_user')) ?></div>
-                        <div class="muted" style="font-size:.92rem;"><?= e(__('ui.organization_manage.joined', ['date' => $member->joinedAt])) ?></div>
+                    <div class="org-manage-member-heading">
+                        <?php if ($memberUser !== null): ?>
+                            <?php $memberDisplayName = display_name_for_user($memberUser); ?>
+                            <?php if (!empty($memberUser->avatarPath)): ?>
+                                <img class="avatar-square avatar-image" src="<?= e($memberUser->avatarPath) ?>" alt="<?= e($memberDisplayName) ?>" width="32" height="32" decoding="async" loading="lazy">
+                            <?php else: ?>
+                                <span class="avatar-square" style="background: <?= e(avatar_color_for_user($memberUser)) ?>;"><?= e(avatar_initial($memberDisplayName)) ?></span>
+                            <?php endif; ?>
+                        <?php endif; ?>
+                        <div class="org-manage-member-heading-text">
+                            <div style="font-weight:700;"><?= e($memberUser !== null ? user_label_with_email($memberUser) : __('ui.organization_manage.unknown_user')) ?></div>
+                            <div class="muted" style="font-size:.92rem;"><?= e(__('ui.organization_manage.joined', ['date' => $member->joinedAt])) ?></div>
+                        </div>
                     </div>
                     <?php if ($member->role === 'owner' || empty($canManageSettings)): ?>
                         <div class="muted" style="font-size:.92rem;"><?= e(__('ui.organization_manage.roles.' . $member->role)) ?></div>

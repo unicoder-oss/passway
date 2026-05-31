@@ -476,6 +476,44 @@ final class SecretServiceTest extends DatabaseTestCase
         $this->assertSame($newOwner->id, $updated->ownerUserId);
     }
 
+    public function test_transfer_ownership_removes_exact_acl_for_new_secret_owner(): void
+    {
+        $owner = $this->createTestUser();
+        $newOwner = $this->createTestUser('new-owner-acl@example.com');
+        $org = $this->orgSvc->create('Org', $owner->id);
+        $this->orgSvc->addMember($org->id, $newOwner->id, 'reader', null);
+        $dir = $this->dirSvc->create($org->id, null, 'Dir', $owner->id);
+        $secret = $this->svc->create($org->id, $dir->uuid, 'Secret', 'static', 'value', $owner->id);
+
+        $this->permSvc->grant('user', $newOwner->id, 'secret', $secret->id, 'read', true, null, $owner->id, $org->id);
+        $this->permSvc->grant('user', $newOwner->id, 'secret', $secret->id, 'write', true, null, $owner->id, $org->id);
+        $this->assertFalse($this->permSvc->can('read', $newOwner->id, 'secret', $secret->id, $org->id));
+
+        $this->svc->transferOwnership($secret->uuid, $org->id, $newOwner->id, $owner->id);
+
+        $this->assertTrue($this->permSvc->can('read', $newOwner->id, 'secret', $secret->id, $org->id));
+        $this->assertSame('value', $this->svc->get($secret->uuid, $org->id, $newOwner->id)['value']);
+        $this->assertSame([], $this->svc->listAcl($secret->uuid, $org->id, $newOwner->id));
+    }
+
+    public function test_secret_owner_can_read_despite_inherited_directory_deny(): void
+    {
+        $owner = $this->createTestUser();
+        $newOwner = $this->createTestUser('new-owner-inherited-deny@example.com');
+        $org = $this->orgSvc->create('Org', $owner->id);
+        $this->orgSvc->addMember($org->id, $newOwner->id, 'reader', null);
+        $dir = $this->dirSvc->create($org->id, null, 'Dir', $owner->id);
+        $secret = $this->svc->create($org->id, $dir->uuid, 'Secret', 'static', 'value', $owner->id);
+
+        $this->permSvc->grant('user', $newOwner->id, 'directory', $dir->id, 'read', true, null, $owner->id, $org->id);
+        $this->assertFalse($this->permSvc->can('read', $newOwner->id, 'secret', $secret->id, $org->id));
+
+        $this->svc->transferOwnership($secret->uuid, $org->id, $newOwner->id, $owner->id);
+
+        $this->assertTrue($this->permSvc->can('read', $newOwner->id, 'secret', $secret->id, $org->id));
+        $this->assertSame('value', $this->svc->get($secret->uuid, $org->id, $newOwner->id)['value']);
+    }
+
     public function test_transfer_ownership_requires_secret_owner(): void
     {
         $owner = $this->createTestUser();

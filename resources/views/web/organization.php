@@ -214,20 +214,71 @@ require base_path('resources/views/partials/auth_topbar.php');
                 gap: .75rem;
             }
             .acl-rule-row {
-                grid-template-columns: minmax(0, 1.4fr) repeat(2, minmax(0, .7fr)) auto;
-                align-items: end;
+                grid-template-columns: minmax(260px, 1.8fr) repeat(2, minmax(0, .7fr)) auto;
+                align-items: start;
             }
+            .acl-rule-row > button {
+                align-self: center;
+            }
+            #directory-acl-modal { width: min(860px, calc(100vw - 2rem)); }
             .acl-subject-copy {
                 min-width: 0;
+                display: flex;
+                gap: .65rem;
+                align-items: flex-start;
+            }
+            .acl-subject-main {
+                min-width: 0;
                 display: grid;
-                gap: .2rem;
+                gap: .25rem;
             }
             .acl-subject-line {
                 display: flex;
                 gap: .5rem;
-                align-items: center;
+                align-items: flex-start;
                 flex-wrap: wrap;
             }
+            .acl-subject-line strong { overflow-wrap: anywhere; }
+            .acl-picker { position: relative; }
+            .acl-picker-list {
+                position: absolute;
+                top: calc(100% + .35rem);
+                left: 0;
+                right: 0;
+                z-index: 40;
+                max-height: 240px;
+                overflow: auto;
+                border: 1px solid var(--border);
+                background: var(--panel);
+                box-shadow: var(--shadow);
+                display: grid;
+            }
+            .acl-picker-option {
+                padding: .7rem .8rem;
+                cursor: pointer;
+                border: 0;
+                background: transparent;
+                color: var(--fg);
+                font: inherit;
+                text-align: left;
+                width: 100%;
+                justify-content: flex-start;
+            }
+            .acl-picker-option:hover,
+            .acl-picker-option:focus,
+            .acl-picker-option.is-active {
+                background: var(--panel-subtle);
+                outline: none;
+            }
+            .acl-picker-option-content {
+                display: flex;
+                align-items: center;
+                gap: .6rem;
+                min-width: 0;
+            }
+            .acl-picker-option-copy { min-width: 0; display: grid; gap: .1rem; }
+            .acl-picker-empty { padding: .7rem .8rem; color: var(--muted); }
+            .acl-avatar-sm { width: 28px; height: 28px; flex-basis: 28px; font-size: .82rem; }
             .acl-tabs {
                 display: flex;
                 gap: .5rem;
@@ -467,14 +518,12 @@ require base_path('resources/views/partials/auth_topbar.php');
                             <section data-directory-acl-panel="users" class="grid" style="gap:.75rem;">
                                 <div class="grid field-actions-2" style="gap:.75rem; align-items:end;">
                                     <div>
-                                        <label for="directory-acl-user-select"><?= e(__('ui.organization.acl_add_user')) ?></label>
-                                        <select id="directory-acl-user-select">
-                                            <option value=""><?= e(__('ui.organization.acl_select_user')) ?></option>
-                                            <?php foreach ($organizationMembers as $member): ?>
-                                                <?php if ($member['role'] === 'owner') { continue; } ?>
-                                                <option value="<?= e($member['uuid']) ?>"><?= e($member['display_label']) ?></option>
-                                            <?php endforeach; ?>
-                                        </select>
+                                        <label for="directory-acl-user-picker"><?= e(__('ui.organization.acl_add_user')) ?></label>
+                                        <div class="acl-picker" data-acl-picker="directory-user">
+                                            <input type="hidden" id="directory-acl-user-select">
+                                            <input id="directory-acl-user-picker" placeholder="<?= e(__('ui.organization.acl_select_user')) ?>" autocomplete="off" data-acl-picker-input>
+                                            <div class="acl-picker-list hidden" data-acl-picker-list></div>
+                                        </div>
                                     </div>
                                     <button type="button" class="secondary" id="directory-acl-add-user"><?= e(__('ui.organization.acl_add_rule')) ?></button>
                                 </div>
@@ -482,13 +531,12 @@ require base_path('resources/views/partials/auth_topbar.php');
                             <section data-directory-acl-panel="groups" class="grid hidden" style="gap:.75rem;">
                                 <div class="grid field-actions-2" style="gap:.75rem; align-items:end;">
                                     <div>
-                                        <label for="directory-acl-group-select"><?= e(__('ui.organization.acl_add_group')) ?></label>
-                                        <select id="directory-acl-group-select">
-                                            <option value=""><?= e(__('ui.organization.acl_select_group')) ?></option>
-                                            <?php foreach ($organizationGroups as $group): ?>
-                                                <option value="<?= e($group['uuid']) ?>"><?= e($group['name']) ?></option>
-                                            <?php endforeach; ?>
-                                        </select>
+                                        <label for="directory-acl-group-picker"><?= e(__('ui.organization.acl_add_group')) ?></label>
+                                        <div class="acl-picker" data-acl-picker="directory-group">
+                                            <input type="hidden" id="directory-acl-group-select">
+                                            <input id="directory-acl-group-picker" placeholder="<?= e(__('ui.organization.acl_select_group')) ?>" autocomplete="off" data-acl-picker-input>
+                                            <div class="acl-picker-list hidden" data-acl-picker-list></div>
+                                        </div>
                                     </div>
                                     <button type="button" class="secondary" id="directory-acl-add-group"><?= e(__('ui.organization.acl_add_rule')) ?></button>
                                 </div>
@@ -497,13 +545,12 @@ require base_path('resources/views/partials/auth_topbar.php');
                         <section data-directory-acl-panel="keys" class="grid<?= $isSoloMode ? '' : ' hidden' ?>" style="gap:.75rem;">
                             <div class="grid field-actions-2" style="gap:.75rem; align-items:end;">
                                 <div>
-                                    <label for="directory-acl-key-select"><?= e(__('ui.organization.acl_add_key')) ?></label>
-                                    <select id="directory-acl-key-select">
-                                        <option value=""><?= e(__('ui.organization.acl_select_key')) ?></option>
-                                        <?php foreach ($organizationApiKeys as $apiKey): ?>
-                                            <option value="<?= e($apiKey['uuid']) ?>"><?= e($apiKey['name'] . ' (' . $apiKey['key_prefix'] . ')') ?></option>
-                                        <?php endforeach; ?>
-                                    </select>
+                                    <label for="directory-acl-key-picker"><?= e(__('ui.organization.acl_add_key')) ?></label>
+                                    <div class="acl-picker" data-acl-picker="directory-key">
+                                        <input type="hidden" id="directory-acl-key-select">
+                                        <input id="directory-acl-key-picker" placeholder="<?= e(__('ui.organization.acl_select_key')) ?>" autocomplete="off" data-acl-picker-input>
+                                        <div class="acl-picker-list hidden" data-acl-picker-list></div>
+                                    </div>
                                 </div>
                                 <button type="button" class="secondary" id="directory-acl-add-key"><?= e(__('ui.organization.acl_add_rule')) ?></button>
                             </div>
@@ -830,6 +877,189 @@ require base_path('resources/views/partials/auth_topbar.php');
             });
         };
 
+        const normalizeAclSearch = (value) => (value || '').toString().trim().toLowerCase();
+
+        const createAclAvatar = (item, className = 'acl-avatar-sm') => {
+            if (item.avatar_path) {
+                const image = document.createElement('img');
+                image.className = `avatar-square avatar-image ${className}`;
+                image.src = item.avatar_path;
+                image.alt = item.label || item.name || item.email || '';
+                image.decoding = 'async';
+                image.loading = 'lazy';
+                return image;
+            }
+
+            const fallback = document.createElement('span');
+            fallback.className = `avatar-square ${className}`;
+            fallback.style.background = item.avatar_color || '#475569';
+            fallback.textContent = item.avatar_initial || '?';
+            return fallback;
+        };
+
+        const resetAclPicker = (hiddenInput) => {
+            if (!hiddenInput) {
+                return;
+            }
+
+            hiddenInput.value = '';
+            const picker = hiddenInput.closest('[data-acl-picker]');
+            const input = picker ? picker.querySelector('[data-acl-picker-input]') : null;
+            if (input) {
+                input.value = '';
+                input.dataset.selectedLabel = '';
+            }
+        };
+
+        const setupAclPicker = (picker, optionsProvider) => {
+            const input = picker.querySelector('[data-acl-picker-input]');
+            const hiddenInput = picker.querySelector('input[type="hidden"]');
+            const list = picker.querySelector('[data-acl-picker-list]');
+            let activeIndex = -1;
+            let currentOptions = [];
+
+            if (!input || !hiddenInput || !list) {
+                return;
+            }
+
+            const closeList = () => {
+                list.classList.add('hidden');
+                list.innerHTML = '';
+                activeIndex = -1;
+            };
+
+            const setSelected = (option) => {
+                hiddenInput.value = option.value || '';
+                input.value = option.label || option.value || '';
+                input.dataset.selectedLabel = input.value;
+                closeList();
+            };
+
+            const renderOptions = (options) => {
+                currentOptions = options;
+                list.innerHTML = '';
+
+                if (!options.length) {
+                    const empty = document.createElement('div');
+                    empty.className = 'acl-picker-empty';
+                    empty.textContent = <?= json_encode((string) __('ui.audit.autocomplete_no_matches')) ?>;
+                    list.appendChild(empty);
+                    list.classList.remove('hidden');
+                    return;
+                }
+
+                options.forEach((option, index) => {
+                    const button = document.createElement('button');
+                    button.type = 'button';
+                    button.className = 'acl-picker-option';
+                    if (index === activeIndex) {
+                        button.classList.add('is-active');
+                    }
+
+                    const content = document.createElement('span');
+                    content.className = 'acl-picker-option-content';
+                    if (option.kind === 'user') {
+                        content.appendChild(createAclAvatar(option));
+                    }
+
+                    const copy = document.createElement('span');
+                    copy.className = 'acl-picker-option-copy';
+                    const title = document.createElement('strong');
+                    title.textContent = option.label || option.value || '';
+                    copy.appendChild(title);
+                    if (option.email) {
+                        const email = document.createElement('span');
+                        email.className = 'muted';
+                        email.textContent = option.email;
+                        copy.appendChild(email);
+                    }
+                    content.appendChild(copy);
+                    button.appendChild(content);
+                    button.addEventListener('mousedown', (event) => {
+                        event.preventDefault();
+                        setSelected(option);
+                    });
+                    list.appendChild(button);
+                });
+
+                list.classList.remove('hidden');
+            };
+
+            const loadOptions = () => {
+                const query = normalizeAclSearch(input.value);
+                const options = optionsProvider()
+                    .filter((option) => query === '' || normalizeAclSearch(`${option.label || ''} ${option.email || ''} ${option.value || ''}`).includes(query))
+                    .slice(0, 12);
+
+                if (query !== normalizeAclSearch(input.dataset.selectedLabel || '')) {
+                    hiddenInput.value = '';
+                }
+
+                renderOptions(options);
+            };
+
+            input.addEventListener('focus', loadOptions);
+            input.addEventListener('input', loadOptions);
+            input.addEventListener('keydown', (event) => {
+                if (!currentOptions.length) {
+                    return;
+                }
+
+                if (event.key === 'ArrowDown') {
+                    event.preventDefault();
+                    activeIndex = Math.min(currentOptions.length - 1, activeIndex + 1);
+                    renderOptions(currentOptions);
+                    return;
+                }
+
+                if (event.key === 'ArrowUp') {
+                    event.preventDefault();
+                    activeIndex = Math.max(0, activeIndex - 1);
+                    renderOptions(currentOptions);
+                    return;
+                }
+
+                if (event.key === 'Enter' && activeIndex >= 0 && currentOptions[activeIndex]) {
+                    event.preventDefault();
+                    setSelected(currentOptions[activeIndex]);
+                    return;
+                }
+
+                if (event.key === 'Escape') {
+                    closeList();
+                }
+            });
+            input.addEventListener('blur', () => {
+                window.setTimeout(() => {
+                    closeList();
+                    if (hiddenInput.value.trim() === '') {
+                        input.value = '';
+                        input.dataset.selectedLabel = '';
+                    }
+                }, 120);
+            });
+        };
+
+        const availableDirectoryAclUsers = () => organizationMembers
+            .filter((member) => member.role !== 'owner' && member.uuid !== currentDirectoryOwnerUuid && !directoryAclState.some((rule) => rule.subject_type === 'user' && rule.subject_uuid === member.uuid))
+            .map((member) => ({
+                kind: 'user',
+                value: member.uuid,
+                label: member.name || member.email,
+                email: member.name !== member.email ? member.email : '',
+                avatar_path: member.avatar_path,
+                avatar_initial: member.avatar_initial,
+                avatar_color: member.avatar_color,
+            }));
+
+        const availableDirectoryAclGroups = () => organizationGroups
+            .filter((group) => !directoryAclState.some((rule) => rule.subject_type === 'group' && rule.subject_uuid === group.uuid))
+            .map((group) => ({ kind: 'group', value: group.uuid, label: group.name }));
+
+        const availableDirectoryAclKeys = () => organizationApiKeys
+            .filter((apiKey) => !directoryAclState.some((rule) => rule.subject_type === 'api_key' && rule.subject_uuid === apiKey.uuid))
+            .map((apiKey) => ({ kind: 'api_key', value: apiKey.uuid, label: apiKey.name }));
+
         const renderDirectoryAclRules = () => {
             if (!directoryAclRules) {
                 return;
@@ -871,6 +1101,16 @@ require base_path('resources/views/partials/auth_topbar.php');
                 row.className = 'acl-rule-row';
                 const subject = document.createElement('div');
                 subject.className = 'acl-subject-copy';
+                if (rule.subject_type === 'user') {
+                    subject.appendChild(createAclAvatar({
+                        label: rule.subject_name || rule.subject_uuid,
+                        avatar_path: rule.subject_avatar_path,
+                        avatar_initial: rule.subject_avatar_initial,
+                        avatar_color: rule.subject_avatar_color,
+                    }));
+                }
+                const main = document.createElement('div');
+                main.className = 'acl-subject-main';
                 const line = document.createElement('div');
                 line.className = 'acl-subject-line';
                 const title = document.createElement('strong');
@@ -879,14 +1119,15 @@ require base_path('resources/views/partials/auth_topbar.php');
                 pill.className = 'pill';
                 pill.textContent = directoryAclLabels[rule.subject_type] || rule.subject_type;
                 line.appendChild(title);
-                line.appendChild(pill);
-                subject.appendChild(line);
-                if (rule.subject_email) {
+                main.appendChild(line);
+                main.appendChild(pill);
+                if (rule.subject_email && rule.subject_email !== rule.subject_name) {
                     const email = document.createElement('div');
                     email.className = 'muted';
                     email.textContent = rule.subject_email;
-                    subject.appendChild(email);
+                    main.appendChild(email);
                 }
+                subject.appendChild(main);
                 row.appendChild(subject);
                 row.appendChild(createEffectSelect('read', index, rule.read));
                 row.appendChild(createEffectSelect('write', index, rule.write));
@@ -933,6 +1174,9 @@ require base_path('resources/views/partials/auth_topbar.php');
                     subject_uuid: rule.subject_uuid,
                     subject_name: rule.subject_name,
                     subject_email: rule.subject_email,
+                    subject_avatar_path: rule.subject_avatar_path,
+                    subject_avatar_initial: rule.subject_avatar_initial,
+                    subject_avatar_color: rule.subject_avatar_color,
                     read: rule.read,
                     write: rule.write,
                 })).filter((rule) => !(rule.subject_type === 'user' && rule.subject_uuid === currentDirectoryOwnerUuid));
@@ -1050,6 +1294,9 @@ require base_path('resources/views/partials/auth_topbar.php');
                     subject_uuid: rule.subject_uuid,
                     subject_name: rule.subject_name,
                     subject_email: rule.subject_email,
+                    subject_avatar_path: rule.subject_avatar_path,
+                    subject_avatar_initial: rule.subject_avatar_initial,
+                    subject_avatar_color: rule.subject_avatar_color,
                     read: rule.read,
                     write: rule.write,
                 })).filter((rule) => !(rule.subject_type === 'user' && rule.subject_uuid === currentDirectoryOwnerUuid));
@@ -1134,6 +1381,10 @@ require base_path('resources/views/partials/auth_topbar.php');
             button.addEventListener('click', () => setDirectoryAclTab(button.getAttribute('data-directory-acl-tab') || 'users'));
         });
 
+        document.querySelectorAll('[data-acl-picker="directory-user"]').forEach((picker) => setupAclPicker(picker, availableDirectoryAclUsers));
+        document.querySelectorAll('[data-acl-picker="directory-group"]').forEach((picker) => setupAclPicker(picker, availableDirectoryAclGroups));
+        document.querySelectorAll('[data-acl-picker="directory-key"]').forEach((picker) => setupAclPicker(picker, availableDirectoryAclKeys));
+
         if (directoryAclAddUserButton && directoryAclUserSelect && directoryAclStatus) {
             directoryAclAddUserButton.addEventListener('click', () => {
                 const subjectUuid = directoryAclUserSelect.value;
@@ -1158,10 +1409,13 @@ require base_path('resources/views/partials/auth_topbar.php');
                     subject_uuid: member.uuid,
                     subject_name: member.name,
                     subject_email: member.email,
+                    subject_avatar_path: member.avatar_path,
+                    subject_avatar_initial: member.avatar_initial,
+                    subject_avatar_color: member.avatar_color,
                     read: null,
                     write: null,
                 });
-                directoryAclUserSelect.value = '';
+                resetAclPicker(directoryAclUserSelect);
                 directoryAclStatus.textContent = <?= json_encode((string) __('ui.organization.acl_modal_hint')) ?>;
                 renderDirectoryAclRules();
             });
@@ -1194,7 +1448,7 @@ require base_path('resources/views/partials/auth_topbar.php');
                     read: null,
                     write: null,
                 });
-                directoryAclGroupSelect.value = '';
+                resetAclPicker(directoryAclGroupSelect);
                 directoryAclStatus.textContent = <?= json_encode((string) __('ui.organization.acl_modal_hint')) ?>;
                 renderDirectoryAclRules();
             });
@@ -1227,7 +1481,7 @@ require base_path('resources/views/partials/auth_topbar.php');
                     read: null,
                     write: null,
                 });
-                directoryAclKeySelect.value = '';
+                resetAclPicker(directoryAclKeySelect);
                 directoryAclStatus.textContent = <?= json_encode((string) __('ui.organization.acl_modal_hint')) ?>;
                 renderDirectoryAclRules();
             });
@@ -1254,6 +1508,9 @@ require base_path('resources/views/partials/auth_topbar.php');
                 if (directoryAclStatus) {
                     directoryAclStatus.textContent = <?= json_encode((string) __('ui.organization.acl_modal_hint')) ?>;
                 }
+                resetAclPicker(directoryAclUserSelect);
+                resetAclPicker(directoryAclGroupSelect);
+                resetAclPicker(directoryAclKeySelect);
                 renderDirectoryAclRules();
             });
         }

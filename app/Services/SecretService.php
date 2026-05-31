@@ -667,10 +667,13 @@ final class SecretService
             return $secret;
         }
 
-        $secret->update([
-            'owner_user_id' => (int) $newOwnerId,
-            'updated_at' => now()->format('Y-m-d H:i:s'),
-        ]);
+        Database::getInstance()->transaction(function () use ($secret, $newOwnerId): void {
+            $secret->update([
+                'owner_user_id' => (int) $newOwnerId,
+                'updated_at' => now()->format('Y-m-d H:i:s'),
+            ]);
+            $this->permissionService->removeUserRulesForResource('secret', $secret->id, $newOwnerId);
+        });
 
         $updated = Secret::findByUuid($secretUuid)
             ?? throw new \RuntimeException(__('ui.backend.secret.not_found'));

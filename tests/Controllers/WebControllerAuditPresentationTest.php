@@ -44,10 +44,10 @@ final class WebControllerAuditPresentationTest extends DatabaseTestCase
         set_request_locale($locale);
 
         $owner = $this->createTestUser('owner@example.com');
-        $owner->update(['nickname' => 'Иван', 'updated_at' => now()->format('Y-m-d H:i:s')]);
+        $owner->update(['nickname' => 'Иван', 'avatar_color' => '#123456', 'avatar_path' => '/uploads/users/owner.webp', 'updated_at' => now()->format('Y-m-d H:i:s')]);
 
         $target = $this->createTestUser('target@example.com');
-        $target->update(['nickname' => 'Пётр', 'updated_at' => now()->format('Y-m-d H:i:s')]);
+        $target->update(['nickname' => 'Пётр', 'avatar_color' => '#654321', 'updated_at' => now()->format('Y-m-d H:i:s')]);
 
         $organization = $this->organizationService->create('Org', $owner->id);
 
@@ -74,6 +74,18 @@ final class WebControllerAuditPresentationTest extends DatabaseTestCase
 
         $this->assertSame($expectedTitle, $this->flattenTitle($entry));
         $this->assertSame('Иван <owner@example.com>', $entry['actor_label']);
+        $this->assertSame([
+            'kind' => 'user',
+            'path' => '/uploads/users/owner.webp',
+            'initial' => 'И',
+            'color' => '#123456',
+        ], $entry['actor_avatar']);
+        $this->assertSame([
+            'kind' => 'user',
+            'path' => '',
+            'initial' => 'П',
+            'color' => '#654321',
+        ], $entry['title_parts'][1]['avatar']);
         $this->assertSame([], $entry['details']);
         $this->assertSame('1.2.3.4', $entry['ip_address']);
     }
@@ -178,6 +190,88 @@ final class WebControllerAuditPresentationTest extends DatabaseTestCase
             $entry['title_parts'][1]['href']
         );
         $this->assertSame($expectedDetails, $entry['details']);
+    }
+
+    public function test_it_keeps_api_key_actor_text_only(): void
+    {
+        $owner = $this->createTestUser('api-owner@example.com');
+        $organization = $this->organizationService->create('API Org', $owner->id);
+
+        $apiKeyId = (string) Database::getInstance()->insert('api_keys', [
+            'uuid' => generate_uuid(),
+            'organization_id' => (int) $organization->id,
+            'user_id' => (int) $owner->id,
+            'name' => 'Automation key',
+            'role' => 'editor',
+            'key_hash' => hash('sha256', 'automation-key'),
+            'key_prefix' => 'sv_auto',
+            'is_active' => 1,
+            'last_used_at' => null,
+            'expires_at' => null,
+            'created_at' => now()->format('Y-m-d H:i:s'),
+        ]);
+
+        $entries = $this->presentEntries($organization, [
+            new AuditLog(
+                id: '3',
+                organizationId: $organization->id,
+                userId: null,
+                apiKeyId: $apiKeyId,
+                sessionId: null,
+                action: 'auth.api_key_success',
+                resourceType: 'api_key',
+                resourceId: $apiKeyId,
+                resourceUuid: null,
+                ipAddress: null,
+                userAgent: null,
+                detailsJson: '{}',
+                success: true,
+                createdAt: '2026-05-11 19:17:51',
+            ),
+        ]);
+
+        $entry = $entries[0];
+
+        $this->assertSame(__('ui.audit.api_key_actor', ['name' => 'Automation key']), $entry['actor_label']);
+        $this->assertNull($entry['actor_avatar']);
+    }
+
+    public function test_it_adds_avatar_to_linked_organization_title_part(): void
+    {
+        $owner = $this->createTestUser('org-owner@example.com');
+        $organization = $this->organizationService->create('Avatar Org', $owner->id);
+        $organization->update(['avatar_path' => '/uploads/organizations/avatar.webp']);
+        $organization = \Passway\Models\Organization::findById($organization->id);
+        self::assertNotNull($organization);
+
+        $entries = $this->presentEntries($organization, [
+            new AuditLog(
+                id: '4',
+                organizationId: $organization->id,
+                userId: $owner->id,
+                apiKeyId: null,
+                sessionId: null,
+                action: 'org.create',
+                resourceType: 'organization',
+                resourceId: $organization->id,
+                resourceUuid: $organization->uuid,
+                ipAddress: null,
+                userAgent: null,
+                detailsJson: '{}',
+                success: true,
+                createdAt: '2026-05-11 19:17:51',
+            ),
+        ]);
+
+        $organizationPart = $entries[0]['title_parts'][2];
+
+        $this->assertSame('/organizations/' . $organization->uuid, $organizationPart['href']);
+        $this->assertSame([
+            'kind' => 'organization',
+            'path' => '/uploads/organizations/avatar.webp',
+            'initial' => 'A',
+            'color' => avatar_fallback_color(),
+        ], $organizationPart['avatar']);
     }
 
     /** @return array<string, array{string, string}> */

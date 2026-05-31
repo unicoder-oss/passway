@@ -683,6 +683,9 @@ final class SecretController
                     'subject_uuid' => null,
                     'subject_name' => null,
                     'subject_email' => null,
+                    'subject_avatar_path' => null,
+                    'subject_avatar_initial' => null,
+                    'subject_avatar_color' => null,
                     'read' => null,
                     'write' => null,
                 ];
@@ -692,6 +695,9 @@ final class SecretController
                     $grouped[$key]['subject_uuid'] = $subject?->uuid;
                     $grouped[$key]['subject_name'] = $subject !== null ? display_name_for_user($subject) : null;
                     $grouped[$key]['subject_email'] = $subject?->email;
+                    $grouped[$key]['subject_avatar_path'] = $subject?->avatarPath;
+                    $grouped[$key]['subject_avatar_initial'] = $subject !== null ? avatar_initial(display_name_for_user($subject)) : null;
+                    $grouped[$key]['subject_avatar_color'] = $subject !== null ? avatar_color_for_user($subject) : null;
                 } elseif ($rule->subjectType === 'group') {
                     $subject = Group::findById($rule->subjectId);
                     $grouped[$key]['subject_uuid'] = $subject?->uuid;

@@ -1169,6 +1169,7 @@ final class WebController
                 'status' => $entry->success ? __('ui.app.success') : __('ui.app.failed'),
                 'actor_label' => $actor['label'],
                 'actor_href' => $actor['href'],
+                'actor_avatar' => $actor['avatar'] ?? null,
                 'details' => $this->buildInstanceAuditDetailLines($entry),
                 'ip_address' => $entry->ipAddress,
             ];
@@ -1218,6 +1219,7 @@ final class WebController
             'status' => $entry->success ? __('ui.app.success') : __('ui.app.failed'),
             'actor_label' => $actor['label'],
             'actor_href' => $actor['href'],
+            'actor_avatar' => $actor['avatar'] ?? null,
             'details' => $this->buildAuditDetailLines($organization, $entry, $lookup),
             'ip_address' => $entry->ipAddress,
         ];
@@ -1225,14 +1227,18 @@ final class WebController
 
     /**
      * @param array<string, array<string, object|null>> $lookup
-     * @return array{label:string, href:?string}
+     * @return array{label:string, href:?string, avatar?:array{kind:string,path:string,initial:string,color:string}}
      */
     private function resolveAuditActor(AuditLog $entry, array &$lookup): array
     {
         if ($entry->userId !== null) {
             $user = $this->auditLookupUser($entry->userId, $lookup);
             if ($user !== null) {
-                return ['label' => user_label_with_email($user), 'href' => null];
+                return [
+                    'label' => user_label_with_email($user),
+                    'href' => null,
+                    'avatar' => $this->auditUserAvatar($user),
+                ];
             }
 
             return ['label' => __('ui.audit.unknown_user'), 'href' => null];
@@ -1383,9 +1389,9 @@ final class WebController
     }
 
     /**
-     * @param array{label:?string, href:?string} $resource
+     * @param array{label:?string, href:?string, avatar?:array{kind:string,path:string,initial:string,color:string}} $resource
      * @param array<string, array<string, object|null>> $lookup
-     * @return array<int, array{text:string, href:?string, accent:bool}>
+     * @return array<int, array<string, mixed>>
      */
     private function buildAuditTitleParts(AuditLog $entry, array $resource, array &$lookup): array
     {
@@ -1470,8 +1476,8 @@ final class WebController
     }
 
     /**
-     * @param array<int, array{text:string, href:?string, accent:bool}> $parts
-     * @return array<int, array{text:string, href:?string, accent:bool}>
+     * @param array<int, array<string, mixed>> $parts
+     * @return array<int, array<string, mixed>>
      */
     private function auditSentenceParts(array $parts): array
     {
@@ -1483,32 +1489,44 @@ final class WebController
                 continue;
             }
 
-            $normalized[] = [
+            $normalizedPart = [
                 'text' => $text,
                 'href' => isset($part['href']) && \is_string($part['href']) && $part['href'] !== '' ? $part['href'] : null,
                 'accent' => !empty($part['accent']),
             ];
+
+            if (isset($part['avatar']) && \is_array($part['avatar'])) {
+                $normalizedPart['avatar'] = $part['avatar'];
+            }
+
+            $normalized[] = $normalizedPart;
         }
 
         return $normalized;
     }
 
     /**
-     * @param array{label:?string, href:?string} $resource
-     * @return array{text:string, href:?string, accent:bool}
+     * @param array{label:?string, href:?string, avatar?:array{kind:string,path:string,initial:string,color:string}} $resource
+     * @return array<string, mixed>
      */
     private function auditResourcePart(array $resource): array
     {
-        return [
+        $part = [
             'text' => (string) ($resource['label'] ?? ''),
             'href' => $resource['href'],
             'accent' => true,
         ];
+
+        if (isset($resource['avatar']) && \is_array($resource['avatar'])) {
+            $part['avatar'] = $resource['avatar'];
+        }
+
+        return $part;
     }
 
     /**
      * @param array<string, array<string, object|null>> $lookup
-     * @return array{text:string, href:?string, accent:bool}
+     * @return array<string, mixed>
      */
     private function auditUserPart(?string $userId, array &$lookup): array
     {
@@ -1517,16 +1535,22 @@ final class WebController
         }
 
         $user = $this->auditLookupUser($userId, $lookup);
-        return [
+        $part = [
             'text' => $user !== null ? user_label_with_email($user) : __('ui.audit.unknown_user'),
             'href' => null,
             'accent' => true,
         ];
+
+        if ($user !== null) {
+            $part['avatar'] = $this->auditUserAvatar($user);
+        }
+
+        return $part;
     }
 
     /**
-     * @param array{label:?string, href:?string} $resource
-     * @return array<int, array{text:string, href:?string, accent:bool}>
+     * @param array{label:?string, href:?string, avatar?:array{kind:string,path:string,initial:string,color:string}} $resource
+     * @return array<int, array<string, mixed>>
      */
     private function auditDefaultTitleParts(AuditLog $entry, array $resource): array
     {
@@ -1552,6 +1576,30 @@ final class WebController
 
         $value = (string) $value;
         return $value !== '' ? $value : null;
+    }
+
+    /** @return array{kind:string,path:string,initial:string,color:string} */
+    private function auditUserAvatar(User $user): array
+    {
+        $displayName = display_name_for_user($user);
+
+        return [
+            'kind' => 'user',
+            'path' => (string) ($user->avatarPath ?? ''),
+            'initial' => avatar_initial($displayName),
+            'color' => avatar_color_for_user($user),
+        ];
+    }
+
+    /** @return array{kind:string,path:string,initial:string,color:string} */
+    private function auditOrganizationAvatar(Organization $organization): array
+    {
+        return [
+            'kind' => 'organization',
+            'path' => (string) ($organization->avatarPath ?? ''),
+            'initial' => avatar_initial($organization->name),
+            'color' => avatar_fallback_color(),
+        ];
     }
 
     private function translateAuditAction(string $action): string
@@ -1614,7 +1662,7 @@ final class WebController
 
     /**
      * @param array<string, array<string, object|null>> $lookup
-     * @return array{label:?string, href:?string}
+     * @return array{label:?string, href:?string, avatar?:array{kind:string,path:string,initial:string,color:string}}
      */
     private function resolveAuditOrganizationResource(AuditLog $entry, array &$lookup): array
     {
@@ -1631,12 +1679,13 @@ final class WebController
         return [
             'label' => $organization->name,
             'href' => '/organizations/' . \urlencode($organization->uuid),
+            'avatar' => $this->auditOrganizationAvatar($organization),
         ];
     }
 
     /**
      * @param array<string, array<string, object|null>> $lookup
-     * @return array{label:?string, href:?string}
+     * @return array{label:?string, href:?string, avatar?:array{kind:string,path:string,initial:string,color:string}}
      */
     private function resolveAuditUserResource(AuditLog $entry, array &$lookup): array
     {
@@ -1649,7 +1698,11 @@ final class WebController
             return ['label' => $this->formatAuditResourceFallback('user', $entry), 'href' => null];
         }
 
-        return ['label' => user_label_with_email($user), 'href' => null];
+        return [
+            'label' => user_label_with_email($user),
+            'href' => null,
+            'avatar' => $this->auditUserAvatar($user),
+        ];
     }
 
     /**
@@ -2986,7 +3039,7 @@ final class WebController
         return null;
     }
 
-    /** @return array<int, array{uuid:string,name:string,email:string,display_label:string,role:string}> */
+    /** @return array<int, array{uuid:string,name:string,email:string,display_label:string,role:string,avatar_path:string,avatar_initial:string,avatar_color:string}> */
     private function serializeOrganizationMembers(string $orgId): array
     {
         $members = [];
@@ -3003,6 +3056,9 @@ final class WebController
                 'email' => $memberUser->email,
                 'display_label' => user_label_with_email($memberUser),
                 'role' => $member->role,
+                'avatar_path' => (string) ($memberUser->avatarPath ?? ''),
+                'avatar_initial' => avatar_initial(display_name_for_user($memberUser)),
+                'avatar_color' => avatar_color_for_user($memberUser),
             ];
         }
 

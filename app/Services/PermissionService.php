@@ -73,6 +73,10 @@ final class PermissionService
             return false;
         }
 
+        if ($this->isOwnedByUser($resourceType, $resourceId, $userId)) {
+            return true;
+        }
+
         // 1-2. Fine-grained ACL on the resource and its ancestors
         $fineGrained = $this->checkFineGrained($permission, $userId, $resourceType, $resourceId, $orgId);
         if ($fineGrained !== null) {
@@ -336,9 +340,38 @@ final class PermissionService
         return $this->listForResource($resourceType, $resourceId);
     }
 
+    public function removeUserRulesForResource(string $resourceType, string $resourceId, string $userId): void
+    {
+        if (!\in_array($resourceType, UserPermission::VALID_RESOURCE_TYPES, true)) {
+            throw new \InvalidArgumentException(
+                __('ui.backend.permission.invalid_resource_type', ['allowed' => \implode(', ', UserPermission::VALID_RESOURCE_TYPES)])
+            );
+        }
+
+        Database::getInstance()->query(
+            'DELETE FROM user_permissions WHERE subject_type = ? AND subject_id = ? AND resource_type = ? AND resource_id = ?',
+            ['user', (int) $userId, $resourceType, (int) $resourceId]
+        );
+    }
+
     // ------------------------------------------------------------------ //
     //  Helpers                                                    //
     // ------------------------------------------------------------------ //
+
+    private function isOwnedByUser(string $resourceType, string $resourceId, string $userId): bool
+    {
+        if ($resourceType === 'secret') {
+            $secret = Secret::findById($resourceId);
+            return $secret !== null && $secret->ownerUserId === $userId;
+        }
+
+        if ($resourceType === 'directory') {
+            $directory = Directory::findById($resourceId);
+            return $directory !== null && $directory->ownerUserId === $userId;
+        }
+
+        return false;
+    }
 
     /**
      * Check user/group ACL on the resource and its ancestors.

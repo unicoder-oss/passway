@@ -147,20 +147,67 @@ $renderReadonlyRotationField = static function (array $field, array $values): vo
         gap: .75rem;
     }
     .acl-rule-row {
-        grid-template-columns: minmax(0, 1.4fr) repeat(2, minmax(0, .7fr)) auto;
-        align-items: end;
+        grid-template-columns: minmax(260px, 1.8fr) repeat(2, minmax(0, .7fr)) auto;
+        align-items: start;
     }
+    .acl-rule-row > button {
+        align-self: center;
+    }
+    #secret-acl-modal { width: min(860px, calc(100vw - 2rem)); }
     .acl-subject-copy {
         min-width: 0;
-        display: grid;
-        gap: .2rem;
+        display: flex;
+        gap: .65rem;
+        align-items: flex-start;
     }
+    .acl-subject-main { min-width: 0; display: grid; gap: .25rem; }
     .acl-subject-line {
         display: flex;
         gap: .5rem;
-        align-items: center;
+        align-items: flex-start;
         flex-wrap: wrap;
     }
+    .acl-subject-line strong { overflow-wrap: anywhere; }
+    .acl-picker { position: relative; }
+    .acl-picker-list {
+        position: absolute;
+        top: calc(100% + .35rem);
+        left: 0;
+        right: 0;
+        z-index: 40;
+        max-height: 240px;
+        overflow: auto;
+        border: 1px solid var(--border);
+        background: var(--panel);
+        box-shadow: var(--shadow);
+        display: grid;
+    }
+    .acl-picker-option {
+        padding: .7rem .8rem;
+        cursor: pointer;
+        border: 0;
+        background: transparent;
+        color: var(--fg);
+        font: inherit;
+        text-align: left;
+        width: 100%;
+        justify-content: flex-start;
+    }
+    .acl-picker-option:hover,
+    .acl-picker-option:focus,
+    .acl-picker-option.is-active {
+        background: var(--panel-subtle);
+        outline: none;
+    }
+    .acl-picker-option-content {
+        display: flex;
+        align-items: center;
+        gap: .6rem;
+        min-width: 0;
+    }
+    .acl-picker-option-copy { min-width: 0; display: grid; gap: .1rem; }
+    .acl-picker-empty { padding: .7rem .8rem; color: var(--muted); }
+    .acl-avatar-sm { width: 28px; height: 28px; flex-basis: 28px; font-size: .82rem; }
     .acl-tabs {
         display: flex;
         gap: .5rem;
@@ -489,14 +536,12 @@ $renderReadonlyRotationField = static function (array $field, array $values): vo
                     <section data-acl-panel="users" class="grid" style="gap:.75rem;">
                         <div class="grid field-actions-2" style="gap:.75rem; align-items:end;">
                             <div>
-                                <label for="secret-acl-user-select"><?= e(__('ui.secret.acl_add_user')) ?></label>
-                                <select id="secret-acl-user-select">
-                                    <option value=""><?= e(__('ui.secret.acl_select_user')) ?></option>
-                                    <?php foreach ($organizationMembers as $member): ?>
-                                        <?php if ($member['uuid'] === $secretOwnerUuid) { continue; } ?>
-                                        <option value="<?= e($member['uuid']) ?>"><?= e($member['display_label']) ?></option>
-                                    <?php endforeach; ?>
-                                </select>
+                                <label for="secret-acl-user-picker"><?= e(__('ui.secret.acl_add_user')) ?></label>
+                                <div class="acl-picker" data-acl-picker="secret-user">
+                                    <input type="hidden" id="secret-acl-user-select">
+                                    <input id="secret-acl-user-picker" placeholder="<?= e(__('ui.secret.acl_select_user')) ?>" autocomplete="off" data-acl-picker-input>
+                                    <div class="acl-picker-list hidden" data-acl-picker-list></div>
+                                </div>
                             </div>
                             <button type="button" class="secondary" id="secret-acl-add-user"><?= e(__('ui.secret.acl_add_rule')) ?></button>
                         </div>
@@ -504,13 +549,12 @@ $renderReadonlyRotationField = static function (array $field, array $values): vo
                     <section data-acl-panel="groups" class="grid hidden" style="gap:.75rem;">
                         <div class="grid field-actions-2" style="gap:.75rem; align-items:end;">
                             <div>
-                                <label for="secret-acl-group-select"><?= e(__('ui.secret.acl_add_group')) ?></label>
-                                <select id="secret-acl-group-select">
-                                    <option value=""><?= e(__('ui.secret.acl_select_group')) ?></option>
-                                    <?php foreach ($organizationGroups as $group): ?>
-                                        <option value="<?= e($group['uuid']) ?>"><?= e($group['name']) ?></option>
-                                    <?php endforeach; ?>
-                                </select>
+                                <label for="secret-acl-group-picker"><?= e(__('ui.secret.acl_add_group')) ?></label>
+                                <div class="acl-picker" data-acl-picker="secret-group">
+                                    <input type="hidden" id="secret-acl-group-select">
+                                    <input id="secret-acl-group-picker" placeholder="<?= e(__('ui.secret.acl_select_group')) ?>" autocomplete="off" data-acl-picker-input>
+                                    <div class="acl-picker-list hidden" data-acl-picker-list></div>
+                                </div>
                             </div>
                             <button type="button" class="secondary" id="secret-acl-add-group"><?= e(__('ui.secret.acl_add_rule')) ?></button>
                         </div>
@@ -519,13 +563,12 @@ $renderReadonlyRotationField = static function (array $field, array $values): vo
                 <section data-acl-panel="keys" class="grid<?= $isSoloMode ? '' : ' hidden' ?>" style="gap:.75rem;">
                     <div class="grid field-actions-2" style="gap:.75rem; align-items:end;">
                         <div>
-                            <label for="secret-acl-key-select"><?= e(__('ui.secret.acl_add_key')) ?></label>
-                            <select id="secret-acl-key-select">
-                                <option value=""><?= e(__('ui.secret.acl_select_key')) ?></option>
-                                <?php foreach ($organizationApiKeys as $apiKey): ?>
-                                    <option value="<?= e($apiKey['uuid']) ?>"><?= e($apiKey['name'] . ' (' . $apiKey['key_prefix'] . ')') ?></option>
-                                <?php endforeach; ?>
-                            </select>
+                            <label for="secret-acl-key-picker"><?= e(__('ui.secret.acl_add_key')) ?></label>
+                            <div class="acl-picker" data-acl-picker="secret-key">
+                                <input type="hidden" id="secret-acl-key-select">
+                                <input id="secret-acl-key-picker" placeholder="<?= e(__('ui.secret.acl_select_key')) ?>" autocomplete="off" data-acl-picker-input>
+                                <div class="acl-picker-list hidden" data-acl-picker-list></div>
+                            </div>
                         </div>
                         <button type="button" class="secondary" id="secret-acl-add-key"><?= e(__('ui.secret.acl_add_rule')) ?></button>
                     </div>
@@ -889,6 +932,189 @@ $renderReadonlyRotationField = static function (array $field, array $values): vo
         });
     };
 
+    const normalizeAclSearch = (value) => (value || '').toString().trim().toLowerCase();
+
+    const createAclAvatar = (item, className = 'acl-avatar-sm') => {
+        if (item.avatar_path) {
+            const image = document.createElement('img');
+            image.className = `avatar-square avatar-image ${className}`;
+            image.src = item.avatar_path;
+            image.alt = item.label || item.name || item.email || '';
+            image.decoding = 'async';
+            image.loading = 'lazy';
+            return image;
+        }
+
+        const fallback = document.createElement('span');
+        fallback.className = `avatar-square ${className}`;
+        fallback.style.background = item.avatar_color || '#475569';
+        fallback.textContent = item.avatar_initial || '?';
+        return fallback;
+    };
+
+    const resetAclPicker = (hiddenInput) => {
+        if (!hiddenInput) {
+            return;
+        }
+
+        hiddenInput.value = '';
+        const picker = hiddenInput.closest('[data-acl-picker]');
+        const input = picker ? picker.querySelector('[data-acl-picker-input]') : null;
+        if (input) {
+            input.value = '';
+            input.dataset.selectedLabel = '';
+        }
+    };
+
+    const setupAclPicker = (picker, optionsProvider) => {
+        const input = picker.querySelector('[data-acl-picker-input]');
+        const hiddenInput = picker.querySelector('input[type="hidden"]');
+        const list = picker.querySelector('[data-acl-picker-list]');
+        let activeIndex = -1;
+        let currentOptions = [];
+
+        if (!input || !hiddenInput || !list) {
+            return;
+        }
+
+        const closeList = () => {
+            list.classList.add('hidden');
+            list.innerHTML = '';
+            activeIndex = -1;
+        };
+
+        const setSelected = (option) => {
+            hiddenInput.value = option.value || '';
+            input.value = option.label || option.value || '';
+            input.dataset.selectedLabel = input.value;
+            closeList();
+        };
+
+        const renderOptions = (options) => {
+            currentOptions = options;
+            list.innerHTML = '';
+
+            if (!options.length) {
+                const empty = document.createElement('div');
+                empty.className = 'acl-picker-empty';
+                empty.textContent = <?= json_encode((string) __('ui.audit.autocomplete_no_matches')) ?>;
+                list.appendChild(empty);
+                list.classList.remove('hidden');
+                return;
+            }
+
+            options.forEach((option, index) => {
+                const button = document.createElement('button');
+                button.type = 'button';
+                button.className = 'acl-picker-option';
+                if (index === activeIndex) {
+                    button.classList.add('is-active');
+                }
+
+                const content = document.createElement('span');
+                content.className = 'acl-picker-option-content';
+                if (option.kind === 'user') {
+                    content.appendChild(createAclAvatar(option));
+                }
+
+                const copy = document.createElement('span');
+                copy.className = 'acl-picker-option-copy';
+                const title = document.createElement('strong');
+                title.textContent = option.label || option.value || '';
+                copy.appendChild(title);
+                if (option.email) {
+                    const email = document.createElement('span');
+                    email.className = 'muted';
+                    email.textContent = option.email;
+                    copy.appendChild(email);
+                }
+                content.appendChild(copy);
+                button.appendChild(content);
+                button.addEventListener('mousedown', (event) => {
+                    event.preventDefault();
+                    setSelected(option);
+                });
+                list.appendChild(button);
+            });
+
+            list.classList.remove('hidden');
+        };
+
+        const loadOptions = () => {
+            const query = normalizeAclSearch(input.value);
+            const options = optionsProvider()
+                .filter((option) => query === '' || normalizeAclSearch(`${option.label || ''} ${option.email || ''} ${option.value || ''}`).includes(query))
+                .slice(0, 12);
+
+            if (query !== normalizeAclSearch(input.dataset.selectedLabel || '')) {
+                hiddenInput.value = '';
+            }
+
+            renderOptions(options);
+        };
+
+        input.addEventListener('focus', loadOptions);
+        input.addEventListener('input', loadOptions);
+        input.addEventListener('keydown', (event) => {
+            if (!currentOptions.length) {
+                return;
+            }
+
+            if (event.key === 'ArrowDown') {
+                event.preventDefault();
+                activeIndex = Math.min(currentOptions.length - 1, activeIndex + 1);
+                renderOptions(currentOptions);
+                return;
+            }
+
+            if (event.key === 'ArrowUp') {
+                event.preventDefault();
+                activeIndex = Math.max(0, activeIndex - 1);
+                renderOptions(currentOptions);
+                return;
+            }
+
+            if (event.key === 'Enter' && activeIndex >= 0 && currentOptions[activeIndex]) {
+                event.preventDefault();
+                setSelected(currentOptions[activeIndex]);
+                return;
+            }
+
+            if (event.key === 'Escape') {
+                closeList();
+            }
+        });
+        input.addEventListener('blur', () => {
+            window.setTimeout(() => {
+                closeList();
+                if (hiddenInput.value.trim() === '') {
+                    input.value = '';
+                    input.dataset.selectedLabel = '';
+                }
+            }, 120);
+        });
+    };
+
+    const availableSecretAclUsers = () => organizationMembers
+        .filter((member) => member.uuid !== secretOwnerUuid && !secretAclState.some((rule) => rule.subject_type === 'user' && rule.subject_uuid === member.uuid))
+        .map((member) => ({
+            kind: 'user',
+            value: member.uuid,
+            label: member.name || member.email,
+            email: member.name !== member.email ? member.email : '',
+            avatar_path: member.avatar_path,
+            avatar_initial: member.avatar_initial,
+            avatar_color: member.avatar_color,
+        }));
+
+    const availableSecretAclGroups = () => organizationGroups
+        .filter((group) => !secretAclState.some((rule) => rule.subject_type === 'group' && rule.subject_uuid === group.uuid))
+        .map((group) => ({ kind: 'group', value: group.uuid, label: group.name }));
+
+    const availableSecretAclKeys = () => organizationApiKeys
+        .filter((apiKey) => !secretAclState.some((rule) => rule.subject_type === 'api_key' && rule.subject_uuid === apiKey.uuid))
+        .map((apiKey) => ({ kind: 'api_key', value: apiKey.uuid, label: apiKey.name }));
+
     const renderAclRules = () => {
         if (!secretAclRules) {
             return;
@@ -931,6 +1157,16 @@ $renderReadonlyRotationField = static function (array $field, array $values): vo
 
             const subject = document.createElement('div');
             subject.className = 'acl-subject-copy';
+            if (rule.subject_type === 'user') {
+                subject.appendChild(createAclAvatar({
+                    label: rule.subject_name || rule.subject_uuid,
+                    avatar_path: rule.subject_avatar_path,
+                    avatar_initial: rule.subject_avatar_initial,
+                    avatar_color: rule.subject_avatar_color,
+                }));
+            }
+            const main = document.createElement('div');
+            main.className = 'acl-subject-main';
             const line = document.createElement('div');
             line.className = 'acl-subject-line';
             const title = document.createElement('strong');
@@ -939,14 +1175,15 @@ $renderReadonlyRotationField = static function (array $field, array $values): vo
             pill.className = 'pill';
             pill.textContent = aclLabels[rule.subject_type] || rule.subject_type;
             line.appendChild(title);
-            line.appendChild(pill);
-            subject.appendChild(line);
-            if (rule.subject_email) {
+            main.appendChild(line);
+            main.appendChild(pill);
+            if (rule.subject_email && rule.subject_email !== rule.subject_name) {
                 const email = document.createElement('div');
                 email.className = 'muted';
                 email.textContent = rule.subject_email;
-                subject.appendChild(email);
+                main.appendChild(email);
             }
+            subject.appendChild(main);
             row.appendChild(subject);
             row.appendChild(createEffectSelect('read', index, rule.read));
             row.appendChild(createEffectSelect('write', index, rule.write));
@@ -993,6 +1230,9 @@ $renderReadonlyRotationField = static function (array $field, array $values): vo
                     subject_uuid: rule.subject_uuid,
                     subject_name: rule.subject_name,
                     subject_email: rule.subject_email,
+                    subject_avatar_path: rule.subject_avatar_path,
+                    subject_avatar_initial: rule.subject_avatar_initial,
+                    subject_avatar_color: rule.subject_avatar_color,
                     read: rule.read,
                     write: rule.write,
                 })).filter((rule) => !(rule.subject_type === 'user' && rule.subject_uuid === secretOwnerUuid));
@@ -1167,6 +1407,9 @@ $renderReadonlyRotationField = static function (array $field, array $values): vo
                 subject_uuid: rule.subject_uuid,
                 subject_name: rule.subject_name,
                 subject_email: rule.subject_email,
+                subject_avatar_path: rule.subject_avatar_path,
+                subject_avatar_initial: rule.subject_avatar_initial,
+                subject_avatar_color: rule.subject_avatar_color,
                 read: rule.read,
                 write: rule.write,
             })).filter((rule) => !(rule.subject_type === 'user' && rule.subject_uuid === secretOwnerUuid));
@@ -1252,6 +1495,10 @@ $renderReadonlyRotationField = static function (array $field, array $values): vo
         button.addEventListener('click', () => setAclTab(button.getAttribute('data-acl-tab') || 'users'));
     });
 
+    document.querySelectorAll('[data-acl-picker="secret-user"]').forEach((picker) => setupAclPicker(picker, availableSecretAclUsers));
+    document.querySelectorAll('[data-acl-picker="secret-group"]').forEach((picker) => setupAclPicker(picker, availableSecretAclGroups));
+    document.querySelectorAll('[data-acl-picker="secret-key"]').forEach((picker) => setupAclPicker(picker, availableSecretAclKeys));
+
     if (secretAclAddUserButton && secretAclUserSelect && secretAclStatus) {
         secretAclAddUserButton.addEventListener('click', () => {
             const subjectUuid = secretAclUserSelect.value;
@@ -1276,10 +1523,13 @@ $renderReadonlyRotationField = static function (array $field, array $values): vo
                 subject_uuid: member.uuid,
                 subject_name: member.name,
                 subject_email: member.email,
+                subject_avatar_path: member.avatar_path,
+                subject_avatar_initial: member.avatar_initial,
+                subject_avatar_color: member.avatar_color,
                 read: null,
                 write: null,
             });
-            secretAclUserSelect.value = '';
+            resetAclPicker(secretAclUserSelect);
             secretAclStatus.textContent = <?= json_encode((string) __('ui.secret.acl_modal_hint')) ?>;
             renderAclRules();
         });
@@ -1312,7 +1562,7 @@ $renderReadonlyRotationField = static function (array $field, array $values): vo
                 read: null,
                 write: null,
             });
-            secretAclGroupSelect.value = '';
+            resetAclPicker(secretAclGroupSelect);
             secretAclStatus.textContent = <?= json_encode((string) __('ui.secret.acl_modal_hint')) ?>;
             renderAclRules();
         });
@@ -1345,7 +1595,7 @@ $renderReadonlyRotationField = static function (array $field, array $values): vo
                 read: null,
                 write: null,
             });
-            secretAclKeySelect.value = '';
+            resetAclPicker(secretAclKeySelect);
             secretAclStatus.textContent = <?= json_encode((string) __('ui.secret.acl_modal_hint')) ?>;
             renderAclRules();
         });
@@ -1375,6 +1625,9 @@ $renderReadonlyRotationField = static function (array $field, array $values): vo
             if (secretAclStatus) {
                 secretAclStatus.textContent = <?= json_encode((string) __('ui.secret.acl_modal_hint')) ?>;
             }
+            resetAclPicker(secretAclUserSelect);
+            resetAclPicker(secretAclGroupSelect);
+            resetAclPicker(secretAclKeySelect);
             renderAclRules();
         });
     }

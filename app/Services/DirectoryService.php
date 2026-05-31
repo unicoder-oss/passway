@@ -355,10 +355,13 @@ final class DirectoryService
             return $dir;
         }
 
-        $dir->update([
-            'owner_user_id' => (int) $newOwnerId,
-            'updated_at' => now()->format('Y-m-d H:i:s'),
-        ]);
+        Database::getInstance()->transaction(function () use ($dir, $newOwnerId): void {
+            $dir->update([
+                'owner_user_id' => (int) $newOwnerId,
+                'updated_at' => now()->format('Y-m-d H:i:s'),
+            ]);
+            $this->permissionService->removeUserRulesForResource('directory', $dir->id, $newOwnerId);
+        });
 
         return Directory::findByUuid($dirUuid)
             ?? throw new \RuntimeException(__('ui.backend.directory.not_found'));
