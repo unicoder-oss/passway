@@ -201,19 +201,19 @@ require base_path('resources/views/partials/auth_topbar.php');
                 text-align: left;
             }
             .acl-rule-list,
-            .owner-candidate-list {
+            .owner-selection {
                 display: grid;
                 gap: .75rem;
             }
             .acl-rule-row,
-            .owner-candidate {
+            .owner-selection-card {
                 padding: .85rem 1rem;
                 border: 1px solid var(--border);
                 background: var(--panel-subtle);
-                display: grid;
-                gap: .75rem;
             }
             .acl-rule-row {
+                display: grid;
+                gap: .75rem;
                 grid-template-columns: minmax(260px, 1.8fr) repeat(2, minmax(0, .7fr)) auto;
                 align-items: start;
             }
@@ -289,15 +289,12 @@ require base_path('resources/views/partials/auth_topbar.php');
                 color: var(--button-fg);
                 border-color: var(--button);
             }
-            .owner-candidate {
-                grid-template-columns: auto minmax(0, 1fr);
-                align-items: start;
+            .owner-selection-card {
+                display: flex;
+                align-items: flex-start;
+                gap: .75rem;
             }
-            .owner-candidate input {
-                width: auto;
-                margin-top: .2rem;
-            }
-            .owner-candidate-copy {
+            .owner-selection-copy {
                 min-width: 0;
                 display: grid;
                 gap: .2rem;
@@ -574,9 +571,13 @@ require base_path('resources/views/partials/auth_topbar.php');
                         <div class="grid" style="gap:1rem;">
                             <div>
                                 <label for="directory-owner-search"><?= e(__('ui.organization.owner_search')) ?></label>
-                                <input id="directory-owner-search" placeholder="<?= e(__('ui.organization.owner_search_placeholder')) ?>">
+                                <div class="acl-picker" data-acl-picker="directory-owner">
+                                    <input type="hidden" id="directory-owner-select">
+                                    <input id="directory-owner-search" placeholder="<?= e(__('ui.organization.owner_search_placeholder')) ?>" autocomplete="off" data-acl-picker-input>
+                                    <div class="acl-picker-list hidden" data-acl-picker-list></div>
+                                </div>
                             </div>
-                            <div id="directory-owner-candidates" class="owner-candidate-list"></div>
+                            <div id="directory-owner-selection" class="owner-selection"></div>
                             <div class="actions-end">
                                 <button type="button" class="secondary" data-close-modal="transfer-directory-owner-modal"><?= e(__('ui.organization.cancel')) ?></button>
                                 <button type="button" id="directory-owner-continue-button"><?= e(__('ui.organization.transfer_owner_continue')) ?></button>
@@ -828,7 +829,8 @@ require base_path('resources/views/partials/auth_topbar.php');
         const directoryAclPanels = Array.from(document.querySelectorAll('[data-directory-acl-panel]'));
         const transferDirectoryOwnerModal = document.getElementById('transfer-directory-owner-modal');
         const directoryOwnerSearch = document.getElementById('directory-owner-search');
-        const directoryOwnerCandidates = document.getElementById('directory-owner-candidates');
+        const directoryOwnerSelect = document.getElementById('directory-owner-select');
+        const directoryOwnerSelection = document.getElementById('directory-owner-selection');
         const directoryOwnerContinueButton = document.getElementById('directory-owner-continue-button');
         const confirmDirectoryOwnerModal = document.getElementById('confirm-directory-owner-modal');
         const confirmDirectoryOwnerText = document.getElementById('confirm-directory-owner-text');
@@ -838,7 +840,6 @@ require base_path('resources/views/partials/auth_topbar.php');
         const organizationMembers = <?= json_encode($organizationMembers, JSON_UNESCAPED_UNICODE | JSON_UNESCAPED_SLASHES) ?>;
         const organizationGroups = <?= json_encode($organizationGroups, JSON_UNESCAPED_UNICODE | JSON_UNESCAPED_SLASHES) ?>;
         const organizationApiKeys = <?= json_encode($organizationApiKeys, JSON_UNESCAPED_UNICODE | JSON_UNESCAPED_SLASHES) ?>;
-        const currentUserUuid = <?= json_encode($user->uuid) ?>;
         const currentDirectoryOwnerUuid = <?= json_encode($currentDir !== null && $currentDir->ownerUserId !== null ? \Passway\Models\User::findById($currentDir->ownerUserId)?->uuid : null) ?>;
         const directoryAclLabels = {
             inherit: <?= json_encode((string) __('ui.organization.acl_effect_inherit')) ?>,
@@ -911,7 +912,7 @@ require base_path('resources/views/partials/auth_topbar.php');
             }
         };
 
-        const setupAclPicker = (picker, optionsProvider) => {
+        const setupAclPicker = (picker, optionsProvider, onSelect = null, openOnFocus = true) => {
             const input = picker.querySelector('[data-acl-picker-input]');
             const hiddenInput = picker.querySelector('input[type="hidden"]');
             const list = picker.querySelector('[data-acl-picker-list]');
@@ -932,6 +933,9 @@ require base_path('resources/views/partials/auth_topbar.php');
                 hiddenInput.value = option.value || '';
                 input.value = option.label || option.value || '';
                 input.dataset.selectedLabel = input.value;
+                if (typeof onSelect === 'function') {
+                    onSelect(option);
+                }
                 closeList();
             };
 
@@ -988,7 +992,7 @@ require base_path('resources/views/partials/auth_topbar.php');
             const loadOptions = () => {
                 const query = normalizeAclSearch(input.value);
                 const options = optionsProvider()
-                    .filter((option) => query === '' || normalizeAclSearch(`${option.label || ''} ${option.email || ''} ${option.value || ''}`).includes(query))
+                    .filter((option) => query === '' || normalizeAclSearch(`${option.label || ''} ${option.name || ''} ${option.email || ''} ${option.role || ''} ${option.role_label || ''} ${option.value || ''}`).includes(query))
                     .slice(0, 12);
 
                 if (query !== normalizeAclSearch(input.dataset.selectedLabel || '')) {
@@ -998,7 +1002,10 @@ require base_path('resources/views/partials/auth_topbar.php');
                 renderOptions(options);
             };
 
-            input.addEventListener('focus', loadOptions);
+            if (openOnFocus) {
+                input.addEventListener('focus', loadOptions);
+            }
+            input.addEventListener('click', loadOptions);
             input.addEventListener('input', loadOptions);
             input.addEventListener('keydown', (event) => {
                 if (!currentOptions.length) {
@@ -1047,6 +1054,21 @@ require base_path('resources/views/partials/auth_topbar.php');
                 value: member.uuid,
                 label: member.name || member.email,
                 email: member.name !== member.email ? member.email : '',
+                avatar_path: member.avatar_path,
+                avatar_initial: member.avatar_initial,
+                avatar_color: member.avatar_color,
+            }));
+
+        const availableDirectoryOwnerUsers = () => organizationMembers
+            .filter((member) => member.uuid !== currentDirectoryOwnerUuid)
+            .map((member) => ({
+                kind: 'user',
+                value: member.uuid,
+                label: member.display_label || member.name || member.email,
+                name: member.name || member.email,
+                email: member.email,
+                role: member.role,
+                role_label: member.role_label || member.role,
                 avatar_path: member.avatar_path,
                 avatar_initial: member.avatar_initial,
                 avatar_color: member.avatar_color,
@@ -1310,62 +1332,45 @@ require base_path('resources/views/partials/auth_topbar.php');
             }
         };
 
-        const renderDirectoryOwnerCandidates = () => {
-            if (!directoryOwnerCandidates || !directoryOwnerContinueButton) {
+        const renderDirectoryOwnerSelection = () => {
+            if (!directoryOwnerSelection || !directoryOwnerContinueButton) {
                 return;
             }
 
-            const query = directoryOwnerSearch ? directoryOwnerSearch.value.trim().toLowerCase() : '';
-            const candidates = organizationMembers.filter((member) => {
-                if (member.uuid === currentUserUuid || member.role === 'owner') {
-                    return false;
-                }
-
-                if (query === '') {
-                    return true;
-                }
-
-                return `${member.display_label || ''} ${member.name} ${member.email} ${member.role}`.toLowerCase().includes(query);
-            });
-
-            directoryOwnerCandidates.innerHTML = '';
-            if (candidates.length === 0) {
-                const empty = document.createElement('div');
-                empty.className = 'muted';
-                empty.textContent = directoryAclLabels.ownerEmpty;
-                directoryOwnerCandidates.appendChild(empty);
+            directoryOwnerSelection.innerHTML = '';
+            const member = organizationMembers.find((item) => item.uuid === selectedDirectoryOwnerUuid);
+            if (!member) {
                 directoryOwnerContinueButton.disabled = true;
                 return;
             }
 
-            candidates.forEach((member) => {
-                const label = document.createElement('label');
-                label.className = 'owner-candidate';
-                const radio = document.createElement('input');
-                radio.type = 'radio';
-                radio.name = 'directory-owner-user';
-                radio.value = member.uuid;
-                radio.checked = selectedDirectoryOwnerUuid === member.uuid;
-                radio.addEventListener('change', () => {
-                    selectedDirectoryOwnerUuid = member.uuid;
-                    directoryOwnerContinueButton.disabled = false;
-                });
-
-                const copy = document.createElement('div');
-                copy.className = 'owner-candidate-copy';
+            const card = document.createElement('div');
+            card.className = 'owner-selection-card';
+            card.appendChild(createAclAvatar({
+                label: member.name || member.email,
+                avatar_path: member.avatar_path,
+                avatar_initial: member.avatar_initial,
+                avatar_color: member.avatar_color,
+            }, 'acl-avatar-sm'));
+            const copy = document.createElement('div');
+            copy.className = 'owner-selection-copy';
+            if (member.name && member.name !== member.email) {
                 const title = document.createElement('strong');
                 title.textContent = member.name;
-                const meta = document.createElement('div');
-                meta.className = 'muted';
-                meta.textContent = `${member.email} · ${member.role}`;
                 copy.appendChild(title);
-                copy.appendChild(meta);
-                label.appendChild(radio);
-                label.appendChild(copy);
-                directoryOwnerCandidates.appendChild(label);
-            });
-
-            directoryOwnerContinueButton.disabled = selectedDirectoryOwnerUuid === null;
+            }
+            const email = document.createElement('div');
+            email.className = 'muted';
+            email.textContent = member.email;
+            const role = document.createElement('div');
+            role.className = 'muted';
+            role.textContent = <?= json_encode((string) __('ui.organization.owner_current_role', ['role' => ':role'])) ?>
+                .replace(':role', member.role_label || member.role);
+            copy.appendChild(email);
+            copy.appendChild(role);
+            card.appendChild(copy);
+            directoryOwnerSelection.appendChild(card);
+            directoryOwnerContinueButton.disabled = false;
         };
 
         if (openDirectoryAclButton && directoryAclModal) {
@@ -1384,6 +1389,10 @@ require base_path('resources/views/partials/auth_topbar.php');
         document.querySelectorAll('[data-acl-picker="directory-user"]').forEach((picker) => setupAclPicker(picker, availableDirectoryAclUsers));
         document.querySelectorAll('[data-acl-picker="directory-group"]').forEach((picker) => setupAclPicker(picker, availableDirectoryAclGroups));
         document.querySelectorAll('[data-acl-picker="directory-key"]').forEach((picker) => setupAclPicker(picker, availableDirectoryAclKeys));
+        document.querySelectorAll('[data-acl-picker="directory-owner"]').forEach((picker) => setupAclPicker(picker, availableDirectoryOwnerUsers, (option) => {
+            selectedDirectoryOwnerUuid = option.value || null;
+            renderDirectoryOwnerSelection();
+        }, false));
 
         if (directoryAclAddUserButton && directoryAclUserSelect && directoryAclStatus) {
             directoryAclAddUserButton.addEventListener('click', () => {
@@ -1530,15 +1539,18 @@ require base_path('resources/views/partials/auth_topbar.php');
         if (transferDirectoryOwnerModal) {
             transferDirectoryOwnerModal.addEventListener('close', () => {
                 selectedDirectoryOwnerUuid = null;
-                if (directoryOwnerSearch) {
-                    directoryOwnerSearch.value = '';
-                }
-                renderDirectoryOwnerCandidates();
+                resetAclPicker(directoryOwnerSelect);
+                renderDirectoryOwnerSelection();
             });
         }
 
         if (directoryOwnerSearch) {
-            directoryOwnerSearch.addEventListener('input', renderDirectoryOwnerCandidates);
+            directoryOwnerSearch.addEventListener('input', () => {
+                if (directoryOwnerSelect && directoryOwnerSelect.value.trim() === '') {
+                    selectedDirectoryOwnerUuid = null;
+                    renderDirectoryOwnerSelection();
+                }
+            });
         }
 
         if (directoryOwnerContinueButton && confirmDirectoryOwnerModal && confirmDirectoryOwnerText && confirmDirectoryOwnerUuid) {
@@ -1555,7 +1567,7 @@ require base_path('resources/views/partials/auth_topbar.php');
             });
         }
 
-        renderDirectoryOwnerCandidates();
+        renderDirectoryOwnerSelection();
 
         const wizardForm = document.getElementById('secret-modal-form');
         if (!wizardForm) {

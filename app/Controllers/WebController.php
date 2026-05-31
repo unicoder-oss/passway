@@ -3039,7 +3039,7 @@ final class WebController
         return null;
     }
 
-    /** @return array<int, array{uuid:string,name:string,email:string,display_label:string,role:string,avatar_path:string,avatar_initial:string,avatar_color:string}> */
+    /** @return array<int, array{uuid:string,name:string,email:string,display_label:string,role:string,role_label:string,avatar_path:string,avatar_initial:string,avatar_color:string}> */
     private function serializeOrganizationMembers(string $orgId): array
     {
         $members = [];
@@ -3056,6 +3056,7 @@ final class WebController
                 'email' => $memberUser->email,
                 'display_label' => user_label_with_email($memberUser),
                 'role' => $member->role,
+                'role_label' => __('ui.organization_manage.roles.' . $member->role),
                 'avatar_path' => (string) ($memberUser->avatarPath ?? ''),
                 'avatar_initial' => avatar_initial(display_name_for_user($memberUser)),
                 'avatar_color' => avatar_color_for_user($memberUser),

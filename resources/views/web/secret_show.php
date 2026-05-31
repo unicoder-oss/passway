@@ -134,19 +134,19 @@ $renderReadonlyRotationField = static function (array $field, array $values): vo
         width: 100%;
     }
     .acl-rule-list,
-    .owner-candidate-list {
+    .owner-selection {
         display: grid;
         gap: .75rem;
     }
     .acl-rule-row,
-    .owner-candidate {
+    .owner-selection-card {
         padding: .85rem 1rem;
         border: 1px solid var(--border);
         background: var(--panel-subtle);
-        display: grid;
-        gap: .75rem;
     }
     .acl-rule-row {
+        display: grid;
+        gap: .75rem;
         grid-template-columns: minmax(260px, 1.8fr) repeat(2, minmax(0, .7fr)) auto;
         align-items: start;
     }
@@ -218,15 +218,12 @@ $renderReadonlyRotationField = static function (array $field, array $values): vo
         color: var(--button-fg);
         border-color: var(--button);
     }
-    .owner-candidate {
-        grid-template-columns: auto minmax(0, 1fr);
-        align-items: start;
+    .owner-selection-card {
+        display: flex;
+        align-items: flex-start;
+        gap: .75rem;
     }
-    .owner-candidate input {
-        width: auto;
-        margin-top: .2rem;
-    }
-    .owner-candidate-copy {
+    .owner-selection-copy {
         min-width: 0;
         display: grid;
         gap: .2rem;
@@ -592,9 +589,13 @@ $renderReadonlyRotationField = static function (array $field, array $values): vo
                 <div class="grid" style="gap:1rem;">
                     <div>
                         <label for="secret-owner-search"><?= e(__('ui.secret.owner_search')) ?></label>
-                        <input id="secret-owner-search" placeholder="<?= e(__('ui.secret.owner_search_placeholder')) ?>">
+                        <div class="acl-picker" data-acl-picker="secret-owner">
+                            <input type="hidden" id="secret-owner-select">
+                            <input id="secret-owner-search" placeholder="<?= e(__('ui.secret.owner_search_placeholder')) ?>" autocomplete="off" data-acl-picker-input>
+                            <div class="acl-picker-list hidden" data-acl-picker-list></div>
+                        </div>
                     </div>
-                    <div id="secret-owner-candidates" class="owner-candidate-list"></div>
+                    <div id="secret-owner-selection" class="owner-selection"></div>
                     <div class="actions-end">
                         <button type="button" class="secondary" data-close-modal="transfer-secret-owner-modal"><?= e(__('ui.organization.cancel')) ?></button>
                         <button type="button" id="secret-owner-continue-button"><?= e(__('ui.secret.transfer_owner_continue')) ?></button>
@@ -879,7 +880,8 @@ $renderReadonlyRotationField = static function (array $field, array $values): vo
     const aclTabPanels = Array.from(document.querySelectorAll('[data-acl-panel]'));
     const transferSecretOwnerModal = document.getElementById('transfer-secret-owner-modal');
     const secretOwnerSearch = document.getElementById('secret-owner-search');
-    const secretOwnerCandidates = document.getElementById('secret-owner-candidates');
+    const secretOwnerSelect = document.getElementById('secret-owner-select');
+    const secretOwnerSelection = document.getElementById('secret-owner-selection');
     const secretOwnerContinueButton = document.getElementById('secret-owner-continue-button');
     const confirmSecretOwnerModal = document.getElementById('confirm-secret-owner-modal');
     const confirmSecretOwnerText = document.getElementById('confirm-secret-owner-text');
@@ -890,7 +892,6 @@ $renderReadonlyRotationField = static function (array $field, array $values): vo
     const organizationMembers = <?= json_encode($organizationMembers, JSON_UNESCAPED_UNICODE | JSON_UNESCAPED_SLASHES) ?>;
     const organizationGroups = <?= json_encode($organizationGroups, JSON_UNESCAPED_UNICODE | JSON_UNESCAPED_SLASHES) ?>;
     const organizationApiKeys = <?= json_encode($organizationApiKeys, JSON_UNESCAPED_UNICODE | JSON_UNESCAPED_SLASHES) ?>;
-    const currentUserUuid = <?= json_encode($user->uuid) ?>;
     const secretOwnerUuid = <?= json_encode($secretOwnerUuid) ?>;
     const aclLabels = {
         inherit: <?= json_encode((string) __('ui.secret.acl_effect_inherit')) ?>,
@@ -966,7 +967,7 @@ $renderReadonlyRotationField = static function (array $field, array $values): vo
         }
     };
 
-    const setupAclPicker = (picker, optionsProvider) => {
+    const setupAclPicker = (picker, optionsProvider, onSelect = null, openOnFocus = true) => {
         const input = picker.querySelector('[data-acl-picker-input]');
         const hiddenInput = picker.querySelector('input[type="hidden"]');
         const list = picker.querySelector('[data-acl-picker-list]');
@@ -987,6 +988,9 @@ $renderReadonlyRotationField = static function (array $field, array $values): vo
             hiddenInput.value = option.value || '';
             input.value = option.label || option.value || '';
             input.dataset.selectedLabel = input.value;
+            if (typeof onSelect === 'function') {
+                onSelect(option);
+            }
             closeList();
         };
 
@@ -1043,7 +1047,7 @@ $renderReadonlyRotationField = static function (array $field, array $values): vo
         const loadOptions = () => {
             const query = normalizeAclSearch(input.value);
             const options = optionsProvider()
-                .filter((option) => query === '' || normalizeAclSearch(`${option.label || ''} ${option.email || ''} ${option.value || ''}`).includes(query))
+                .filter((option) => query === '' || normalizeAclSearch(`${option.label || ''} ${option.name || ''} ${option.email || ''} ${option.role || ''} ${option.role_label || ''} ${option.value || ''}`).includes(query))
                 .slice(0, 12);
 
             if (query !== normalizeAclSearch(input.dataset.selectedLabel || '')) {
@@ -1053,7 +1057,10 @@ $renderReadonlyRotationField = static function (array $field, array $values): vo
             renderOptions(options);
         };
 
-        input.addEventListener('focus', loadOptions);
+        if (openOnFocus) {
+            input.addEventListener('focus', loadOptions);
+        }
+        input.addEventListener('click', loadOptions);
         input.addEventListener('input', loadOptions);
         input.addEventListener('keydown', (event) => {
             if (!currentOptions.length) {
@@ -1102,6 +1109,21 @@ $renderReadonlyRotationField = static function (array $field, array $values): vo
             value: member.uuid,
             label: member.name || member.email,
             email: member.name !== member.email ? member.email : '',
+            avatar_path: member.avatar_path,
+            avatar_initial: member.avatar_initial,
+            avatar_color: member.avatar_color,
+        }));
+
+    const availableSecretOwnerUsers = () => organizationMembers
+        .filter((member) => member.uuid !== secretOwnerUuid)
+        .map((member) => ({
+            kind: 'user',
+            value: member.uuid,
+            label: member.display_label || member.name || member.email,
+            name: member.name || member.email,
+            email: member.email,
+            role: member.role,
+            role_label: member.role_label || member.role,
             avatar_path: member.avatar_path,
             avatar_initial: member.avatar_initial,
             avatar_color: member.avatar_color,
@@ -1423,62 +1445,45 @@ $renderReadonlyRotationField = static function (array $field, array $values): vo
         }
     };
 
-    const renderSecretOwnerCandidates = () => {
-        if (!secretOwnerCandidates || !secretOwnerContinueButton) {
+    const renderSecretOwnerSelection = () => {
+        if (!secretOwnerSelection || !secretOwnerContinueButton) {
             return;
         }
 
-        const query = secretOwnerSearch ? secretOwnerSearch.value.trim().toLowerCase() : '';
-        const candidates = organizationMembers.filter((member) => {
-            if (member.uuid === currentUserUuid || member.role === 'owner') {
-                return false;
-            }
-
-            if (query === '') {
-                return true;
-            }
-
-            return `${member.display_label || ''} ${member.name} ${member.email} ${member.role}`.toLowerCase().includes(query);
-        });
-
-        secretOwnerCandidates.innerHTML = '';
-        if (candidates.length === 0) {
-            const empty = document.createElement('div');
-            empty.className = 'muted';
-            empty.textContent = aclLabels.ownerEmpty;
-            secretOwnerCandidates.appendChild(empty);
+        secretOwnerSelection.innerHTML = '';
+        const member = organizationMembers.find((item) => item.uuid === selectedSecretOwnerUuid);
+        if (!member) {
             secretOwnerContinueButton.disabled = true;
             return;
         }
 
-        candidates.forEach((member) => {
-            const label = document.createElement('label');
-            label.className = 'owner-candidate';
-            const radio = document.createElement('input');
-            radio.type = 'radio';
-            radio.name = 'secret-owner-user';
-            radio.value = member.uuid;
-            radio.checked = selectedSecretOwnerUuid === member.uuid;
-            radio.addEventListener('change', () => {
-                selectedSecretOwnerUuid = member.uuid;
-                secretOwnerContinueButton.disabled = false;
-            });
-
-            const copy = document.createElement('div');
-            copy.className = 'owner-candidate-copy';
+        const card = document.createElement('div');
+        card.className = 'owner-selection-card';
+        card.appendChild(createAclAvatar({
+            label: member.name || member.email,
+            avatar_path: member.avatar_path,
+            avatar_initial: member.avatar_initial,
+            avatar_color: member.avatar_color,
+        }, 'acl-avatar-sm'));
+        const copy = document.createElement('div');
+        copy.className = 'owner-selection-copy';
+        if (member.name && member.name !== member.email) {
             const title = document.createElement('strong');
             title.textContent = member.name;
-            const meta = document.createElement('div');
-            meta.className = 'muted';
-            meta.textContent = `${member.email} · ${member.role}`;
             copy.appendChild(title);
-            copy.appendChild(meta);
-            label.appendChild(radio);
-            label.appendChild(copy);
-            secretOwnerCandidates.appendChild(label);
-        });
-
-        secretOwnerContinueButton.disabled = selectedSecretOwnerUuid === null;
+        }
+        const email = document.createElement('div');
+        email.className = 'muted';
+        email.textContent = member.email;
+        const role = document.createElement('div');
+        role.className = 'muted';
+        role.textContent = <?= json_encode((string) __('ui.secret.owner_current_role', ['role' => ':role'])) ?>
+            .replace(':role', member.role_label || member.role);
+        copy.appendChild(email);
+        copy.appendChild(role);
+        card.appendChild(copy);
+        secretOwnerSelection.appendChild(card);
+        secretOwnerContinueButton.disabled = false;
     };
 
     if (openSecretAclButton && secretAclModal) {
@@ -1498,6 +1503,10 @@ $renderReadonlyRotationField = static function (array $field, array $values): vo
     document.querySelectorAll('[data-acl-picker="secret-user"]').forEach((picker) => setupAclPicker(picker, availableSecretAclUsers));
     document.querySelectorAll('[data-acl-picker="secret-group"]').forEach((picker) => setupAclPicker(picker, availableSecretAclGroups));
     document.querySelectorAll('[data-acl-picker="secret-key"]').forEach((picker) => setupAclPicker(picker, availableSecretAclKeys));
+    document.querySelectorAll('[data-acl-picker="secret-owner"]').forEach((picker) => setupAclPicker(picker, availableSecretOwnerUsers, (option) => {
+        selectedSecretOwnerUuid = option.value || null;
+        renderSecretOwnerSelection();
+    }, false));
 
     if (secretAclAddUserButton && secretAclUserSelect && secretAclStatus) {
         secretAclAddUserButton.addEventListener('click', () => {
@@ -1653,15 +1662,18 @@ $renderReadonlyRotationField = static function (array $field, array $values): vo
     if (transferSecretOwnerModal) {
         transferSecretOwnerModal.addEventListener('close', () => {
             selectedSecretOwnerUuid = null;
-            if (secretOwnerSearch) {
-                secretOwnerSearch.value = '';
-            }
-            renderSecretOwnerCandidates();
+            resetAclPicker(secretOwnerSelect);
+            renderSecretOwnerSelection();
         });
     }
 
     if (secretOwnerSearch) {
-        secretOwnerSearch.addEventListener('input', renderSecretOwnerCandidates);
+        secretOwnerSearch.addEventListener('input', () => {
+            if (secretOwnerSelect && secretOwnerSelect.value.trim() === '') {
+                selectedSecretOwnerUuid = null;
+                renderSecretOwnerSelection();
+            }
+        });
     }
 
     if (secretOwnerContinueButton && confirmSecretOwnerModal && confirmSecretOwnerText && confirmSecretOwnerUuid) {
@@ -1678,7 +1690,7 @@ $renderReadonlyRotationField = static function (array $field, array $values): vo
         });
     }
 
-    renderSecretOwnerCandidates();
+    renderSecretOwnerSelection();
 
     const templateForm = document.getElementById('template-secret-form');
     if (!templateForm) {
