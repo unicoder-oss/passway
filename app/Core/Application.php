@@ -157,6 +157,10 @@ final class Application
             fn() => new \Passway\Services\ViewService()
         );
         $this->container->singleton(
+            \Passway\Services\DocumentationService::class,
+            fn() => new \Passway\Services\DocumentationService()
+        );
+        $this->container->singleton(
             \Passway\Services\LoggerService::class,
             fn() => new \Passway\Services\LoggerService()
         );
@@ -365,6 +369,7 @@ final class Application
                 $c->make(\Passway\Services\RotationRegistryService::class),
                 $c->make(\Passway\Services\OrganizationIntegrationService::class),
                 $c->make(\Passway\Services\ApprovalService::class),
+                $c->make(\Passway\Services\DocumentationService::class),
             )
         );
         $this->container->singleton(
@@ -628,6 +633,20 @@ final class Application
                         --shadow: none;
                     }
                 }
+                @font-face {
+                    font-family: "Passway Mono";
+                    src: url("/fonts/NotoSansMono-Regular.woff2") format("woff2");
+                    font-weight: 400;
+                    font-style: normal;
+                    font-display: fallback;
+                }
+                @font-face {
+                    font-family: "Passway Mono";
+                    src: url("/fonts/NotoSansMono-Bold.woff2") format("woff2");
+                    font-weight: 700;
+                    font-style: normal;
+                    font-display: fallback;
+                }
                 * { box-sizing: border-box; }
                 body {
                     margin: 0;
@@ -638,7 +657,7 @@ final class Application
                     padding: 1rem;
                     background: var(--bg);
                     color: var(--fg);
-                    font-family: ui-monospace, SFMono-Regular, Menlo, Consolas, "Liberation Mono", monospace;
+                    font-family: "Passway Mono", ui-monospace, SFMono-Regular, Menlo, Consolas, "Liberation Mono", monospace;
                     line-height: 1.5;
                 }
                 .card {

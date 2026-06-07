@@ -1,41 +1,45 @@
 Options -Indexes -MultiViews
 DirectoryIndex index.php
 
-# Перенаправить все запросы через index.php (Front Controller)
+# Route all requests through index.php (Front Controller)
 RewriteEngine On
 
-# Безопасность заголовков
+# Security headers
 Header always set X-Content-Type-Options "nosniff"
 Header always set X-Frame-Options "DENY"
 Header always set Referrer-Policy "strict-origin-when-cross-origin"
 Header always set Permissions-Policy "geolocation=(), microphone=(), camera=()"
 
-# CSP — базовый, конкретизируется в приложении
+# Basic CSP, refined by the application
 Header always set Content-Security-Policy "default-src 'self'; script-src 'self' 'nonce-%{REQUEST_ID}e'; style-src 'self' 'unsafe-inline'; img-src 'self' data:; connect-src 'self'; font-src 'self'; object-src 'none'; base-uri 'self'; form-action 'self'"
 
 # Uploaded avatars use content-addressed filenames, so browsers can cache them aggressively.
 <IfModule mod_headers.c>
+    <FilesMatch "\.(?:woff2?|ttf|otf)$">
+        Header set Cache-Control "public, max-age=31536000, immutable" "expr=%{REQUEST_URI} =~ m#^/fonts/#"
+    </FilesMatch>
+
     <FilesMatch "\.(?:avif|webp|png|jpe?g|gif|svg)$">
         Header set Cache-Control "public, max-age=31536000, immutable" "expr=%{REQUEST_URI} =~ m#^/uploads/#"
     </FilesMatch>
 </IfModule>
 
-# HSTS — только production
+# HSTS, production only
 # Header always set Strict-Transport-Security "max-age=31536000; includeSubDomains; preload"
 
-# Не пропускаем существующие файлы и директории
+# Do not pass through existing files and directories
 RewriteCond %{REQUEST_FILENAME} !-f
 RewriteCond %{REQUEST_FILENAME} !-d
 
-# Всё остальное — в index.php
+# Everything else goes to index.php
 RewriteRule ^ index.php [QSA,L]
 
-# Запрет доступа к скрытым файлам (.env, .git, etc.)
+# Deny access to hidden files (.env, .git, etc.)
 <FilesMatch "^\.">
     Require all denied
 </FilesMatch>
 
-# Запрет доступа к файлам конфигурации
+# Deny access to configuration files
 <FilesMatch "\.(env|json|lock|md|sh|sql|xml|yml|yaml)$">
     Require all denied
 </FilesMatch>

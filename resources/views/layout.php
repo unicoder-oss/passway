@@ -3,6 +3,8 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <link rel="preload" href="/fonts/NotoSansMono-Regular.woff2" as="font" type="font/woff2" crossorigin>
+    <link rel="preload" href="/fonts/NotoSansMono-Bold.woff2" as="font" type="font/woff2" crossorigin>
     <title><?= e((string) ($title ?? 'Passway')) ?></title>
     <style>
         :root {
@@ -100,10 +102,26 @@
             --shadow: 0 12px 32px rgba(0, 0, 0, .05);
         }
 
+        @font-face {
+            font-family: "Passway Mono";
+            src: url("/fonts/NotoSansMono-Regular.woff2") format("woff2");
+            font-weight: 400;
+            font-style: normal;
+            font-display: fallback;
+        }
+
+        @font-face {
+            font-family: "Passway Mono";
+            src: url("/fonts/NotoSansMono-Bold.woff2") format("woff2");
+            font-weight: 700;
+            font-style: normal;
+            font-display: fallback;
+        }
+
         * { box-sizing: border-box; }
         body {
             margin: 0;
-            font-family: ui-monospace, SFMono-Regular, Menlo, Consolas, "Liberation Mono", monospace;
+            font-family: "Passway Mono", ui-monospace, SFMono-Regular, Menlo, Consolas, "Liberation Mono", monospace;
             background: var(--bg);
             color: var(--fg);
             line-height: 1.5;

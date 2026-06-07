@@ -905,10 +905,24 @@ final class InviteController
                         --shadow: none;
                     }
                 }
+                @font-face {
+                    font-family: "Passway Mono";
+                    src: url("/fonts/NotoSansMono-Regular.woff2") format("woff2");
+                    font-weight: 400;
+                    font-style: normal;
+                    font-display: fallback;
+                }
+                @font-face {
+                    font-family: "Passway Mono";
+                    src: url("/fonts/NotoSansMono-Bold.woff2") format("woff2");
+                    font-weight: 700;
+                    font-style: normal;
+                    font-display: fallback;
+                }
                 * { box-sizing: border-box; }
                 body {
                     margin: 0;
-                    font-family: ui-monospace, SFMono-Regular, Menlo, Consolas, "Liberation Mono", monospace;
+                    font-family: "Passway Mono", ui-monospace, SFMono-Regular, Menlo, Consolas, "Liberation Mono", monospace;
                     background: var(--bg);
                     color: var(--fg);
                     line-height: 1.5;

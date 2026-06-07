@@ -31,6 +31,8 @@ $router->post('/setup', [SetupController::class, 'process']);
 
 $router->get('/', [WebController::class, 'home'], [AuthMiddleware::class]);
 $router->get('/partials/home-organizations', [WebController::class, 'homeOrganizationsPartial'], [AuthMiddleware::class]);
+$router->get('/docs', [WebController::class, 'showUserDocs'], [AuthMiddleware::class]);
+$router->get('/docs/:slug', [WebController::class, 'showUserDocArticle'], [AuthMiddleware::class]);
 $router->get('/api', [WebController::class, 'showApiDocs'], [AuthMiddleware::class]);
 $router->get('/audit', [WebController::class, 'showInstanceAudit'], [AuthMiddleware::class]);
 

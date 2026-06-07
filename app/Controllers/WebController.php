@@ -31,6 +31,7 @@ use Passway\Services\OrganizationIntegrationService;
 use Passway\Services\RotationService;
 use Passway\Services\RotationRegistryService;
 use Passway\Services\DirectoryService;
+use Passway\Services\DocumentationService;
 use Passway\Services\GroupService;
 use Passway\Services\InviteService;
 use Passway\Services\OrganizationService;
@@ -65,6 +66,7 @@ final class WebController
         private readonly RotationRegistryService $rotationRegistryService,
         private readonly OrganizationIntegrationService $organizationIntegrationService,
         private readonly ApprovalService $approvalService,
+        private readonly DocumentationService $documentationService,
     ) {}
 
     public function home(Request $request): Response
@@ -2609,6 +2611,40 @@ final class WebController
             'title' => __('ui.titles.api_docs'),
             'user' => $user,
             'sections' => require base_path('resources/docs/api.php'),
+        ]));
+    }
+
+    public function showUserDocs(Request $request): Response
+    {
+        return $this->renderUserDocs(DocumentationService::DEFAULT_SLUG);
+    }
+
+    public function showUserDocArticle(Request $request): Response
+    {
+        return $this->renderUserDocs((string) $request->routeParam('slug'));
+    }
+
+    private function renderUserDocs(string $slug): Response
+    {
+        $user = AuthContext::requireUser();
+        $page = $this->documentationService->page($slug, app_locale());
+
+        if ($page === null) {
+            return Response::make(404)
+                ->withContentType('text/html; charset=utf-8')
+                ->withBody($this->view->render('web/docs', [
+                    'title' => __('ui.titles.docs'),
+                    'user' => $user,
+                    'article' => null,
+                    'categories' => $this->documentationService->categoriesForLocale(app_locale()),
+                ]));
+        }
+
+        return $this->html($this->view->render('web/docs', [
+            'title' => (string) $page['article']['title'] . ' - ' . __('ui.titles.docs'),
+            'user' => $user,
+            'article' => $page['article'],
+            'categories' => $page['categories'],
         ]));
     }
 

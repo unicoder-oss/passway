@@ -7,11 +7,11 @@ if (PHP_SAPI === 'cli-server') {
     $staticFile = __DIR__ . ($requestPath !== false ? $requestPath : '/');
 
     if (is_file($staticFile)) {
-        if (is_string($requestPath) && str_starts_with($requestPath, '/uploads/')) {
-            $uploadsRoot = realpath(__DIR__ . '/uploads');
+        if (is_string($requestPath) && (str_starts_with($requestPath, '/uploads/') || str_starts_with($requestPath, '/fonts/'))) {
+            $staticRoot = realpath(__DIR__ . (str_starts_with($requestPath, '/fonts/') ? '/fonts' : '/uploads'));
             $resolvedStaticFile = realpath($staticFile);
 
-            if ($uploadsRoot === false || $resolvedStaticFile === false || !str_starts_with($resolvedStaticFile, $uploadsRoot . DIRECTORY_SEPARATOR)) {
+            if ($staticRoot === false || $resolvedStaticFile === false || !str_starts_with($resolvedStaticFile, $staticRoot . DIRECTORY_SEPARATOR)) {
                 return false;
             }
 

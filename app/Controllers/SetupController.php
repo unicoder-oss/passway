@@ -195,8 +195,10 @@ final class SetupController
             <style>
                 :root { color-scheme: light dark; --bg:#f5f5f5; --fg:#161616; --muted:#606060; --panel:#fff; --border:#d0d0d0; --error-bg:#f5e6e6; --error-border:#c79494; --error-fg:#5f1e1e; --button:#4b4b4b; }
                 @media (prefers-color-scheme: dark) { :root { --bg:#111111; --fg:#f3f3f3; --muted:#a4a4a4; --panel:#1a1a1a; --border:#393939; --error-bg:#351b1b; --error-border:#6a2d2d; --error-fg:#f1cdcd; --button:#d6d6d6; } }
+                @font-face { font-family: "Passway Mono"; src: url("/fonts/NotoSansMono-Regular.woff2") format("woff2"); font-weight: 400; font-style: normal; font-display: fallback; }
+                @font-face { font-family: "Passway Mono"; src: url("/fonts/NotoSansMono-Bold.woff2") format("woff2"); font-weight: 700; font-style: normal; font-display: fallback; }
                 * { box-sizing: border-box; }
-                body { margin: 0; font-family: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace; background: var(--bg); color: var(--fg); display: flex; align-items: center; justify-content: center; min-height: 100vh; padding: 1rem; }
+                body { margin: 0; font-family: "Passway Mono", ui-monospace, SFMono-Regular, Menlo, Consolas, monospace; background: var(--bg); color: var(--fg); display: flex; align-items: center; justify-content: center; min-height: 100vh; padding: 1rem; }
                 .card { background: var(--panel); border: 1px solid var(--border); padding: 2rem; width: 100%; max-width: 760px; }
                 h1 { margin: 0 0 .35rem; font-size: 1.6rem; }
                 p.subtitle { margin: 0 0 1.5rem; color: var(--muted); }

@@ -42,7 +42,17 @@ $profileAvatarInitial = avatar_initial($profileDisplayName);
     <div class="topnav">
         <?php foreach ($topbarLinks as $link): ?>
             <?php if (((string) ($link['href'] ?? '')) === '/auth/logout') { continue; } ?>
-            <a class="button secondary" href="<?= e((string) ($link['href'] ?? '/')) ?>"><?= e((string) ($link['label'] ?? '')) ?></a>
+            <?php if (((string) ($link['href'] ?? '')) === '/api'): ?>
+                <div class="profile-menu js-delayed-details-menu">
+                    <button type="button" class="button secondary profile-menu-trigger" aria-haspopup="true" aria-expanded="false"><?= e(__('ui.help.title')) ?></button>
+                    <div class="profile-menu-panel panel">
+                        <a class="button secondary" href="/docs"><?= e(__('ui.help.guide')) ?></a>
+                        <a class="button secondary" href="/api"><?= e(__('ui.help.api')) ?></a>
+                    </div>
+                </div>
+            <?php else: ?>
+                <a class="button secondary" href="<?= e((string) ($link['href'] ?? '/')) ?>"><?= e((string) ($link['label'] ?? '')) ?></a>
+            <?php endif; ?>
         <?php endforeach; ?>
         <span id="global-approval-counter" class="approval-counter-square" aria-live="polite">0</span>
         <div class="profile-menu js-delayed-details-menu">
