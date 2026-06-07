@@ -1,27 +1,64 @@
 <?php if (empty($organizationSettingsPartial)) { require base_path('resources/views/partials/auth_topbar.php'); } ?>
 
+<style>
+    .organization-settings-panel,
+    .organization-settings-form,
+    .organization-settings-meta,
+    .organization-avatar-preview {
+        min-width: 0;
+    }
+
+    .organization-settings-meta {
+        overflow-wrap: anywhere;
+    }
+
+    .organization-avatar-preview {
+        width: min(256px, 100%);
+    }
+
+    .organization-avatar-preview canvas {
+        touch-action: none;
+        user-select: none;
+    }
+
+    @media (max-width: 900px) {
+        .organization-settings-panel {
+            padding: 1rem !important;
+        }
+
+        .organization-avatar-preview {
+            width: min(320px, 100%);
+        }
+
+        .organization-settings-form .js-avatar-clear,
+        .organization-settings-form > button[type="submit"] {
+            width: 100%;
+        }
+    }
+</style>
+
 <div class="js-organization-settings-page" data-page-title="<?= e((string) ($title ?? 'Passway')) ?>">
 <?php if (!empty($queryError)): ?><div class="error" data-toast="true" style="margin-bottom:1rem;"><?= e((string) $queryError) ?></div><?php endif; ?>
 <?php if (!empty($querySuccess)): ?><div class="success" data-toast="true" style="margin-bottom:1rem;"><?= e((string) $querySuccess) ?></div><?php endif; ?>
 
 <section style="margin:0 0 1rem;">
     <h1 style="margin:0; font-size:2rem;"><?= e(__('ui.organization_manage.settings_basic')) ?></h1>
-    <div class="muted" style="margin-top:.35rem;"><?= e($organization->name) ?></div>
+    <div class="muted organization-settings-meta" style="margin-top:.35rem;"><?= e($organization->name) ?></div>
 </section>
 
 <div class="grid sidebar-layout" style="align-items:start; padding-bottom:2rem; gap:1rem;">
     <?php require base_path('resources/views/web/partials/organization_settings_sidebar.php'); ?>
 
-    <section class="panel" style="padding:1.5rem; display:grid; gap:.75rem;">
+    <section class="panel organization-settings-panel" style="padding:1.5rem; display:grid; gap:.75rem;">
         <h2 style="margin:0;"><?= e(__('ui.organization_manage.settings')) ?></h2>
-        <form method="POST" action="/organizations/<?= e($organization->uuid) ?>/manage" class="grid js-avatar-editor" style="gap:.75rem;" data-current-avatar-src="<?= e((string) ($organization->avatarPath ?? '')) ?>" data-organization-settings-form="true" onsubmit="return window.passwayOrganizationSettingsSubmit ? window.passwayOrganizationSettingsSubmit(event, this) : true;">
+        <form method="POST" action="/organizations/<?= e($organization->uuid) ?>/manage" class="grid js-avatar-editor organization-settings-form" style="gap:.75rem;" data-current-avatar-src="<?= e((string) ($organization->avatarPath ?? '')) ?>" data-organization-settings-form="true" onsubmit="return window.passwayOrganizationSettingsSubmit ? window.passwayOrganizationSettingsSubmit(event, this) : true;">
             <div style="display:flex; align-items:center; gap:1rem; flex-wrap:wrap;">
                 <?php if (!empty($organization->avatarPath)): ?>
                     <img class="avatar-square avatar-image" src="<?= e($organization->avatarPath) ?>" alt="<?= e($organization->name) ?>" width="64" height="64" decoding="async" style="width:64px; height:64px; flex:0 0 64px;">
                 <?php else: ?>
                     <div class="avatar-square" style="width:64px; height:64px; flex:0 0 64px; background:<?= e(avatar_fallback_color()) ?>; font-size:1.4rem;"><?= e(avatar_initial($organization->name)) ?></div>
                 <?php endif; ?>
-                <div class="muted" style="font-size:.92rem;"><?= e(__('ui.invite.organization_avatar_hint')) ?></div>
+                <div class="muted organization-settings-meta" style="font-size:.92rem;"><?= e(__('ui.invite.organization_avatar_hint')) ?></div>
             </div>
             <div>
                 <label for="org-name"><?= e(__('ui.organization_manage.name')) ?></label>
@@ -40,7 +77,7 @@
                     <button type="button" class="secondary js-avatar-clear"><?= e(__('ui.organization_manage.clear_avatar')) ?></button>
                 </div>
             <?php endif; ?>
-            <div class="preview-wrap" style="width:256px;"><canvas class="js-avatar-canvas" width="256" height="256"></canvas></div>
+            <div class="preview-wrap organization-avatar-preview"><canvas class="js-avatar-canvas" width="256" height="256"></canvas></div>
             <div>
                 <label for="org-avatar-zoom"><?= e(__('ui.invite.organization_avatar_choose')) ?></label>
                 <input id="org-avatar-zoom" class="range js-avatar-zoom" type="range" min="1" max="4" step="0.01" value="1">
@@ -201,6 +238,7 @@
                 if (!state.image || state.mode !== 'new') {
                     return;
                 }
+                event.preventDefault();
                 state.dragging = true;
                 state.lastX = event.clientX;
                 state.lastY = event.clientY;
@@ -211,6 +249,7 @@
                 if (!state.dragging || !state.image || state.mode !== 'new') {
                     return;
                 }
+                event.preventDefault();
                 state.offsetX += event.clientX - state.lastX;
                 state.offsetY += event.clientY - state.lastY;
                 state.lastX = event.clientX;
@@ -224,7 +263,9 @@
                     return;
                 }
                 state.dragging = false;
-                canvas.releasePointerCapture(event.pointerId);
+                if (canvas.hasPointerCapture(event.pointerId)) {
+                    canvas.releasePointerCapture(event.pointerId);
+                }
             };
 
             canvas.addEventListener('pointerup', stopDragging);

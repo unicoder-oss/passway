@@ -97,6 +97,7 @@ require base_path('resources/views/partials/auth_topbar.php');
                 right: 0;
                 top: calc(100% + .5rem);
                 min-width: 180px;
+                max-width: calc(100vw - 2rem);
                 padding: .75rem;
                 display: none;
                 gap: .5rem;
@@ -309,6 +310,17 @@ require base_path('resources/views/partials/auth_topbar.php');
                 .acl-rule-row {
                     grid-template-columns: minmax(0, 1fr);
                 }
+
+                .org-menu-panel {
+                    left: 0;
+                    right: auto;
+                }
+
+                .org-menu-panel button {
+                    width: 100%;
+                    justify-content: flex-start;
+                    text-align: left;
+                }
             }
         </style>
 
@@ -323,7 +335,7 @@ require base_path('resources/views/partials/auth_topbar.php');
                 <div class="actions">
                     <?php if ($currentDir !== null && (!empty($canWriteCurrentDirectory) || !empty($canManageCurrentDirectoryAcl))): ?>
                         <div class="org-menu js-delayed-menu">
-                            <button type="button"><?= e(__('ui.organization.manage_directory')) ?></button>
+                            <button type="button" class="org-menu-trigger" aria-haspopup="true" aria-expanded="false"><?= e(__('ui.organization.manage_directory')) ?></button>
                             <div class="org-menu-panel panel">
                                 <?php if (!empty($canWriteCurrentDirectory)): ?><button type="button" class="secondary" data-open-modal="rename-directory-modal"><?= e(__('ui.organization.rename_directory')) ?></button><?php endif; ?>
                                 <?php if (!empty($canManageCurrentDirectoryAcl)): ?><button type="button" class="secondary" data-open-modal="directory-acl-modal" id="open-directory-acl-modal"><?= e(__('ui.organization.configure_acl')) ?></button><?php endif; ?>
@@ -334,7 +346,7 @@ require base_path('resources/views/partials/auth_topbar.php');
                     <?php endif; ?>
                     <?php if (($currentDir === null && $canEditContent) || ($currentDir !== null && !empty($canWriteCurrentDirectory))): ?>
                         <div class="org-menu js-delayed-menu">
-                            <button type="button" aria-label="<?= e(__('ui.organization.actions')) ?>">+</button>
+                            <button type="button" class="org-menu-trigger" aria-label="<?= e(__('ui.organization.actions')) ?>" aria-haspopup="true" aria-expanded="false">+</button>
                             <div class="org-menu-panel panel">
                                 <button type="button" class="secondary" data-open-modal="directory-modal"><?= e(__('ui.organization.add_directory_short')) ?></button>
                                 <button type="button" class="secondary" data-open-modal="secret-modal"><?= e(__('ui.organization.add_secret_short')) ?></button>
@@ -746,9 +758,14 @@ require base_path('resources/views/partials/auth_topbar.php');
 
         for (const menu of menus) {
             let closeTimer = null;
+            let wasOpenOnPointerDown = false;
+            const trigger = menu.querySelector('.org-menu-trigger');
 
             const closeMenu = () => {
                 menu.classList.remove('is-open');
+                if (trigger !== null) {
+                    trigger.setAttribute('aria-expanded', 'false');
+                }
             };
 
             const openMenu = () => {
@@ -759,9 +776,16 @@ require base_path('resources/views/partials/auth_topbar.php');
                 for (const other of menus) {
                     if (other !== menu) {
                         other.classList.remove('is-open');
+                        const otherTrigger = other.querySelector('.org-menu-trigger');
+                        if (otherTrigger !== null) {
+                            otherTrigger.setAttribute('aria-expanded', 'false');
+                        }
                     }
                 }
                 menu.classList.add('is-open');
+                if (trigger !== null) {
+                    trigger.setAttribute('aria-expanded', 'true');
+                }
             };
 
             const scheduleClose = () => {
@@ -784,6 +808,28 @@ require base_path('resources/views/partials/auth_topbar.php');
                     }
                 }, 0);
             });
+
+            if (trigger !== null) {
+                trigger.addEventListener('pointerdown', () => {
+                    wasOpenOnPointerDown = menu.classList.contains('is-open');
+                });
+
+                trigger.addEventListener('click', (event) => {
+                    event.preventDefault();
+                    if (wasOpenOnPointerDown) {
+                        closeMenu();
+                    } else {
+                        openMenu();
+                    }
+                    wasOpenOnPointerDown = menu.classList.contains('is-open');
+                });
+            }
+
+            document.addEventListener('click', (event) => {
+                if (!menu.contains(event.target)) {
+                    closeMenu();
+                }
+            });
         }
 
         const openButtons = document.querySelectorAll('[data-open-modal]');
@@ -796,6 +842,9 @@ require base_path('resources/views/partials/auth_topbar.php');
 
         openButtons.forEach((button) => {
             button.addEventListener('click', () => {
+                const sourceMenu = button.closest('.js-delayed-menu');
+                sourceMenu?.classList.remove('is-open');
+                sourceMenu?.querySelector('.org-menu-trigger')?.setAttribute('aria-expanded', 'false');
                 const dialog = document.getElementById(button.getAttribute('data-open-modal'));
                 if (dialog && typeof dialog.showModal === 'function') {
                     dialog.showModal();

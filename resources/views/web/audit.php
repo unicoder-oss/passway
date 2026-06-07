@@ -181,6 +181,7 @@ $renderAutocomplete = static function (
         display: flex;
         align-items: flex-start;
         gap: .85rem;
+        min-width: 0;
     }
 
     .audit-entry-body {
@@ -188,11 +189,39 @@ $renderAutocomplete = static function (
         flex: 1 1 auto;
     }
 
+    .audit-list,
+    .audit-entry-card,
+    .audit-entry-title,
+    .audit-entry-meta,
+    .audit-entry-detail,
+    .audit-summary {
+        min-width: 0;
+        overflow-wrap: anywhere;
+    }
+
     .audit-title-entity {
         display: inline-flex;
         align-items: center;
         gap: .35rem;
         vertical-align: middle;
+        max-width: 100%;
+    }
+
+    @media (max-width: 900px) {
+        .audit-filter-panel,
+        .audit-list {
+            padding: 1rem !important;
+        }
+
+        .audit-entry-with-avatar {
+            gap: .7rem;
+        }
+
+        .audit-avatar-md {
+            width: 36px;
+            height: 36px;
+            flex-basis: 36px;
+        }
     }
 </style>
 
@@ -200,7 +229,7 @@ $renderAutocomplete = static function (
     <h1 style="margin:0; font-size:2rem;"><?= e(__('ui.audit.for_org', ['organization' => $organization->name])) ?></h1>
 </section>
 
-<section class="panel" style="padding:1.5rem; margin-bottom:1rem;">
+<section class="panel audit-filter-panel" style="padding:1.5rem; margin-bottom:1rem;">
     <form method="GET" class="grid grid-4" style="gap:1rem;">
         <div>
             <label for="action"><?= e(__('ui.audit.event')) ?></label>
@@ -375,15 +404,15 @@ $nextQuery['limit'] = (string) $meta['limit'];
 $nextQuery['offset'] = (string) ($meta['offset'] + $meta['limit']);
 ?>
 
-<section class="panel" style="padding:1.5rem; display:grid; gap:.75rem;">
-    <div class="muted"><?= e(__('ui.audit.summary', ['total' => (string) $meta['total'], 'offset' => (string) $meta['offset'], 'limit' => (string) $meta['limit']])) ?></div>
+<section class="panel audit-list" style="padding:1.5rem; display:grid; gap:.75rem;">
+    <div class="muted audit-summary"><?= e(__('ui.audit.summary', ['total' => (string) $meta['total'], 'offset' => (string) $meta['offset'], 'limit' => (string) $meta['limit']])) ?></div>
     <?php foreach ($entries as $entry): ?>
-        <div class="panel panel-muted<?= !empty($entry['actor_avatar']) ? ' audit-entry-with-avatar' : '' ?>" style="padding:1rem;">
+        <div class="panel panel-muted audit-entry-card<?= !empty($entry['actor_avatar']) ? ' audit-entry-with-avatar' : '' ?>" style="padding:1rem;">
             <?php if (!empty($entry['actor_avatar']) && is_array($entry['actor_avatar'])): ?>
                 <?php $renderAuditAvatar($entry['actor_avatar'], 'audit-avatar-md', (string) $entry['actor_label']); ?>
             <?php endif; ?>
             <div class="audit-entry-body">
-                <div style="font-weight:700; line-height:1.45;">
+                <div class="audit-entry-title" style="font-weight:700; line-height:1.45;">
                     <?php foreach ($entry['title_parts'] as $part): ?>
                         <?php
                             $partAvatar = isset($part['avatar']) && is_array($part['avatar']) ? $part['avatar'] : null;
@@ -393,11 +422,11 @@ $nextQuery['offset'] = (string) ($meta['offset'] + $meta['limit']);
                         <?php if ($part['href'] !== null): ?><a href="<?= e((string) $part['href']) ?>" class="audit-title-link<?= $showPartAvatar ? ' audit-title-entity' : '' ?>"><?php if ($showPartAvatar) { $renderAuditAvatar($partAvatar, 'audit-avatar-inline', (string) $part['text']); } ?><?= e((string) $part['text']) ?></a><?php else: ?><?php if (!empty($part['accent'])): ?><span class="audit-title-accent<?= $showPartAvatar ? ' audit-title-entity' : '' ?>"><?php if ($showPartAvatar) { $renderAuditAvatar($partAvatar, 'audit-avatar-inline', (string) $part['text']); } ?><?= e((string) $part['text']) ?></span><?php else: ?><?= e((string) $part['text']) ?><?php endif; ?><?php endif; ?>
                     <?php endforeach; ?>
                 </div>
-                <div class="muted" style="font-size:.92rem;"><?= $entry['timestamp_html'] ?> · <?= e((string) $entry['status']) ?> · <?php if ($entry['actor_href'] !== null): ?><a href="<?= e((string) $entry['actor_href']) ?>"><?= e((string) $entry['actor_label']) ?></a><?php else: ?><?= e((string) $entry['actor_label']) ?><?php endif; ?></div>
+                <div class="muted audit-entry-meta" style="font-size:.92rem;"><?= $entry['timestamp_html'] ?> · <?= e((string) $entry['status']) ?> · <?php if ($entry['actor_href'] !== null): ?><a href="<?= e((string) $entry['actor_href']) ?>"><?= e((string) $entry['actor_label']) ?></a><?php else: ?><?= e((string) $entry['actor_label']) ?><?php endif; ?></div>
                 <?php foreach (($entry['details'] ?? []) as $detail): ?>
-                    <div class="muted" style="margin-top:.35rem; font-size:.92rem;"><?= e((string) $detail) ?></div>
+                    <div class="muted audit-entry-detail" style="margin-top:.35rem; font-size:.92rem;"><?= e((string) $detail) ?></div>
                 <?php endforeach; ?>
-                <?php if (($entry['ip_address'] ?? null) !== null): ?><div class="muted" style="margin-top:.35rem; font-size:.92rem;"><?= e(__('ui.audit.ip', ['ip' => (string) $entry['ip_address']])) ?></div><?php endif; ?>
+                <?php if (($entry['ip_address'] ?? null) !== null): ?><div class="muted audit-entry-detail" style="margin-top:.35rem; font-size:.92rem;"><?= e(__('ui.audit.ip', ['ip' => (string) $entry['ip_address']])) ?></div><?php endif; ?>
             </div>
         </div>
     <?php endforeach; ?>

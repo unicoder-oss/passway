@@ -12,6 +12,14 @@ require base_path('resources/views/partials/auth_topbar.php');
         display: grid;
         gap: 1rem;
         padding-bottom: 2rem;
+        min-width: 0;
+    }
+    .api-docs-shell .panel,
+    .api-docs-summary,
+    .api-docs-endpoints,
+    .api-docs-endpoint,
+    .api-docs-example {
+        min-width: 0;
     }
     .api-docs-summary {
         display: grid;
@@ -42,13 +50,33 @@ require base_path('resources/views/partials/auth_topbar.php');
         flex-wrap: wrap;
         gap: .5rem;
         align-items: center;
+        min-width: 0;
+    }
+    .api-docs-meta code,
+    .api-docs-meta .pill,
+    .api-docs-endpoint .muted,
+    .api-docs-endpoint div {
+        overflow-wrap: anywhere;
     }
     .api-docs-code {
         margin: 0;
         padding: .85rem;
         overflow: auto;
+        max-width: 100%;
         border: 1px solid var(--border);
         background: var(--panel-subtle);
+    }
+    @media (max-width: 900px) {
+        .api-docs-shell section.panel,
+        .api-docs-endpoint {
+            padding: 1rem !important;
+        }
+        .api-docs-meta {
+            align-items: flex-start;
+        }
+        .api-docs-method {
+            min-width: 64px;
+        }
     }
 </style>
 
@@ -90,11 +118,11 @@ require base_path('resources/views/partials/auth_topbar.php');
                             <div><?= e((string) $endpoint['summary']) ?></div>
                         </div>
                         <div class="grid grid-2" style="align-items:start; gap:1rem;">
-                            <div>
+                            <div class="api-docs-example">
                                 <label><?= e(__('ui.api_docs.request_example')) ?></label>
                                 <pre class="api-docs-code mono"><?= e((string) $endpoint['request']) ?></pre>
                             </div>
-                            <div>
+                            <div class="api-docs-example">
                                 <label><?= e(__('ui.api_docs.response_example')) ?></label>
                                 <pre class="api-docs-code mono"><?= e((string) $endpoint['response']) ?></pre>
                             </div>

@@ -10,6 +10,46 @@ $activeProfileSection = (string) ($activeProfileSection ?? 'basic');
 $displayName = display_name_for_user($user);
 ?>
 
+<style>
+    .profile-basic-panel,
+    .profile-basic-form,
+    .profile-basic-meta,
+    .profile-email-row,
+    .profile-email-field,
+    .profile-avatar-preview {
+        min-width: 0;
+    }
+
+    .profile-basic-meta,
+    .profile-email-field input {
+        overflow-wrap: anywhere;
+    }
+
+    .profile-avatar-preview {
+        width: min(256px, 100%);
+    }
+
+    .profile-avatar-preview canvas {
+        touch-action: none;
+        user-select: none;
+    }
+
+    @media (max-width: 900px) {
+        .profile-basic-panel {
+            padding: 1rem !important;
+        }
+
+        .profile-avatar-preview {
+            width: min(320px, 100%);
+        }
+
+        .profile-email-row > button,
+        .profile-basic-form > button[type="submit"] {
+            width: 100%;
+        }
+    }
+</style>
+
 <div
     class="js-profile-settings-page"
     data-page-title="<?= e((string) ($title ?? 'Passway')) ?>"
@@ -32,20 +72,20 @@ $displayName = display_name_for_user($user);
     <?php require base_path('resources/views/web/partials/profile_settings_sidebar.php'); ?>
 
     <?php if ($activeProfileSection === 'basic'): ?>
-        <section class="panel" style="padding:1.5rem; display:grid; gap:1rem;">
+        <section class="panel profile-basic-panel" style="padding:1.5rem; display:grid; gap:1rem;">
             <div>
                 <h2 style="margin:0;"><?= e(__('ui.profile.sections.basic')) ?></h2>
-                <p class="muted" style="margin:.35rem 0 0;"><?= __('ui.profile.created_last_login', ['created_at' => local_datetime($user->createdAt), 'last_login_at' => $user->lastLoginAt !== null ? local_datetime($user->lastLoginAt) : e(__('ui.app.never'))]) ?></p>
+                <p class="muted profile-basic-meta" style="margin:.35rem 0 0;"><?= __('ui.profile.created_last_login', ['created_at' => local_datetime($user->createdAt), 'last_login_at' => $user->lastLoginAt !== null ? local_datetime($user->lastLoginAt) : e(__('ui.app.never'))]) ?></p>
             </div>
 
-            <form method="POST" action="/profile" class="grid js-avatar-editor" style="gap:.75rem;" data-profile-settings-form="true" data-current-avatar-src="<?= e((string) ($user->avatarPath ?? '')) ?>">
+            <form method="POST" action="/profile" class="grid js-avatar-editor profile-basic-form" style="gap:.75rem;" data-profile-settings-form="true" data-current-avatar-src="<?= e((string) ($user->avatarPath ?? '')) ?>">
                 <div>
                     <label for="profile-nickname"><?= e(__('ui.profile.nickname')) ?></label>
                     <input id="profile-nickname" name="nickname" value="<?= e((string) ($user->nickname ?? '')) ?>" maxlength="255" placeholder="<?= e(__('ui.profile.nickname_placeholder')) ?>">
                 </div>
 
-                <div class="grid field-actions-2" style="gap:.75rem;">
-                    <div>
+                <div class="grid field-actions-2 profile-email-row" style="gap:.75rem;">
+                    <div class="profile-email-field">
                         <label for="profile-email-display"><?= e(__('ui.profile.email')) ?></label>
                         <input id="profile-email-display" value="<?= e($user->email) ?>" readonly>
                     </div>
@@ -57,7 +97,7 @@ $displayName = display_name_for_user($user);
                     <input id="profile-avatar-file" class="js-avatar-file" type="file" accept="image/png,image/jpeg,image/webp">
                     <div class="muted" style="margin-top:.5rem; font-size:.92rem;"><?= e(__('ui.profile.avatar_hint')) ?></div>
                 </div>
-                <div class="preview-wrap" style="width:256px;"><canvas class="js-avatar-canvas" width="256" height="256"></canvas></div>
+                <div class="preview-wrap profile-avatar-preview"><canvas class="js-avatar-canvas" width="256" height="256"></canvas></div>
                 <?php if (!empty($user->avatarPath)): ?>
                     <div class="actions">
                         <button type="button" class="secondary js-avatar-clear"><?= e(__('ui.profile.clear_avatar')) ?></button>
@@ -362,6 +402,7 @@ $displayName = display_name_for_user($user);
             if (!state.image || state.mode !== 'new') {
                 return;
             }
+            event.preventDefault();
             state.dragging = true;
             state.lastX = event.clientX;
             state.lastY = event.clientY;
@@ -371,6 +412,7 @@ $displayName = display_name_for_user($user);
             if (!state.dragging || !state.image || state.mode !== 'new') {
                 return;
             }
+            event.preventDefault();
             state.offsetX += event.clientX - state.lastX;
             state.offsetY += event.clientY - state.lastY;
             state.lastX = event.clientX;
