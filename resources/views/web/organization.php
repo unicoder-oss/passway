@@ -105,6 +105,14 @@ require base_path('resources/views/partials/auth_topbar.php');
             }
             .org-menu.is-open .org-menu-panel,
             .org-menu:focus-within .org-menu-panel { display: grid; }
+            .org-menu.align-left .org-menu-panel {
+                left: 0;
+                right: auto;
+            }
+            .org-menu.align-right .org-menu-panel {
+                left: auto;
+                right: 0;
+            }
             .org-entry {
                 display: grid;
                 grid-template-columns: auto minmax(0, 1fr);
@@ -763,9 +771,26 @@ require base_path('resources/views/partials/auth_topbar.php');
 
             const closeMenu = () => {
                 menu.classList.remove('is-open');
+                menu.classList.remove('align-left', 'align-right');
                 if (trigger !== null) {
                     trigger.setAttribute('aria-expanded', 'false');
                 }
+            };
+
+            const alignMenuPanel = () => {
+                if (trigger === null || window.matchMedia('(min-width: 720px)').matches) {
+                    menu.classList.remove('align-left', 'align-right');
+                    return;
+                }
+
+                const rect = trigger.getBoundingClientRect();
+                const viewportPadding = 16;
+                const panelWidth = Math.min(180, window.innerWidth - viewportPadding * 2);
+                const availableRight = window.innerWidth - rect.left - viewportPadding;
+                const availableLeft = rect.right - viewportPadding;
+
+                menu.classList.toggle('align-left', availableRight >= panelWidth || availableRight >= availableLeft);
+                menu.classList.toggle('align-right', availableRight < panelWidth && availableRight < availableLeft);
             };
 
             const openMenu = () => {
@@ -776,12 +801,14 @@ require base_path('resources/views/partials/auth_topbar.php');
                 for (const other of menus) {
                     if (other !== menu) {
                         other.classList.remove('is-open');
+                        other.classList.remove('align-left', 'align-right');
                         const otherTrigger = other.querySelector('.org-menu-trigger');
                         if (otherTrigger !== null) {
                             otherTrigger.setAttribute('aria-expanded', 'false');
                         }
                     }
                 }
+                alignMenuPanel();
                 menu.classList.add('is-open');
                 if (trigger !== null) {
                     trigger.setAttribute('aria-expanded', 'true');
@@ -801,6 +828,11 @@ require base_path('resources/views/partials/auth_topbar.php');
             menu.addEventListener('mouseenter', openMenu);
             menu.addEventListener('mouseleave', scheduleClose);
             menu.addEventListener('focusin', openMenu);
+            window.addEventListener('resize', () => {
+                if (menu.classList.contains('is-open')) {
+                    alignMenuPanel();
+                }
+            });
             menu.addEventListener('focusout', () => {
                 window.setTimeout(() => {
                     if (!menu.contains(document.activeElement)) {

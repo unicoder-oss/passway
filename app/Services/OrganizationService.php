@@ -342,8 +342,9 @@ final class OrganizationService
         $stats = $this->deletionStats($orgId);
         $now = now()->format('Y-m-d H:i:s');
         $db = Database::getInstance();
+        $inactiveLiteral = $this->booleanSqlLiteral(false);
 
-        $db->transaction(function () use ($db, $org, $orgId, $requesterId, $stats, $now): void {
+        $db->transaction(function () use ($db, $org, $orgId, $requesterId, $stats, $now, $inactiveLiteral): void {
             $this->getAuditService()->record(
                 action: 'org.delete',
                 organizationId: $orgId,
@@ -363,10 +364,10 @@ final class OrganizationService
 
             $db->query('UPDATE secrets SET deleted_at = ? WHERE organization_id = ? AND deleted_at IS NULL', [$now, (int) $orgId]);
             $db->query('UPDATE directories SET deleted_at = ? WHERE organization_id = ? AND deleted_at IS NULL', [$now, (int) $orgId]);
-            $db->query('UPDATE api_keys SET is_active = 0 WHERE organization_id = ?', [(int) $orgId]);
+            $db->query("UPDATE api_keys SET is_active = {$inactiveLiteral} WHERE organization_id = ?", [(int) $orgId]);
 
             if ($db->tableExists('organization_integrations')) {
-                $db->query('UPDATE organization_integrations SET is_active = 0, updated_at = ? WHERE organization_id = ?', [$now, (int) $orgId]);
+                $db->query("UPDATE organization_integrations SET is_active = {$inactiveLiteral}, updated_at = ? WHERE organization_id = ?", [$now, (int) $orgId]);
             }
 
             $db->update('organizations', [
@@ -467,8 +468,9 @@ final class OrganizationService
             'SELECT COUNT(*) FROM api_keys WHERE organization_id = ?',
             [(int) $orgId]
         );
+        $activeLiteral = $this->booleanSqlLiteral(true);
         $apiKeysActive = (int) $db->fetchColumn(
-            'SELECT COUNT(*) FROM api_keys WHERE organization_id = ? AND is_active = 1 AND (expires_at IS NULL OR expires_at > ?)',
+            "SELECT COUNT(*) FROM api_keys WHERE organization_id = ? AND is_active = {$activeLiteral} AND (expires_at IS NULL OR expires_at > ?)",
             [(int) $orgId, now()->format('Y-m-d H:i:s')]
         );
 
@@ -478,6 +480,15 @@ final class OrganizationService
             'api_keys_total' => $apiKeysTotal,
             'api_keys_active' => $apiKeysActive,
         ];
+    }
+
+    private function booleanSqlLiteral(bool $value): string
+    {
+        if (Database::getInstance()->getDriver() === 'pgsql') {
+            return $value ? 'TRUE' : 'FALSE';
+        }
+
+        return $value ? '1' : '0';
     }
 
     /** @return array{organizations_deleted:int,directories_deleted:int,secrets_deleted:int,permissions_deleted:int} */
