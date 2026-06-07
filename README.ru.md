@@ -180,3 +180,6 @@ composer maintain:cleanup
 ```bash
 vendor/bin/phpunit
 ```
+
+## Полезное
+- [Демонстрационный сервис ротации SSH-ключей](https://github.com/unicoder-oss/passway-demo-ssh-rotation-service)

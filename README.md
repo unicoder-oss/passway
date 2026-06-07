@@ -216,3 +216,6 @@ Tests run against SQLite `:memory:` using `phpunit.xml.dist`. A local `phpunit.x
 ```bash
 vendor/bin/phpunit
 ```
+
+## Useful links
+- [Demo SSH Rotation Service](https://github.com/unicoder-oss/passway-demo-ssh-rotation-service)
