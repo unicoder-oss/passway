@@ -31,6 +31,15 @@
         </style>
         <div class="grid" style="gap:.8rem;">
             <?php foreach ($memberRows as $row): $member = $row['member']; $memberUser = $row['user']; ?>
+                <?php
+                    $currentMemberRole = (string) ($currentMemberRole ?? '');
+                    $canEditMemberRole = !empty($canManageSettings)
+                        && $member->role !== 'owner'
+                        && ($currentMemberRole === 'owner' || in_array($member->role, ['editor', 'reader'], true));
+                    $editableRoles = $currentMemberRole === 'owner'
+                        ? ['admin', 'editor', 'reader']
+                        : ['editor', 'reader'];
+                ?>
                 <div class="panel panel-muted org-manage-member-card" style="padding:1rem; display:grid; gap:.75rem;">
                     <div class="org-manage-member-heading">
                         <?php if ($memberUser !== null): ?>
@@ -46,14 +55,14 @@
                             <div class="muted" style="font-size:.92rem;"><?= e(__('ui.organization_manage.joined', ['date' => $member->joinedAt])) ?></div>
                         </div>
                     </div>
-                    <?php if ($member->role === 'owner' || empty($canManageSettings)): ?>
+                    <?php if (!$canEditMemberRole): ?>
                         <div class="muted" style="font-size:.92rem;"><?= e(__('ui.organization_manage.roles.' . $member->role)) ?></div>
                     <?php else: ?>
                         <form method="POST" action="/organizations/<?= e($organization->uuid) ?>/members/<?= e($memberUser?->uuid ?? '') ?>/role" class="grid field-actions-3" style="gap:.75rem;">
                             <div>
                                 <label><?= e(__('ui.organization_manage.role')) ?></label>
                                 <select name="role">
-                                    <?php foreach (array_values(array_filter(\Passway\Models\OrganizationMember::ROLES, static fn(string $role): bool => $role !== 'owner')) as $role): ?>
+                                    <?php foreach ($editableRoles as $role): ?>
                                         <option value="<?= e($role) ?>" <?= $member->role === $role ? 'selected' : '' ?>><?= e(__('ui.organization_manage.roles.' . $role)) ?></option>
                                     <?php endforeach; ?>
                                 </select>

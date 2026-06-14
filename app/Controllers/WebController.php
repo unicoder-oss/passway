@@ -366,7 +366,12 @@ final class WebController
 
     public function showOrganizationManage(Request $request): Response
     {
+        $user = AuthContext::requireUser();
         $org = $this->findOrgOrFail($request);
+
+        if (($redirect = $this->redirectIfCannotManageOrganization($org, $user)) !== null) {
+            return $redirect;
+        }
 
         return Response::redirect($this->settingsSectionUrl($org->uuid, 'settings'));
     }
@@ -376,8 +381,8 @@ final class WebController
         $user = AuthContext::requireUser();
         $org = $this->findOrgOrFail($request);
 
-        if (!$this->organizationService->hasPermission($org->id, $user->id, 'reader')) {
-            return Response::redirect('/?error=' . \urlencode(__('ui.messages.access_denied')));
+        if (($redirect = $this->redirectIfCannotManageOrganization($org, $user)) !== null) {
+            return $redirect;
         }
 
         return $this->html($this->renderOrganizationSettingsView($request, 'web/organization_settings', [
@@ -402,8 +407,8 @@ final class WebController
         $user = AuthContext::requireUser();
         $org = $this->findOrgOrFail($request);
 
-        if (!$this->organizationService->hasPermission($org->id, $user->id, 'reader')) {
-            return Response::redirect('/?error=' . \urlencode(__('ui.messages.access_denied')));
+        if (($redirect = $this->redirectIfCannotManageOrganization($org, $user)) !== null) {
+            return $redirect;
         }
 
         $members = $this->organizationService->listMembers($org->id);
@@ -424,6 +429,7 @@ final class WebController
             'queryError' => $request->query('error'),
             'querySuccess' => $request->query('success'),
             'canManageSettings' => $this->organizationService->hasPermission($org->id, $user->id, 'admin'),
+            'currentMemberRole' => $this->organizationService->getMemberRole($org->id, $user->id),
             'activeSettingsSection' => 'members',
         ]));
     }
@@ -437,8 +443,8 @@ final class WebController
         $user = AuthContext::requireUser();
         $org = $this->findOrgOrFail($request);
 
-        if (!$this->organizationService->hasPermission($org->id, $user->id, 'reader')) {
-            return Response::redirect('/?error=' . \urlencode(__('ui.messages.access_denied')));
+        if (($redirect = $this->redirectIfCannotManageOrganization($org, $user)) !== null) {
+            return $redirect;
         }
 
         $invites = $this->inviteService->listActive($org->id);
@@ -451,6 +457,7 @@ final class WebController
             'queryError' => $request->query('error'),
             'querySuccess' => $request->query('success'),
             'canManageSettings' => $this->organizationService->hasPermission($org->id, $user->id, 'admin'),
+            'currentMemberRole' => $this->organizationService->getMemberRole($org->id, $user->id),
             'activeSettingsSection' => 'invites',
         ]));
     }
@@ -3783,6 +3790,19 @@ final class WebController
         return $user;
     }
 
+    private function redirectIfCannotManageOrganization(Organization $org, User $user): ?Response
+    {
+        if (!$this->organizationService->hasPermission($org->id, $user->id, 'reader')) {
+            return Response::redirect('/?error=' . \urlencode(__('ui.messages.access_denied')));
+        }
+
+        if (!$this->organizationService->hasPermission($org->id, $user->id, 'admin')) {
+            return Response::redirect($this->organizationUrl($org->uuid));
+        }
+
+        return null;
+    }
+
     private function html(string $body, int $status = 200): Response
     {
         return Response::make($status)
@@ -3856,6 +3876,7 @@ final class WebController
             'queryError' => $error,
             'querySuccess' => $success,
             'canManageSettings' => $this->organizationService->hasPermission($org->id, $user->id, 'admin'),
+            'currentMemberRole' => $this->organizationService->getMemberRole($org->id, $user->id),
             'activeSettingsSection' => 'invites',
         ]));
     }

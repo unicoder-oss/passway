@@ -15,13 +15,14 @@
     <div class="grid grid-2" style="align-items:start; gap:1rem;">
         <section class="panel" style="padding:1rem;">
             <h2 style="margin:0 0 .75rem;"><?= e(__('ui.organization_manage.create_invite')) ?></h2>
+            <?php $inviteRoles = (string) ($currentMemberRole ?? '') === 'owner' ? ['reader', 'editor', 'admin'] : ['reader', 'editor']; ?>
             <form method="POST" action="/organizations/<?= e($organization->uuid) ?>/invites" class="grid" style="gap:.75rem;" data-organization-settings-form="true" onsubmit="return window.passwayOrganizationSettingsSubmit ? window.passwayOrganizationSettingsSubmit(event, this) : true;">
                 <div>
                     <label for="invite-role"><?= e(__('ui.organization_manage.role')) ?></label>
                     <select id="invite-role" name="role">
-                        <option value="reader"><?= e(__('ui.organization_manage.roles.reader')) ?></option>
-                        <option value="editor"><?= e(__('ui.organization_manage.roles.editor')) ?></option>
-                        <option value="admin"><?= e(__('ui.organization_manage.roles.admin')) ?></option>
+                        <?php foreach ($inviteRoles as $role): ?>
+                            <option value="<?= e($role) ?>"><?= e(__('ui.organization_manage.roles.' . $role)) ?></option>
+                        <?php endforeach; ?>
                     </select>
                 </div>
                 <div>

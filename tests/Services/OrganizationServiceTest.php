@@ -216,6 +216,89 @@ final class OrganizationServiceTest extends DatabaseTestCase
         $this->assertSame('editor', $this->svc->getMemberRole($org->id, $member->id));
     }
 
+    public function test_owner_can_assign_and_downgrade_admin_role(): void
+    {
+        $owner = $this->createTestUser();
+        $member = $this->createTestUser('member@example.com');
+        $org = $this->svc->create('Org', $owner->id);
+
+        $this->svc->addMember($org->id, $member->id, 'reader', null);
+        $this->svc->updateMemberRole($org->id, $member->id, 'admin', $owner->id);
+        $this->assertSame('admin', $this->svc->getMemberRole($org->id, $member->id));
+
+        $this->svc->updateMemberRole($org->id, $member->id, 'reader', $owner->id);
+        $this->assertSame('reader', $this->svc->getMemberRole($org->id, $member->id));
+    }
+
+    public function test_admin_can_change_reader_and_editor_roles_only_between_them(): void
+    {
+        $owner = $this->createTestUser();
+        $admin = $this->createTestUser('admin@example.com');
+        $member = $this->createTestUser('member@example.com');
+        $org = $this->svc->create('Org', $owner->id);
+
+        $this->svc->addMember($org->id, $admin->id, 'admin', null);
+        $this->svc->addMember($org->id, $member->id, 'reader', null);
+
+        $this->svc->updateMemberRole($org->id, $member->id, 'editor', $admin->id);
+        $this->assertSame('editor', $this->svc->getMemberRole($org->id, $member->id));
+
+        $this->svc->updateMemberRole($org->id, $member->id, 'reader', $admin->id);
+        $this->assertSame('reader', $this->svc->getMemberRole($org->id, $member->id));
+    }
+
+    public function test_admin_cannot_assign_admin_role(): void
+    {
+        $owner = $this->createTestUser();
+        $admin = $this->createTestUser('admin@example.com');
+        $member = $this->createTestUser('member@example.com');
+        $org = $this->svc->create('Org', $owner->id);
+
+        $this->svc->addMember($org->id, $admin->id, 'admin', null);
+        $this->svc->addMember($org->id, $member->id, 'reader', null);
+
+        $this->expectException(AuthException::class);
+        $this->svc->updateMemberRole($org->id, $member->id, 'admin', $admin->id);
+    }
+
+    public function test_admin_cannot_change_another_admin_role(): void
+    {
+        $owner = $this->createTestUser();
+        $admin = $this->createTestUser('admin@example.com');
+        $otherAdmin = $this->createTestUser('other-admin@example.com');
+        $org = $this->svc->create('Org', $owner->id);
+
+        $this->svc->addMember($org->id, $admin->id, 'admin', null);
+        $this->svc->addMember($org->id, $otherAdmin->id, 'admin', null);
+
+        $this->expectException(AuthException::class);
+        $this->svc->updateMemberRole($org->id, $otherAdmin->id, 'reader', $admin->id);
+    }
+
+    public function test_admin_cannot_change_own_role(): void
+    {
+        $owner = $this->createTestUser();
+        $admin = $this->createTestUser('admin@example.com');
+        $org = $this->svc->create('Org', $owner->id);
+
+        $this->svc->addMember($org->id, $admin->id, 'admin', null);
+
+        $this->expectException(AuthException::class);
+        $this->svc->updateMemberRole($org->id, $admin->id, 'reader', $admin->id);
+    }
+
+    public function test_member_role_update_cannot_assign_owner_role(): void
+    {
+        $owner = $this->createTestUser();
+        $member = $this->createTestUser('member@example.com');
+        $org = $this->svc->create('Org', $owner->id);
+
+        $this->svc->addMember($org->id, $member->id, 'reader', null);
+
+        $this->expectException(AuthException::class);
+        $this->svc->updateMemberRole($org->id, $member->id, 'owner', $owner->id);
+    }
+
     public function test_update_member_role_throws_for_non_admin(): void
     {
         $owner  = $this->createTestUser();

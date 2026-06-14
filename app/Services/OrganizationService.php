@@ -217,9 +217,19 @@ final class OrganizationService
         if ($target->role === 'owner') {
             throw new AuthException(__('ui.backend.organization.cannot_change_owner_role'));
         }
+        if ($newRole === 'owner') {
+            throw new AuthException(__('ui.backend.organization.cannot_change_owner_role'));
+        }
+
+        $requesterIsOwner = $this->hasPermission($orgId, $requesterId, 'owner');
+
         // Only owner can assign admin
-        if ($newRole === 'admin' && !$this->hasPermission($orgId, $requesterId, 'owner')) {
+        if ($newRole === 'admin' && !$requesterIsOwner) {
             throw new AuthException(__('ui.backend.organization.only_owner_assign_admin'));
+        }
+
+        if (!$requesterIsOwner && ($targetUserId === $requesterId || $target->role === 'admin')) {
+            throw new AuthException(__('ui.messages.access_denied'));
         }
 
         Database::getInstance()->update(
