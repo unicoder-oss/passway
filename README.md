@@ -2,7 +2,7 @@
 
 Languages: English | [Русский](README.ru.md)
 
-Passway is a web service for secrets management for PHP 8.1+ with PostgreSQL and SQLite support.
+Passway is a web service for secrets management for PHP 8.5+ with PostgreSQL and SQLite support.
 
 ## Features
 
@@ -13,7 +13,7 @@ Passway is a web service for secrets management for PHP 8.1+ with PostgreSQL and
 
 ## Requirements
 
-- PHP 8.1+
+- PHP 8.5+
 - Composer
 - PHP extensions: `pdo`, `mbstring`, `json`, `sodium`
 - Database extension: `pdo_pgsql` for PostgreSQL or `pdo_sqlite` for SQLite
