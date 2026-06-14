@@ -24,7 +24,7 @@ jobs:
       - name: Setup PHP
         uses: shivammathur/setup-php@v2
         with:
-          php-version: '8.3'
+          php-version: '8.5'
           extensions: mbstring, pdo_sqlite, sqlite3, sodium
           coverage: none
 
@@ -74,6 +74,9 @@ jobs:
         with:
           context: ${{ github.workspace }}
           push: true
+          platforms: linux/amd64
+          provenance: false
+          sbom: false
           tags: ${{ steps.meta.outputs.tags }}
           labels: |
             org.opencontainers.image.source=${{ github.server_url }}/${{ github.repository }}
